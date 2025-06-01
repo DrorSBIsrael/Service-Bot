@@ -198,18 +198,23 @@ transporter.verify()
     .catch((error) => {
         console.error('❌ בעיה בחיבור לשרת אימייל:', error.message);
     });
-// WhatsApp Bot Integration
-app.post('/webhook/whatsapp', async (req, res) => {
+// WhatsApp Bot Integration  
+app.post('/webhook/whatsapp', express.json(), async (req, res) => {
     try {
-        console.log('הודעה מוואטסאפ:', req.body);
+        console.log('📩 Webhook received:', JSON.stringify(req.body, null, 2));
         
-        const message = req.body;
-        if (message.body && message.author) {
-            const phoneNumber = message.author.replace('@c.us', '');
-            const messageText = message.body;
+        // Handle Green API webhook format
+        if (req.body.typeWebhook === 'incomingMessageReceived') {
+            const messageData = req.body.messageData;
+            const senderData = req.body.senderData;
+            
+            const phoneNumber = senderData.sender.replace('@c.us', '');
+            const messageText = messageData.textMessageData?.textMessage || 'הודעה ללא טקסט';
+            
+            console.log(`📱 הודעה מ-${phoneNumber}: ${messageText}`);
             
             // תגובה פשוטה
-            const response = `שלום! קיבלתי את ההודעה שלך: "${messageText}". אני בוט לשירות לקוחות.`;
+            const response = `שלום! קיבלתי את ההודעה שלך: "${messageText}". אני בוט לשירות לקוחות של SB Parking.`;
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
@@ -217,7 +222,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
         
         res.status(200).json({ status: 'OK' });
     } catch (error) {
-        console.error('שגיאה:', error);
+        console.error('❌ שגיאה:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -228,12 +233,17 @@ async function sendWhatsAppMessage(phoneNumber, message) {
     const url = `https://7105.api.greenapi.com/waInstance7105253183/sendMessage/2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889`;
     
     try {
-        await axios.post(url, {
+        const response = await axios.post(url, {
             chatId: `${phoneNumber}@c.us`,
             message: message
         });
-        console.log('הודעה נשלחה בוואטסאפ');
+        console.log('✅ הודעה נשלחה בוואטסאפ:', response.data);
     } catch (error) {
-        console.error('שגיאה בשליחת וואטסאפ:', error);
+        console.error('❌ שגיאה בשליחת וואטסאפ:', error.message);
     }
 }
+
+// בדיקת webhook
+app.get('/webhook/whatsapp', (req, res) => {
+    res.json({ message: 'WhatsApp Webhook is working!' });
+});
