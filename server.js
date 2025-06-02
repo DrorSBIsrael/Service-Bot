@@ -1688,101 +1688,49 @@ app.get('/test-bot-direct', (req, res) => {
         <html dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>🤖 בדיקה ישירה של הדר הבוט</title>
+            <title>בדיקת בוט הדר</title>
             <style>
-                body { font-family: Arial, sans-serif; margin: 0; background: #e5ddd5; }
-                .container { max-width: 900px; margin: 0 auto; background: white; min-height: 100vh; }
-                .header { background: #075e54; color: white; padding: 20px; text-align: center; }
-                .test-scenarios { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
-                .scenario { background: #f0f0f0; padding: 15px; border-radius: 10px; }
-                .test-btn { background: #25d366; color: white; padding: 8px 15px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; width: 100%; }
-                .results { background: white; margin: 10px 0; padding: 15px; border-radius: 8px; border: 1px solid #ddd; min-height: 60px; }
-                .customer-info { background: #d4edda; padding: 10px; border-radius: 5px; margin: 10px 0; font-size: 12px; }
-                .bot-response { background: #e3f2fd; padding: 15px; border-radius: 8px; margin: 10px 0; }
-                .service-number { background: #fff3cd; padding: 10px; border-radius: 5px; font-weight: bold; }
+                body { font-family: Arial, sans-serif; margin: 50px; background: #f0f0f0; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; }
+                button { background: #25d366; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 10px; }
+                .results { background: #f8f9fa; padding: 15px; margin: 15px 0; border-radius: 8px; min-height: 60px; }
             </style>
         </head>
         <body>
             <div class="container">
-                <div class="header">
-                    <h1>🤖 בדיקה ישירה של הדר</h1>
-                    <p>בדיקת זיהוי לקוח, מספור קריאות, תגובות ומיילים</p>
-                </div>
+                <h1>🤖 בדיקת בוט הדר</h1>
                 
-                <div class="test-scenarios">
-                    <div class="scenario">
-                        <h3>✅ לקוח קיים - דרור פרינץ</h3>
-                        <div class="customer-info">
-                            📞 0545484210 | 🏢 חניון רימון
-                        </div>
-                        <button class="test-btn" onclick="testBot('0545484210', 'דרור פרינץ', 'שלום', 'dror1')">👋 בדיקה רגילה</button>
-                        <button class="test-btn" onclick="testBot('0545484210', 'דרור פרינץ', 'יש לי תקלה בכניסה', 'dror2')">🔧 דיווח תקלה</button>
-                        <button class="test-btn" onclick="testBot('0545484210', 'דרור פרינץ', 'רוצה הצעת מחיר לכרטיסים', 'dror3')">💰 הצעת מחיר</button>
-                        <button class="test-btn" onclick="testBot('0545484210', 'דרור פרינץ', 'תודה, שלח לי סיכום', 'dror4')">📧 בקשת סיכום</button>
-                        <div class="results" id="dror1"></div>
-                        <div class="results" id="dror2"></div>
-                        <div class="results" id="dror3"></div>
-                        <div class="results" id="dror4"></div>
-                    </div>
-                    
-                    <div class="scenario">
-                        <h3>❓ לקוח לא מזוהה</h3>
-                        <div class="customer-info">
-                            📞 0501234567 | 🏢 לא במערכת
-                        </div>
-                        <button class="test-btn" onclick="testBot('0501234567', 'יוסי', 'שלום יש לי בעיה', 'unknown1')">❗ פנייה ללא זיהוי</button>
-                        <button class="test-btn" onclick="testBot('0501234567', 'יוסי', 'קוראים לי יוסי מחניון הרצל', 'unknown2')">🏢 ניסיון זיהוי לפי חניון</button>
-                        <button class="test-btn" onclick="testBot('0501234567', 'יוסי', 'אני יוסי כהן מספר לקוח 555', 'unknown3')">🆔 זיהוי עם מספר לקוח</button>
-                        <div class="results" id="unknown1"></div>
-                        <div class="results" id="unknown2"></div>
-                        <div class="results" id="unknown3"></div>
-                    </div>
-                </div>
+                <h3>✅ לקוח קיים - דרור פרינץ</h3>
+                <button onclick="testBot('dror', 'שלום')">👋 בדיקה רגילה</button>
+                <button onclick="testBot('dror', 'יש לי תקלה')">🔧 תקלה</button>
+                <button onclick="testBot('dror', 'רוצה הצעת מחיר')">💰 הצעת מחיר</button>
+                <div class="results" id="dror-results">תוצאות יופיעו כאן...</div>
                 
-                <div style="padding: 20px;">
-                    <h3>🧠 בדיקות זיכרון והמשכיות</h3>
-                    <button class="test-btn" onclick="testContinuation()">🔄 בדיקת המשכיות שיחה</button>
-                    <button class="test-btn" onclick="getMemoryStats()">📊 סטטיסטיקות זיכרון</button>
-                    <button class="test-btn" onclick="testEmailAlert()">📧 בדיקת אימייל התראה</button>
-                    <div class="results" id="memory-results"></div>
-                </div>
+                <h3>❓ לקוח לא מזוהה</h3>
+                <button onclick="testBot('unknown', 'שלום יש לי בעיה')">❗ פנייה ללא זיהוי</button>
+                <button onclick="testBot('unknown', 'אני מחניון הרצל')">🏢 זיהוי לפי חניון</button>
+                <div class="results" id="unknown-results">תוצאות יופיעו כאן...</div>
                 
-                <div style="padding: 20px; background: #f8f9fa;">
-                    <h3>📋 לוג בדיקות:</h3>
-                    <div id="test-log" style="background: white; padding: 15px; border-radius: 8px; height: 200px; overflow-y: auto; font-family: monospace; font-size: 12px;"></div>
-                </div>
+                <h3>🧠 בדיקות מערכת</h3>
+                <button onclick="getStats()">📊 סטטיסטיקות</button>
+                <button onclick="testEmail()">📧 בדיקת אימייל</button>
+                <div class="results" id="system-results">תוצאות יופיעו כאן...</div>
                 
-                <div style="text-align: center; padding: 20px;">
-                    <a href="/" style="background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">🔙 חזור למערכת</a>
-                </div>
+                <a href="/" style="background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">🔙 חזור למערכת</a>
             </div>
 
             <script>
-                function addToLog(message) {
-                    const log = document.getElementById('test-log');
-                    const time = new Date().toLocaleTimeString('he-IL');
-                    log.innerHTML += \`[\${time}] \${message}\\n\`;
-                    log.scrollTop = log.scrollHeight;
-                }
-                
-                function testBot(phone, senderName, message, resultId) {
-                    const resultDiv = document.getElementById(resultId);
-                    resultDiv.innerHTML = '⏳ שולח לבוט...';
+                function testBot(type, message) {
+                    const phone = type === 'dror' ? '0545484210' : '0501234567';
+                    const name = type === 'dror' ? 'דרור פרינץ' : 'יוסי';
+                    const resultId = type === 'dror' ? 'dror-results' : 'unknown-results';
                     
-                    addToLog(\`📤 שולח: "\${message}" מ-\${phone} (\${senderName})\`);
+                    document.getElementById(resultId).innerHTML = 'בודק...';
                     
-                    // יצירת webhook מדומה כמו שהיה מגיע מ-WhatsApp
                     const webhookData = {
                         typeWebhook: 'incomingMessageReceived',
-                        messageData: {
-                            textMessageData: {
-                                textMessage: message
-                            }
-                        },
-                        senderData: {
-                            sender: phone + '@c.us',
-                            senderName: senderName
-                        }
+                        messageData: { textMessageData: { textMessage: message } },
+                        senderData: { sender: phone + '@c.us', senderName: name }
                     };
                     
                     fetch('/webhook/whatsapp', {
@@ -1790,12 +1738,8 @@ app.get('/test-bot-direct', (req, res) => {
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(webhookData)
                     })
-                    .then(r => r.text())
-                    .then(response => {
-                        addToLog(\`✅ הבוט קיבל והעבד את ההודעה\`);
-                        
-                        // עכשיו נבדוק מה קרה במערכת
-                        return fetch('/api/check-last-response', {
+                    .then(() => {
+                        return fetch('/api/test-response', {
                             method: 'POST',
                             headers: {'Content-Type': 'application/json'},
                             body: JSON.stringify({phone: phone, message: message})
@@ -1803,179 +1747,91 @@ app.get('/test-bot-direct', (req, res) => {
                     })
                     .then(r => r.json())
                     .then(data => {
-                        resultDiv.innerHTML = \`
-                            <h4>📞 הודעה נשלחה:</h4>
-                            <p><em>"\${message}"</em></p>
-                            
-                            <div class="bot-response">
-                                <h4>🤖 תגובת הדר:</h4>
-                                <p>"\${data.botResponse || 'התגובה תישלח ל-WhatsApp'}"</p>
-                            </div>
-                            
-                            \${data.customerFound ? \`
-                                <div class="customer-info">
-                                    <strong>✅ לקוח מזוהה:</strong> \${data.customerFound}
-                                </div>
-                            \` : '<div style="background: #fff3cd; padding: 10px; border-radius: 5px;"><strong>⚠️ לקוח לא מזוהה</strong></div>'}
-                            
-                            \${data.serviceNumber ? \`
-                                <div class="service-number">
-                                    📋 מספר קריאה: \${data.serviceNumber}
-                                </div>
-                            \` : ''}
-                            
-                            \${data.emailSent ? '<p>📧 <strong>אימייל התראה נשלח!</strong></p>' : ''}
-                            
-                            <small style="color: #666;">⏰ \${new Date().toLocaleTimeString('he-IL')}</small>
-                        \`;
-                        
-                        addToLog(\`📧 \${data.emailSent ? 'אימייל נשלח' : 'אין אימייל'} | 🆔 \${data.customerFound || 'לא מזוהה'}\`);
+                        document.getElementById(resultId).innerHTML = 
+                            '<h4>📞 הודעה: "' + message + '"</h4>' +
+                            '<p><strong>🤖 תגובת הדר:</strong> ' + data.response + '</p>' +
+                            (data.serviceNumber ? '<p><strong>📋 מספר קריאה:</strong> ' + data.serviceNumber + '</p>' : '') +
+                            (data.customer ? '<p><strong>✅ לקוח מזוהה:</strong> ' + data.customer + '</p>' : '<p><strong>⚠️ לקוח לא מזוהה</strong></p>');
                     })
                     .catch(err => {
-                        resultDiv.innerHTML = \`<p style="color: red;">❌ שגיאה: \${err.message}</p>\`;
-                        addToLog(\`❌ שגיאה: \${err.message}\`);
+                        document.getElementById(resultId).innerHTML = 'שגיאה: ' + err.message;
                     });
                 }
                 
-                function testContinuation() {
-                    const resultDiv = document.getElementById('memory-results');
-                    resultDiv.innerHTML = '🧠 בודק המשכיות...';
-                    
-                    // שלח הודעה ראשונה
-                    testBot('0545484210', 'דרור פרינץ', 'יש לי תקלה', 'temp');
-                    
-                    // אחרי 2 שניות שלח המשך
-                    setTimeout(() => {
-                        testBot('0545484210', 'דרור פרינץ', 'התקלה בכניסה לא נפתרה', 'temp2');
-                        resultDiv.innerHTML = '✅ נבדקה המשכיות שיחה - בדוק את התגובות למעלה';
-                    }, 2000);
-                }
-                
-                function getMemoryStats() {
+                function getStats() {
                     fetch('/api/memory/stats')
                     .then(r => r.json())
                     .then(stats => {
-                        document.getElementById('memory-results').innerHTML = \`
-                            <h4>🧠 סטטיסטיקות זיכרון:</h4>
-                            <p><strong>פעילות:</strong> \${stats.active}</p>
-                            <p><strong>מסוימות:</strong> \${stats.resolved}</p>
-                            <p><strong>ממתינות לטכנאי:</strong> \${stats.waiting}</p>
-                            <p><strong>סה"כ:</strong> \${stats.total}</p>
-`;
-                        addToLog(`📊 סטטיסטיקות: ${stats.total} שיחות (${stats.active} פעילות)`);
+                        document.getElementById('system-results').innerHTML = 
+                            '<h4>📊 סטטיסטיקות:</h4>' +
+                            '<p>פעילות: ' + stats.active + '</p>' +
+                            '<p>מסוימות: ' + stats.resolved + '</p>' +
+                            '<p>סה"כ: ' + stats.total + '</p>';
                     });
                 }
                 
-                function testEmailAlert() {
-                    fetch('/api/test-email-alert', {method: 'POST'})
+                function testEmail() {
+                    document.getElementById('system-results').innerHTML = 'שולח אימייל...';
+                    fetch('/api/test-email-simple', {method: 'POST'})
                     .then(r => r.json())
                     .then(data => {
-                        document.getElementById('memory-results').innerHTML = `
-                            <h4>📧 בדיקת אימייל:</h4>
-                            <p>${data.success ? '✅ אימייל נשלח בהצלחה!' : '❌ שגיאה באימייל'}</p>
-                            <p><strong>נושא:</strong> ${data.subject || 'לא זמין'}</p>
-                        `;
-                        addToLog(`📧 אימייל בדיקה: ${data.success ? 'הצלחה' : 'כישלון'}`);
+                        document.getElementById('system-results').innerHTML = 
+                            '<h4>📧 בדיקת אימייל:</h4>' +
+                            '<p>' + (data.success ? '✅ אימייל נשלח!' : '❌ שגיאה') + '</p>' +
+                            '<p>נושא: ' + (data.subject || 'לא זמין') + '</p>';
                     });
                 }
-                
-                // הוספת זמן לכל רכיב
-                document.addEventListener('DOMContentLoaded', function() {
-                    addToLog('🚀 מערכת בדיקה הופעלה');
-                });
             </script>
         </body>
         </html>
     `);
 });
 
-// API לבדיקת התגובה האחרונה
-app.post('/api/check-last-response', async (req, res) => {
+// API פשוט לבדיקה
+app.post('/api/test-response', async (req, res) => {
     try {
         const { phone, message } = req.body;
-        
-        // חיפוש לקוח
         const customer = findCustomerByPhoneOrSite(phone, message);
-        
-        // בדיקת זיכרון
-        const context = conversationMemory.getConversationContext(phone, customer);
-        
-        // יצירת תגובה מדומה (כמו שהבוט היה עושה)
-        let botResponse = '';
         let serviceNumber = null;
+        let response = '';
         
         if (customer) {
-            if (message.toLowerCase().includes('תקלה') || message.toLowerCase().includes('בעיה')) {
+            if (message.includes('תקלה') || message.includes('בעיה')) {
                 serviceNumber = generateServiceCallNumber();
-                botResponse = `שלום ${customer.name} מ${customer.site}. נפתחה קריאת שירות ${serviceNumber}. טכנאי יחזור תוך 4 שעות.`;
-            } else if (message.toLowerCase().includes('מחיר')) {
+                response = 'שלום ' + customer.name + '. נפתחה קריאת שירות ' + serviceNumber + '. טכנאי יחזור תוך 4 שעות.';
+            } else if (message.includes('מחיר')) {
                 serviceNumber = generateServiceCallNumber();
-                botResponse = `שלום ${customer.name}. קריאה ${serviceNumber} נפתחה להצעת מחיר.`;
-            } else if (message.toLowerCase().includes('סיכום')) {
-                botResponse = `תודה ${customer.name}! אשלח סיכום לאימייל ${customer.email}`;
+                response = 'שלום ' + customer.name + '. קריאה ' + serviceNumber + ' נפתחה להצעת מחיר.';
             } else {
-                botResponse = `שלום ${customer.name} מ${customer.site}. איך אוכל לעזור?`;
+                response = 'שלום ' + customer.name + ' מ' + customer.site + '. איך אוכל לעזור?';
             }
         } else {
-            botResponse = 'שלום, כדי לטפל בפנייתך אני זקוקה לפרטי זיהוי: שם מלא ושם החניון.';
+            response = 'שלום, כדי לטפל בפנייתך אני זקוקה לפרטי זיהוי.';
         }
         
         res.json({
-            botResponse: botResponse,
-            customerFound: customer ? `${customer.name} - ${customer.site}` : null,
-            serviceNumber: serviceNumber,
-            emailSent: true,
-            conversationLength: context ? context.conversationLength : 1
+            response: response,
+            customer: customer ? customer.name + ' - ' + customer.site : null,
+            serviceNumber: serviceNumber
         });
-        
     } catch (error) {
-        res.json({ 
-            botResponse: 'שגיאה במערכת',
-            customerFound: null,
-            serviceNumber: null,
-            emailSent: false
-        });
+        res.json({ response: 'שגיאה במערכת', customer: null, serviceNumber: null });
     }
 });
 
-    } catch (error) {
-        res.json({ 
-            botResponse: 'שגיאה במערכת',
-            customerFound: null,
-            serviceNumber: null,
-            emailSent: false
-        });
-    }
-});
-
-// API לבדיקת אימייל
-app.post('/api/test-email-alert', async (req, res) => {
+// API פשוט לאימייל
+app.post('/api/test-email-simple', async (req, res) => {
     try {
         const serviceNumber = generateServiceCallNumber();
-        
-        const result = await transporter.sendMail({
+        await transporter.sendMail({
             from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
             to: 'Dror@sbparking.co.il',
-            subject: \`🧪 בדיקת מערכת - קריאה \${serviceNumber}\`,
-            html: \`
-                <h2>🧪 בדיקת מערכת הבוט</h2>
-                <p><strong>מספר קריאה:</strong> \${serviceNumber}</p>
-                <p><strong>זמן:</strong> \${new Date().toLocaleString('he-IL')}</p>
-                <p>✅ המערכת עובדת תקין!</p>
-            \`
+            subject: 'בדיקת מערכת - קריאה ' + serviceNumber,
+            html: '<h2>בדיקת מערכת</h2><p>מספר קריאה: ' + serviceNumber + '</p>'
         });
-        
-        res.json({ 
-            success: true, 
-            subject: \`בדיקת מערכת - קריאה \${serviceNumber}\`,
-            messageId: result.messageId
-        });
-        
+        res.json({ success: true, subject: 'בדיקת מערכת - קריאה ' + serviceNumber });
     } catch (error) {
-        res.json({ 
-            success: false, 
-            error: error.message 
-        });
+        res.json({ success: false, error: error.message });
     }
 });
 
