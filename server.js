@@ -23,9 +23,9 @@ try {
         email: client["מייל"]
     }));
     
-    console.log(`✅ נטענו ${customers.length} לקוחות מהקובץ`);
+    console.log(`? נטענו ${customers.length} לקוחות מהקובץ`);
 } catch (error) {
-    console.error('❌ שגיאה בטעינת קובץ הלקוחות:', error.message);
+    console.error('? שגיאה בטעינת קובץ הלקוחות:', error.message);
     // רשימה בסיסית כגיבוי
     customers = [
         { id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }
@@ -60,19 +60,20 @@ const upload = multer({
     }
 });
 
-// עמוד הבית - טופס אימייל
+// עמוד הבית המעודכן - טופס אימייל
 app.get('/', (req, res) => {
     res.send(`
         <!DOCTYPE html>
         <html dir="rtl">
         <head>
             <meta charset="UTF-8">
-            <title>מערכת שירות לקוחות - שיידט את בכמן</title>
+            <title>מערכת בקרת חניה מתקדמת - שיידט את בכמן</title>
             <style>
                 body { font-family: Arial, sans-serif; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
                 .container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
                 h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
                 .company-header { text-align: center; background: #3498db; color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; }
+                .hadar-info { background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #27ae60; }
                 .stats { display: flex; justify-content: space-around; margin: 20px 0; }
                 .stat { text-align: center; background: #ecf0f1; padding: 15px; border-radius: 8px; }
                 input, textarea, button, select { 
@@ -98,27 +99,52 @@ app.get('/', (req, res) => {
                 .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
                 .quick-btn { padding: 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 8px; text-align: center; }
                 .quick-btn:hover { background: #219a52; }
+                .service-areas { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .service-area { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-right: 4px solid #3498db; }
             </style>
         </head>
         <body>
             <div class="container">
                 <div class="company-header">
                     <h1>🚗 שיידט את בכמן</h1>
-                    <p>מערכת ניהול חניות ושירות לקוחות מתקדמת</p>
+                    <p>מערכת בקרת חניה מתקדמת</p>
+                </div>
+                
+                <div class="hadar-info">
+                    <h3>👩‍💼 הדר - נציגת שירות לקוחות</h3>
+                    <p><strong>מתמחה בטיפול ללקוחות מזוהים בלבד:</strong></p>
+                    <ul>
+                        <li>🔧 שירות ודיווח על תקלות</li>
+                        <li>💰 הצעות מחיר לציוד</li>
+                        <li>📋 דיווח על נזקים</li>
+                        <li>📚 הדרכות תפעול</li>
+                    </ul>
+                    <p><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    <small>שעות פעילות: א'-ה' 8:15-17:00</small>
                 </div>
                 
                 <div class="stats">
                     <div class="stat">
-                        <h3>✅ שירות אימייל</h3>
+                        <h3>📧 שירות אימייל</h3>
                         <small>smtp.012.net.il</small>
                     </div>
                     <div class="stat">
-                        <h3>📱 WhatsApp Bot</h3>
-                        <small>AI מתקדם</small>
+                        <h3>🤖 הדר AI Bot</h3>
+                        <small>נציגת חכמה</small>
                     </div>
                     <div class="stat">
                         <h3>👥 לקוחות רשומים</h3>
                         <small>${customers.length} אתרים</small>
+                    </div>
+                </div>
+                
+                <div class="service-areas">
+                    <h3>🛠️ תחומי שירות</h3>
+                    <div class="service-area">
+                        <strong>ציוד בקרת חניה:</strong> כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, תחנת עבודה
+                    </div>
+                    <div class="service-area">
+                        <strong>טווחי יחידות:</strong> 100-199 כניסות | 200-299 יציאות | 300-399 מעברים | 600-699 אוטומטיות | 700-799 קופות ידניות
                     </div>
                 </div>
                 
@@ -163,7 +189,8 @@ app.get('/', (req, res) => {
                     <p><strong>WhatsApp Webhook:</strong> <code>/webhook/whatsapp</code></p>
                     <p><strong>מספר מחובר:</strong> 972545484210</p>
                     <p><strong>שרת אימייל:</strong> smtp.012.net.il</p>
-                    <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי חניה</p>
+                    <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי בקרת חניה</p>
+                    <p><strong>נציגת שירות:</strong> הדר - AI מתקדם</p>
                 </div>
             </div>
             
@@ -200,7 +227,7 @@ app.get('/', (req, res) => {
                         matches.slice(0, 5).map(c => 
                             \`<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
                                 <strong>\${c.name}</strong> - \${c.site}<br>
-                                <small>📞 \${c.phone} | 📧 \${c.email}</small>
+                                <small>📞 \${c.phone} | 📧 \${c.email} | #\${c.id}</small>
                                 <button onclick="selectCustomer('\${c.email}', '\${c.name}', '\${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
                             </div>\`
                         ).join('');
@@ -224,15 +251,15 @@ app.get('/', (req, res) => {
 // API לשליחת אימייל עם תמונות
 app.post('/send-email', upload.array('images', 5), async (req, res) => {
     try {
-        console.log('📧 מתחיל לשלוח אימייל...');
+        console.log('?? מתחיל לשלוח אימייל...');
         
         const { to, subject, message } = req.body;
         
         let htmlContent = `
             <div dir="rtl" style="font-family: Arial, sans-serif;">
                 <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">🚗 שיידט את בכמן</h2>
-                    <p style="margin: 5px 0 0 0;">מערכת ניהול חניות ושירות לקוחות</p>
+                    <h2 style="margin: 0;">?? שיידט את בכמן</h2>
+                    <p style="margin: 5px 0 0 0;">הדר נציגת שירות מערכת בקרת חניה מתקדמת</p>
                 </div>
                 <div style="padding: 20px;">
                     ${message.replace(/\n/g, '<br>')}
@@ -242,8 +269,8 @@ app.post('/send-email', upload.array('images', 5), async (req, res) => {
         const attachments = [];
         
         if (req.files && req.files.length > 0) {
-            console.log(`📎 מצרף ${req.files.length} תמונות`);
-            htmlContent += '<br><h3 style="color: #2c3e50;">📷 תמונות מצורפות:</h3>';
+            console.log(`?? מצרף ${req.files.length} תמונות`);
+            htmlContent += '<br><h3 style="color: #2c3e50;">?? תמונות מצורפות:</h3>';
             
             req.files.forEach((file, index) => {
                 const cid = `image${index + 1}`;
@@ -261,7 +288,7 @@ app.post('/send-email', upload.array('images', 5), async (req, res) => {
                 <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
                     <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
                         הודעה זו נשלחה ממערכת שיידט את בכמן<br>
-                        📞 לפניות: Report@sbparking.co.il | 🌐 מערכת ניהול חניות מתקדמת
+                        ?? לפניות: Report@sbparking.co.il | ?? מערכת ניהול חניות מתקדמת
                     </p>
                 </div>
             </div>
@@ -276,36 +303,36 @@ app.post('/send-email', upload.array('images', 5), async (req, res) => {
         };
         
         const result = await transporter.sendMail(mailOptions);
-        console.log('✅ אימייל נשלח בהצלחה:', result.messageId);
+        console.log('? אימייל נשלח בהצלחה:', result.messageId);
         
         res.send(`
             <div dir="rtl" style="font-family: Arial; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 50px 0;">
                 <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
                     <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #27ae60; margin: 0;">✅ האימייל נשלח בהצלחה!</h1>
+                        <h1 style="color: #27ae60; margin: 0;">? האימייל נשלח בהצלחה!</h1>
                     </div>
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                        <p><strong>📧 נמען:</strong> ${to}</p>
-                        <p><strong>📝 נושא:</strong> ${subject}</p>
-                        <p><strong>📎 תמונות:</strong> ${req.files ? req.files.length : 0}</p>
-                        <p><strong>🆔 Message ID:</strong> <code>${result.messageId}</code></p>
+                        <p><strong>?? נמען:</strong> ${to}</p>
+                        <p><strong>?? נושא:</strong> ${subject}</p>
+                        <p><strong>?? תמונות:</strong> ${req.files ? req.files.length : 0}</p>
+                        <p><strong>?? Message ID:</strong> <code>${result.messageId}</code></p>
                     </div>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">← חזור למערכת</a>
+                        <a href="/" style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">? חזור למערכת</a>
                     </div>
                 </div>
             </div>
         `);
         
     } catch (error) {
-        console.error('❌ שגיאה בשליחת אימייל:', error);
+        console.error('? שגיאה בשליחת אימייל:', error);
         res.status(500).send(`
             <div dir="rtl" style="font-family: Arial; margin: 50px; background: #e74c3c; min-height: 100vh; padding: 50px 0;">
                 <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px;">
-                    <h2 style="color: #e74c3c; text-align: center;">❌ שגיאה בשליחת האימייל</h2>
+                    <h2 style="color: #e74c3c; text-align: center;">? שגיאה בשליחת האימייל</h2>
                     <p><strong>פרטי השגיאה:</strong> ${error.message}</p>
                     <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">← חזור לנסות שוב</a>
+                        <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">? חזור לנסות שוב</a>
                     </div>
                 </div>
             </div>
@@ -313,10 +340,10 @@ app.post('/send-email', upload.array('images', 5), async (req, res) => {
     }
 });
 
-// WhatsApp Webhook - קבלת הודעות
+// WhatsApp Webhook משופר - קבלת הודעות
 app.post('/webhook/whatsapp', async (req, res) => {
     try {
-        console.log('📩 WhatsApp Webhook received:', JSON.stringify(req.body, null, 2));
+        console.log('?? WhatsApp Webhook received:', JSON.stringify(req.body, null, 2));
         
         // רק הודעות נכנסות - לא סטטוסים
         if (req.body.typeWebhook === 'incomingMessageReceived') {
@@ -326,12 +353,18 @@ app.post('/webhook/whatsapp', async (req, res) => {
             const phoneNumber = senderData.sender.replace('@c.us', '');
             const messageText = messageData.textMessageData?.textMessage || 'הודעה ללא טקסט';
             
-            console.log(`📱 הודעה מ-${phoneNumber}: ${messageText}`);
+            console.log(`?? הודעה מ-${phoneNumber}: ${messageText}`);
             
-            // חיפוש לקוח במסד הנתונים
-            const customer = findCustomerByPhone(phoneNumber);
+            // חיפוש לקוח במסד הנתונים (גם לפי טלפון וגם לפי שם אתר)
+            const customer = findCustomerByPhoneOrSite(phoneNumber, messageText);
             
-            // יצירת תגובה עם AI
+            if (customer) {
+                console.log(`? לקוח מזוהה: ${customer.name} מ${customer.site}`);
+            } else {
+                console.log(`?? לקוח לא מזוהה: ${phoneNumber}`);
+            }
+            
+            // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
             const response = await generateAIResponse(messageText, senderData.senderName || 'לקוח', customer);
             
             // שליחת תגובה
@@ -339,58 +372,74 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             // שליחת אימייל התראה למנהל
             try {
+                const emailSubject = customer ? 
+                    `הודעה מ-${customer.name} (${customer.site})` : 
+                    `הודעה חדשה מ-WhatsApp: ${phoneNumber}`;
+                
                 await transporter.sendMail({
                     from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
                     to: 'Dror@sbparking.co.il',
-                    subject: `הודעה חדשה מ-WhatsApp: ${customer ? customer.name : phoneNumber}`,
+                    subject: emailSubject,
                     html: `
                         <div dir="rtl" style="font-family: Arial, sans-serif;">
                             <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                                <h2 style="margin: 0;">📱 הודעה חדשה מוואטסאפ</h2>
+                                <h2 style="margin: 0;">?? הודעה חדשה מוואטסאפ</h2>
                                 <p style="margin: 5px 0 0 0;">שיידט את בכמן - מערכת שירות לקוחות</p>
                             </div>
+                            
                             <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
                                 <h3 style="color: #2c3e50; margin-top: 0;">פרטי השולח:</h3>
-                                <p><strong>📞 מספר:</strong> ${phoneNumber}</p>
-                                <p><strong>👤 שם:</strong> ${senderData.senderName || 'לא זמין'}</p>
+                                <p><strong>?? מספר:</strong> ${phoneNumber}</p>
+                                <p><strong>?? שם:</strong> ${senderData.senderName || 'לא זמין'}</p>
+                                
                                 ${customer ? `
-                                <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-right: 4px solid #28a745;">
-                                    <h4 style="color: #155724; margin-top: 0;">✅ לקוח מזוהה במערכת:</h4>
+                                <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-right: 4px solid #28a745; margin-top: 15px;">
+                                    <h4 style="color: #155724; margin-top: 0;">? לקוח מזוהה במערכת:</h4>
                                     <p><strong>שם:</strong> ${customer.name}</p>
-                                    <p><strong>אתר:</strong> ${customer.site}</p>
+                                    <p><strong>אתר חניה:</strong> ${customer.site}</p>
                                     <p><strong>אימייל:</strong> ${customer.email}</p>
                                     <p><strong>כתובת:</strong> ${customer.address}</p>
+                                    <p><strong>מספר לקוח:</strong> #${customer.id}</p>
                                 </div>
                                 ` : `
-                                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107;">
-                                    <p style="color: #856404; margin: 0;"><strong>⚠️ לקוח לא מזוהה במערכת</strong></p>
+                                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107; margin-top: 15px;">
+                                    <p style="color: #856404; margin: 0;"><strong>?? לקוח לא מזוהה במערכת</strong></p>
+                                    <small style="color: #856404;">ייתכן שצריך לבקש פרטי זיהוי נוספים</small>
                                 </div>
                                 `}
                             </div>
-                            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db;">
-                                <h3 style="color: #2c3e50; margin-top: 0;">💬 ההודעה:</h3>
-                                <p style="font-size: 16px; line-height: 1.5;">"${messageText}"</p>
+                            
+                            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db; margin-bottom: 20px;">
+                                <h3 style="color: #2c3e50; margin-top: 0;">?? ההודעה:</h3>
+                                <p style="font-size: 16px; line-height: 1.5; background: #f8f9fa; padding: 15px; border-radius: 8px;">"${messageText}"</p>
                             </div>
+                            
+                            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #27ae60;">
+                                <h3 style="color: #2c3e50; margin-top: 0;">?? התגובה שנשלחה:</h3>
+                                <p style="font-size: 14px; line-height: 1.5; background: #e8f5e8; padding: 15px; border-radius: 8px;">"${response}"</p>
+                            </div>
+                            
                             <div style="margin-top: 20px; padding: 15px; background: #ecf0f1; border-radius: 8px; text-align: center;">
                                 <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
-                                    ⏰ זמן: ${new Date().toLocaleString('he-IL')}<br>
-                                    🤖 הודעה זו נשלחה אוטומטית ממערכת שיידט את בכמן
+                                    ? זמן: ${new Date().toLocaleString('he-IL')}<br>
+                                    ?? הודעה זו נשלחה אוטומטית ממערכת שיידט את בכמן<br>
+                                    ?? סה"כ לקוחות במערכת: ${customers.length}
                                 </p>
                             </div>
                         </div>
                     `
                 });
-                console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+                console.log('?? התראה נשלחה למנהל Dror@sbparking.co.il');
             } catch (emailError) {
-                console.error('❌ שגיאה בשליחת התראה:', emailError);
+                console.error('? שגיאה בשליחת התראה:', emailError);
             }
         } else {
-            console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
+            console.log('?? התעלמות מסטטוס:', req.body.typeWebhook);
         }
         
         res.status(200).json({ status: 'OK' });
     } catch (error) {
-        console.error('❌ שגיאה בעיבוד webhook:', error);
+        console.error('? שגיאה בעיבוד webhook:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -409,33 +458,58 @@ function findCustomerByPhone(phoneNumber) {
     });
 }
 
-// פונקציית AI לתגובות חכמות
+// פונקציית AI מתקדמת - הדר נציגת שירות לקוחות
 async function generateAIResponse(message, customerName, customerData = null) {
     try {
-        const systemPrompt = `אתה נציג שירות לקוחות של "שיידט את בכמן" - חברת ניהול חניות מתקדמת בישראל.
+        // השהיה למניעת rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        
+        const systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
 
-תפקידך:
-- לעזור ללקוחות בנושאי חניות, תשלומים, הפרות ותחזוקה
-- לתת מידע מדויק ומועיל על מערכות חניה
-- להיות מקצועי אך חם ונעים
-- לענות תמיד בעברית בלבד
-- אם אתה לא יודע משהו - תבקש מהלקוח לחכות לנציג אנושי
+🔍 כללי זיהוי לקוח:
+אני מעניקה מענה מקצועי למזוהים בלבד, בהתבסס על מאגר מידע קיים של החברה.
+אם הלקוח לא מזוהה במערכת - אבקש ממנו פרטי זיהוי (שם, חניון, מספר לקוח).
 
 ${customerData ? `
-מידע על הלקוח:
+✅ לקוח מזוהה במערכת:
 - שם: ${customerData.name}
-- אתר: ${customerData.site}
+- אתר חניה: ${customerData.site}
+- מספר לקוח: #${customerData.id}
+- טלפון: ${customerData.phone}
 - אימייל: ${customerData.email}
 - כתובת: ${customerData.address}
-` : 'הלקוח לא מזוהה במערכת - בקש פרטים אם נדרש.'}
+
+מכיוון שהלקוח מזוהה, אוכל לטפל בפנייתו לפי סדר הטיפול.
+` : `
+⚠️ לקוח לא מזוהה במערכת!
+אני חייבת לזהות את הלקוח קודם כל. אבקש:
+- שם מלא
+- שם החניון/אתר החניה
+- מספר לקוח (אם יודע)
+ללא זיהוי לא אוכל לטפל בפנייה.
+`}
+
+📋 תחומי התמחותי (רק ללקוחות מזוהים):
+1. שירות ודיווח על תקלות
+2. הצעות מחיר (כרטיסים, גלילי קבלה, זרועות מחסום)
+3. דיווח על נזקים
+4. הדרכות תפעול
+
+🛠️ ציוד בחניון שאני מטפלת בו:
+כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, מחשב אשראי, תחנת עבודה, מרכזיית אינטרקום, טלפון.
+
+📞 פרטי קשר:
+- טלפון משרד: 039792365
+- מייל שירות: Service@sbcloud.co.il
+- מייל משרד: Office@sbcloud.co.il
+- שעות פעילות: א'-ה' 8:15-17:00
 
 כללי תגובה:
-- התחל תמיד בברכה אישית
-- היה קצר ולעניין (עד 3 משפטים)
-- הוסף אימוג'י רלבנטי
-- אם זה נושא מורכב - הבטח שנציג יחזור
-- הזכר את שם החברה "שיידט את בכמן" בצורה טבעית
-- אם הלקוח מזוהה - התייחס לאתר החניה שלו`;
+- אדיבה, מקצועית, עניינית וקצרה
+- לא נותנת מידע טכני שאינו במאגר
+- אם אין תשובה ברורה - מפנה לנציג אנושי
+- לא שולחת אימייל אלא בסוף שיחה ובאישור הלקוח
+- שומרת על דיסקרטיות ומתעדת כל אינטראקציה`;
 
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
@@ -449,27 +523,144 @@ ${customerData ? `
                     content: `הלקוח ${customerName} שלח: "${message}"`
                 }
             ],
-            max_tokens: 150,
-            temperature: 0.7
+            max_tokens: 200,
+            temperature: 0.3 // נמוך יותר למקצועיות
         }, {
             headers: {
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            timeout: 15000
         });
 
         return response.data.choices[0].message.content.trim();
+        
     } catch (error) {
         console.error('❌ שגיאה ב-OpenAI:', error.message);
-        // תגובת fallback אם ה-AI לא עובד
-        const greeting = customerData ? 
-            `שלום ${customerData.name} מ${customerData.site}! 👋` :
-            `שלום ${customerName}! 👋`;
+        
+        // תגובות fallback מותאמות לפי הדר
+        let fallbackMessage;
+        
+        if (error.response?.status === 429) {
+            console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר סטנדרטית');
             
-        return `${greeting}\n\nקיבלתי את ההודעה שלך ואעביר אותה לנציג המתאים.\nנחזור אליך בהקדם!\n\n🚗 שיידט את בכמן - כאן בשבילך`;
+            if (customerData) {
+                // לקוח מזוהה
+                fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
+
+אני הדר משירות הלקוחות של שיידט את בכמן.
+קיבלתי את פנייתך ואעביר אותה לטיפול מיידי.
+
+נציג יחזור אליך בהקדם.
+
+📞 לדחוף: 039792365
+📧 Service@sbcloud.co.il`;
+            } else {
+                // לקוח לא מזוהה
+                fallbackMessage = `שלום ${customerName} 👋
+
+אני הדר מחברת שיידט את בכמן.
+כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
+
+• שם מלא
+• שם החניון/אתר החניה  
+• מספר לקוח (אם ידוע)
+
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+            }
+        } else {
+            fallbackMessage = `שלום ${customerName} 👋
+
+אני הדר מחברת שיידט את בכמן.
+יש לי בעיה טכנית זמנית.
+
+אנא פנה ישירות:
+📞 039792365 
+📧 Service@sbcloud.co.il
+
+שעות פעילות: א'-ה' 8:15-17:00`;
+        }
+        
+        return fallbackMessage;
     }
 }
 
+// פונקציה מותאמת להדר לזיהוי סוג פנייה
+function identifyRequestType(message, customerData) {
+    const msgLower = message.toLowerCase();
+    
+    // זיהוי תקלות
+    if (msgLower.includes('תקלה') || msgLower.includes('לא עובד') || msgLower.includes('בעיה') || 
+        msgLower.includes('תקוע') || msgLower.includes('לא מנפיק') || msgLower.includes('אתחול')) {
+        return 'תקלה';
+    }
+    
+    // זיהוי הצעות מחיר
+    if (msgLower.includes('הצעת מחיר') || msgLower.includes('כרטיסים') || msgLower.includes('גלילי קבלה') || 
+        msgLower.includes('זרוע') || msgLower.includes('הזמנה') || msgLower.includes('מחיר')) {
+        return 'הצעת מחיר';
+    }
+    
+    // זיהוי נזקים
+    if (msgLower.includes('נזק') || msgLower.includes('שבור') || msgLower.includes('פגוע') || 
+        msgLower.includes('תאונה') || msgLower.includes('דיווח נזק')) {
+        return 'נזק';
+    }
+    
+    // זיהוי הדרכות
+    if (msgLower.includes('הדרכה') || msgLower.includes('איך') || msgLower.includes('למד') || 
+        msgLower.includes('הוראות') || msgLower.includes('תפעול')) {
+        return 'הדרכה';
+    }
+    
+    return 'כללי';
+}
+// פונקציה לחיפוש לקוח גם לפי שם החניון
+function findCustomerByPhoneOrSite(phoneNumber, message = '') {
+    // חיפוש ראשון לפי מספר טלפון
+    let customer = findCustomerByPhone(phoneNumber);
+    
+    if (customer) {
+        return customer;
+    }
+    
+    // אם לא נמצא לפי טלפון, ננסה לפי שם אתר בהודעה
+    const messageWords = message.toLowerCase();
+    
+    // חיפוש בהודעה שמות של אתרי חניה
+    const foundSite = customers.find(c => {
+        const siteName = c.site.toLowerCase();
+        const siteWords = siteName.split(' ');
+        
+        // בדיקה אם יש התאמה חלקית לשם האתר
+        return siteWords.some(word => 
+            word.length > 2 && messageWords.includes(word)
+        );
+    });
+    
+    return foundSite || null;
+}
+
+// פונקציה משופרת לחיפוש לקוח לפי מספר טלפון
+function findCustomerByPhone(phoneNumber) {
+    if (!phoneNumber) return null;
+    
+    // ניקוי מספר הטלפון מתווים מיותרים
+    const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
+    
+    return customers.find(customer => {
+        if (!customer.phone) return false;
+        
+        const customerPhone = customer.phone.replace(/[^\d]/g, '');
+        
+        // בדיקות שונות לקידומות
+        return customerPhone === cleanPhone || 
+               customerPhone === cleanPhone.substring(3) || 
+               ('972' + customerPhone) === cleanPhone ||
+               customerPhone === ('0' + cleanPhone.substring(3)) ||
+               ('0' + customerPhone.substring(3)) === cleanPhone;
+    });
+}
 // פונקציה לשליחת הודעות WhatsApp
 async function sendWhatsAppMessage(phoneNumber, message) {
     const instanceId = process.env.WHATSAPP_INSTANCE || '7105253183';
@@ -481,10 +672,10 @@ async function sendWhatsAppMessage(phoneNumber, message) {
             chatId: `${phoneNumber}@c.us`,
             message: message
         });
-        console.log('✅ הודעת WhatsApp נשלחה:', response.data);
+        console.log('? הודעת WhatsApp נשלחה:', response.data);
         return response.data;
     } catch (error) {
-        console.error('❌ שגיאה בשליחת WhatsApp:', error.response?.data || error.message);
+        console.error('? שגיאה בשליחת WhatsApp:', error.response?.data || error.message);
         throw error;
     }
 }
@@ -540,14 +731,14 @@ app.get('/test-connection', async (req, res) => {
         await transporter.verify();
         res.json({
             success: true,
-            message: '✅ החיבור לשרת האימייל עובד!',
+            message: '? החיבור לשרת האימייל עובד!',
             server: 'smtp.012.net.il',
             company: 'שיידט את בכמן'
         });
     } catch (error) {
         res.status(500).json({
             success: false,
-            message: '❌ בעיה בחיבור לשרת האימייל',
+            message: '? בעיה בחיבור לשרת האימייל',
             error: error.message
         });
     }
@@ -598,28 +789,28 @@ app.get('/dashboard', (req, res) => {
         <body>
             <div class="container">
                 <div class="header">
-                    <h1>📊 דשבורד ניהול - שיידט את בכמן</h1>
+                    <h1>?? דשבורד ניהול - שיידט את בכמן</h1>
                     <p>מעקב ובקרה על מערכת ניהול החניות</p>
                 </div>
                 
                 <div class="stats-grid">
                     <div class="stat-card">
-                        <h3>👥 סה"כ לקוחות</h3>
+                        <h3>?? סה"כ לקוחות</h3>
                         <div class="stat-number">${totalCustomers}</div>
                         <p>אתרי חניה פעילים</p>
                     </div>
                     <div class="stat-card">
-                        <h3>🏢 ערים</h3>
+                        <h3>?? ערים</h3>
                         <div class="stat-number">${uniqueCities}</div>
                         <p>ערים עם אתרי חניה</p>
                     </div>
                     <div class="stat-card">
-                        <h3>📧 עם אימייל</h3>
+                        <h3>?? עם אימייל</h3>
                         <div class="stat-number">${customersWithEmail}</div>
                         <p>לקוחות עם כתובת אימייל</p>
                     </div>
                     <div class="stat-card">
-                        <h3>📱 WhatsApp</h3>
+                        <h3>?? WhatsApp</h3>
                         <div class="stat-number">פעיל</div>
                         <p>בוט AI מתקדם</p>
                     </div>
@@ -627,7 +818,7 @@ app.get('/dashboard', (req, res) => {
                 
                 <div class="customers-table">
                     <div class="table-header">
-                        <h2>📋 רשימת לקוחות</h2>
+                        <h2>?? רשימת לקוחות</h2>
                     </div>
                     <div class="customer-row" style="background: #ecf0f1; font-weight: bold;">
                         <div>שם ואתר</div>
@@ -642,8 +833,8 @@ app.get('/dashboard', (req, res) => {
                                 <small style="color: #666;">${c.site}</small>
                             </div>
                             <div>
-                                📞 ${c.phone}<br>
-                                📧 ${c.email}
+                                ?? ${c.phone}<br>
+                                ?? ${c.email}
                             </div>
                             <div>#${c.id}</div>
                             <div>${c.address}</div>
@@ -656,7 +847,7 @@ app.get('/dashboard', (req, res) => {
                     ` : ''}
                 </div>
                 
-                <a href="/" class="back-btn">← חזור למערכת הראשית</a>
+                <a href="/" class="back-btn">? חזור למערכת הראשית</a>
             </div>
         </body>
         </html>
@@ -666,19 +857,19 @@ app.get('/dashboard', (req, res) => {
 // הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('🚀 השרת פועל על פורט:', PORT);
-    console.log('🌐 פתח בדפדפן: http://localhost:' + PORT);
-    console.log('📧 שרת אימייל: smtp.012.net.il');
-    console.log('📱 WhatsApp Instance: 7105253183');
-    console.log('🏢 חברה: שיידט את בכמן');
-    console.log(`👥 לקוחות במערכת: ${customers.length}`);
+    console.log('?? השרת פועל על פורט:', PORT);
+    console.log('?? פתח בדפדפן: http://localhost:' + PORT);
+    console.log('?? שרת אימייל: smtp.012.net.il');
+    console.log('?? WhatsApp Instance: 7105253183');
+    console.log('?? חברה: שיידט את בכמן');
+    console.log(`?? לקוחות במערכת: ${customers.length}`);
 });
 
 // בדיקת חיבור בהפעלה
 transporter.verify()
     .then(() => {
-        console.log('✅ חיבור לשרת אימייל תקין');
+        console.log('? חיבור לשרת אימייל תקין');
     })
     .catch((error) => {
-        console.error('❌ בעיה בחיבור לשרת אימייל:', error.message);
+        console.error('? בעיה בחיבור לשרת אימייל:', error.message);
     });
