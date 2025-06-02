@@ -6,24 +6,6 @@ const multer = require('multer');
 const axios = require('axios');
 const app = express();
 
-// בדיקה אם זה מספר הבדיקה
-const testPhone = process.env.TEST_PHONE_NUMBER;
-if (testPhone && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
-    // אם ההודעה מתחילה ב"בדיקה:" - זה מצב בדיקה
-    if (message.startsWith('בדיקה:')) {
-        const testMessage = message.replace('בדיקה:', '').trim();
-        console.log(`🧪 מצב בדיקה פעיל עבור ${phoneNumber}: ${testMessage}`);
-        
-        // תגובת בדיקה
-        return `🧪 מצב בדיקה - הדר פעילה!
-        
-הודעה שנתקבלה: "${testMessage}"
-${customerData ? `לקוח מזוהה: ${customerData.name} מ${customerData.site}` : 'לקוח לא מזוהה'}
-
-המערכת עובדת תקין! ✅`;
-    }
-}
-
 // טעינת מסד נתוני לקוחות מקובץ חיצוני
 const fs = require('fs');
 
