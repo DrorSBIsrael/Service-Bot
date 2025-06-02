@@ -1,4 +1,4 @@
-// קובץ: server-improved.js
+// קובץ: server-fixed.js
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -42,6 +42,503 @@ class ConversationMemory {
         // הפעלת ניקוי אוטומטי
         setInterval(() => this.cleanupOldConversations(), this.cleanupInterval);
         
+        console.log('🧠 מערכת זיכרון הדר הופעלה');
+    }
+    
+    // יצירת מפתח ייחודי לשיחה
+    createConversationKey(phoneNumber, customerData = null) {
+        const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
+        return customerData ? `${customerData.id}_${cleanPhone}` : cleanPhone;
+    }
+    
+    // הוספת הודעה לשיחה
+    addMessage(phoneNumber, message, sender, customerData = null) {
+        const key = this.createConversationKey(phoneNumber, customerData);
+        
+        if (!this.conversations.has(key)) {
+            this.conversations.set(key, {
+                phoneNumber: phoneNumber,
+                customer: customerData,
+                messages: [],
+                startTime: new Date(),
+                lastActivity: new Date(),
+                status: 'active' // active, resolved, waiting_for_technician
+            });
+        }
+        
+        const conversation = this.conversations.get(key);
+        conversation.messages.push({
+            timestamp: new Date(),
+            sender: sender, // 'customer' or 'hadar'
+            message: message,
+            messageId: Date.now().toString()
+        });
+        
+        conversation.lastActivity = new Date();
+        
+        console.log(`💬 הודעה נוספה לשיחה ${key}: ${sender} - "${message.substring(0, 50)}..."`);
+        return conversation;
+    }
+    
+    // קבלת הקשר השיחה
+    getConversationContext(phoneNumber, customerData = null) {
+        const key = this.createConversationKey(phoneNumber, customerData);
+        const conversation = this.conversations.get(key);
+        
+        if (!conversation) {
+            return null;
+        }
+        
+        // בניית הקשר לצורך ה-AI
+        const context = {
+            customer: conversation.customer,
+            messageHistory: conversation.messages.slice(-10), // רק 10 הודעות אחרונות
+            conversationLength: conversation.messages.length,
+            startTime: conversation.startTime,
+            status: conversation.status,
+            summary: this.buildConversationSummary(conversation)
+        };
+        
+        return context;
+    }
+    
+    // בניית סיכום השיחה
+    buildConversationSummary(conversation) {
+        const messages = conversation.messages;
+        if (messages.length === 0) return "שיחה ריקה";
+        
+        const customerMessages = messages.filter(m => m.sender === 'customer');
+        const hadarMessages = messages.filter(m => m.sender === 'hadar');
+        
+        let summary = `שיחה עם ${conversation.customer ? conversation.customer.name : 'לקוח לא מזוהה'}:\n`;
+        summary += `• התחלה: ${conversation.startTime.toLocaleString('he-IL')}\n`;
+        summary += `• מספר הודעות: ${messages.length} (לקוח: ${customerMessages.length}, הדר: ${hadarMessages.length})\n`;
+        
+        // זיהוי נושא השיחה
+        const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
+        if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
+            summary += `• נושא: טיפול בתקלה\n`;
+        } else if (allCustomerText.includes('מחיר') || allCustomerText.includes('הצעה')) {
+            summary += `• נושא: הצעת מחיר\n`;
+        } else if (allCustomerText.includes('נזק') || allCustomerText.includes('שבור')) {
+            summary += `• נושא: דיווח נזק\n`;
+        } else {
+            summary += `• נושא: שאלות כלליות\n`;
+        }
+        
+        return summary;
+    }
+    
+    // סיום שיחה
+    endConversation(phoneNumber, customerData = null) {
+        const key = this.createConversationKey(phoneNumber, customerData);
+        const conversation = this.conversations.get(key);
+        
+        if (conversation) {
+            conversation.status = 'resolved';
+            conversation.endTime = new Date();
+            console.log(`✅ שיחה ${key} הסתיימה`);
+            return conversation;
+        }
+        
+        return null;
+    }
+    
+    // ניקוי שיחות ישנות
+    cleanupOldConversations() {
+        const now = new Date();
+        let cleanedCount = 0;
+        
+        for (const [key, conversation] of this.conversations.entries()) {
+            const age = now - conversation.lastActivity;
+            
+            if (age > this.maxConversationAge) {
+                this.conversations.delete(key);
+                cleanedCount++;
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            console.log(`🗑️ נוקו ${cleanedCount} שיחות ישנות. סה"כ פעילות: ${this.conversations.size}`);
+        }
+    }
+    
+    // סטטיסטיקות
+    getStats() {
+        const active = Array.from(this.conversations.values()).filter(c => c.status === 'active').length;
+        const resolved = Array.from(this.conversations.values()).filter(c => c.status === 'resolved').length;
+        
+        return {
+            total: this.conversations.size,
+            active: active,
+            resolved: resolved,
+            waiting: Array.from(this.conversations.values()).filter(c => c.status === 'waiting_for_technician').length
+        };
+    }
+}
+
+// יצירת מערכת הזיכרון
+const conversationMemory = new ConversationMemory();
+
+// 🚦 מערכת בקרת קצב API (למניעת 429)
+class RateLimiter {
+    constructor() {
+        this.requestTimes = [];
+        this.maxRequestsPerMinute = 20; // מקסימום 20 בקשות לדקה
+        this.baseDelay = 3000; // 3 שניות בסיס
+        this.lastRequestTime = 0;
+    }
+    
+    async getOptimalDelay() {
+        const now = Date.now();
+        
+        // ניקוי בקשות ישנות (מעל דקה)
+        this.requestTimes = this.requestTimes.filter(time => now - time < 60000);
+        
+        // אם יש יותר מדי בקשות - השהיה ארוכה יותר
+        let delay = this.baseDelay;
+        
+        if (this.requestTimes.length >= this.maxRequestsPerMinute * 0.8) {
+            delay = 5000; // 5 שניות אם מתקרבים למגבלה
+            console.log('⚠️ מתקרבים למגבלת קצב - השהיה מוגברת');
+        }
+        
+        if (this.requestTimes.length >= this.maxRequestsPerMinute) {
+            delay = 10000; // 10 שניות אם חרגנו
+            console.log('🛑 חרגנו ממגבלת קצב - השהיה ארוכה');
+        }
+        
+        // ודא שלא עברה מספיק זמן מהבקשה הקודמת
+        const timeSinceLastRequest = now - this.lastRequestTime;
+        if (timeSinceLastRequest < delay) {
+            delay = delay - timeSinceLastRequest + 1000; // תוספת של שנייה
+        }
+        
+        return delay;
+    }
+    
+    async waitForNextRequest() {
+        const delay = await this.getOptimalDelay();
+        
+        console.log(`⏳ המתנה ${delay/1000} שניות לפני הבקשה הבאה...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        
+        this.requestTimes.push(Date.now());
+        this.lastRequestTime = Date.now();
+    }
+}
+
+const rateLimiter = new RateLimiter();
+
+// הגדרות בסיסיות
+app.use(express.json());
+app.use(express.static('public'));
+
+// הגדרת nodemailer עם השרת שלך
+const transporter = nodemailer.createTransporter({
+    host: process.env.EMAIL_HOST || 'smtp.012.net.il',
+    port: parseInt(process.env.EMAIL_PORT) || 465,
+    secure: process.env.EMAIL_SECURE === 'true',
+    auth: {
+        user: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+        pass: process.env.EMAIL_PASS || 'o51W38D5'
+    }
+});
+
+// הגדרת multer להעלאת תמונות
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype.startsWith('image/')) {
+            cb(null, true);
+        } else {
+            cb(new Error('רק תמונות מותרות'));
+        }
+    }
+});
+
+// עמוד הבית המעודכן - טופס אימייל
+app.get('/', (req, res) => {
+    const memoryStats = conversationMemory.getStats();
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>מערכת בקרת חניה מתקדמת - שיידט את בכמן</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+                .container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
+                h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
+                .company-header { text-align: center; background: #3498db; color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; }
+                .hadar-info { background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #27ae60; }
+                .memory-stats { background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #ffc107; }
+                .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+                .stat { text-align: center; background: #ecf0f1; padding: 15px; border-radius: 8px; }
+                input, textarea, button, select { 
+                    width: 100%; 
+                    padding: 12px; 
+                    margin: 10px 0; 
+                    box-sizing: border-box;
+                    border: 2px solid #ddd;
+                    border-radius: 8px;
+                    font-size: 14px;
+                }
+                button { 
+                    background: linear-gradient(45deg, #3498db, #2980b9); 
+                    color: white; 
+                    border: none; 
+                    cursor: pointer;
+                    font-size: 16px;
+                    font-weight: bold;
+                    transition: all 0.3s;
+                }
+                button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+                .customer-search { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
+                .quick-btn { padding: 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 8px; text-align: center; }
+                .quick-btn:hover { background: #219a52; }
+                .service-areas { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .service-area { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-right: 4px solid #3498db; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="company-header">
+                    <h1>🚗 שיידט את בכמן</h1>
+                    <p>מערכת בקרת חניה מתקדמת עם AI מתקדם</p>
+                </div>
+                
+                <div class="hadar-info">
+                    <h3>👩‍💼 הדר - נציגת שירות לקוחות חכמה</h3>
+                    <p><strong>🧠 עכשיו עם זיכרון שיחות מתקדם!</strong></p>
+                    <ul>
+                        <li>🔧 שירות ודיווח על תקלות עם המשכיות</li>
+                        <li>💰 הצעות מחיר לציוד</li>
+                        <li>📋 דיווח על נזקים</li>
+                        <li>📚 הדרכות תפעול</li>
+                        <li>🔄 זיכרון הקשר משיחות קודמות</li>
+                    </ul>
+                    <p><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    <small>שעות פעילות: א'-ה' 8:15-17:00</small>
+                </div>
+                
+                <div class="memory-stats">
+                    <h3>📊 סטטיסטיקות זיכרון הדר:</h3>
+                    <p>💬 <strong>שיחות פעילות:</strong> ${memoryStats.active}</p>
+                    <p>✅ <strong>שיחות מסוימות:</strong> ${memoryStats.resolved}</p>
+                    <p>🔧 <strong>ממתינות לטכנאי:</strong> ${memoryStats.waiting}</p>
+                    <p>📋 <strong>סה"כ שיחות:</strong> ${memoryStats.total}</p>
+                </div>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <h3>📧 שירות אימייל</h3>
+                        <small>smtp.012.net.il</small>
+                    </div>
+                    <div class="stat">
+                        <h3>🤖 הדר AI Bot</h3>
+                        <small>עם זיכרון</small>
+                    </div>
+                    <div class="stat">
+                        <h3>👥 לקוחות רשומים</h3>
+                        <small>${customers.length} אתרים</small>
+                    </div>
+                </div>
+                
+                <div class="service-areas">
+                    <h3>🛠️ תחומי שירות</h3>
+                    <div class="service-area">
+                        <strong>ציוד בקרת חניה:</strong> כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, תחנת עבודה
+                    </div>
+                    <div class="service-area">
+                        <strong>טווחי יחידות:</strong> 100-199 כניסות | 200-299 יציאות | 300-399 מעברים | 600-699 אוטומטיות | 700-799 קופות ידניות
+                    </div>
+                </div>
+                
+                <div class="quick-actions">
+                    <a href="#email-form" class="quick-btn">📧 שליחת אימייל</a>
+                    <a href="#customer-search" class="quick-btn">🔍 חיפוש לקוח</a>
+                    <a href="/memory-dashboard" class="quick-btn">🧠 דשבורד זיכרון</a>
+                    <a href="/test-memory" class="quick-btn">🧪 בדיקת זיכרון</a>
+                </div>
+                
+                <div id="customer-search" class="customer-search">
+                    <h3>🔍 חיפוש מהיר בלקוחות</h3>
+                    <input type="text" id="searchBox" placeholder="חפש לפי שם, אתר, טלפון או אימייל..." onkeyup="searchCustomers()">
+                    <div id="searchResults"></div>
+                </div>
+                
+                <div id="email-form">
+                    <h2>📧 שליחת אימייל ללקוח</h2>
+                    <form action="/send-email" method="POST" enctype="multipart/form-data">
+                        <label>בחר לקוח:</label>
+                        <select name="customer" id="customerSelect" onchange="fillCustomerDetails()">
+                            <option value="">-- בחר לקוח או הזן ידנית --</option>
+                            ${customers.map(c => `<option value="${c.email}" data-name="${c.name}" data-site="${c.site}">${c.name} - ${c.site}</option>`).join('')}
+                        </select>
+                        
+                        <label>כתובת אימייל:</label>
+                        <input type="email" name="to" id="emailInput" required placeholder="customer@example.com">
+                        
+                        <label>נושא:</label>
+                        <input type="text" name="subject" required placeholder="נושא האימייל">
+                        
+                        <label>הודעה:</label>
+                        <textarea name="message" rows="6" required placeholder="שלום,\n\nכותב אליך מחברת שיידט את בכמן בנוגע ל..."></textarea>
+                        
+                        <label>תמונות (אופציונלי):</label>
+                        <input type="file" name="images" multiple accept="image/*">
+                        
+                        <button type="submit">שלח אימייל 📨</button>
+                    </form>
+                </div>
+                
+                <div style="margin-top: 30px; padding: 20px; background: #ecf0f1; border-radius: 10px;">
+                    <h3>📊 מידע טכני מתקדם</h3>
+                    <p><strong>WhatsApp Webhook:</strong> <code>/webhook/whatsapp</code></p>
+                    <p><strong>מספר מחובר:</strong> 972545484210</p>
+                    <p><strong>שרת אימייל:</strong> smtp.012.net.il</p>
+                    <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי בקרת חניה</p>
+                    <p><strong>נציגת שירות:</strong> הדר - AI מתקדם עם זיכרון</p>
+                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת 24 שעות, ניקוי אוטומטי</p>
+                    <p><strong>⚡ בקרת קצב:</strong> מניעת שגיאות 429</p>
+                </div>
+            </div>
+            
+            <script>
+                const customers = ${JSON.stringify(customers)};
+                
+                function fillCustomerDetails() {
+                    const select = document.getElementById('customerSelect');
+                    const emailInput = document.getElementById('emailInput');
+                    
+                    if (select.value) {
+                        emailInput.value = select.value;
+                    }
+                }
+                
+                function searchCustomers() {
+                    const query = document.getElementById('searchBox').value.toLowerCase();
+                    const results = document.getElementById('searchResults');
+                    
+                    if (query.length < 2) {
+                        results.innerHTML = '';
+                        return;
+                    }
+                    
+                    const matches = customers.filter(c => 
+                        c.name.toLowerCase().includes(query) ||
+                        c.site.toLowerCase().includes(query) ||
+                        c.phone.includes(query) ||
+                        c.email.toLowerCase().includes(query)
+                    );
+                    
+                    if (matches.length > 0) {
+                        results.innerHTML = '<h4>תוצאות חיפוש:</h4>' + 
+                        matches.slice(0, 5).map(c => 
+                            \`<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
+                                <strong>\${c.name}</strong> - \${c.site}<br>
+                                <small>📞 \${c.phone} | 📧 \${c.email} | #\${c.id}</small>
+                                <button onclick="selectCustomer('\${c.email}', '\${c.name}', '\${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
+                            </div>\`
+                        ).join('');
+                    } else {
+                        results.innerHTML = '<p style="color: #e74c3c;">לא נמצאו תוצאות</p>';
+                    }
+                }
+                
+                function selectCustomer(email, name, site) {
+                    document.getElementById('emailInput').value = email;
+                    document.getElementById('customerSelect').value = email;
+                    document.getElementById('searchBox').value = name + ' - ' + site;
+                    document.getElementById('searchResults').innerHTML = '';
+                }
+            </script>
+        </body>
+        </html>
+    `);
+});
+
+// 📧 API לשליחת אימייל עם תמונות
+app.post('/send-email', upload.array('images', 5), async (req, res) => {
+    try {
+        console.log('📧 מתחיל לשלוח אימייל...');
+        
+        const { to, subject, message } = req.body;
+        
+        let htmlContent = `
+            <div dir="rtl" style="font-family: Arial, sans-serif;">
+                <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                    <h2 style="margin: 0;">🚗 שיידט את בכמן</h2>
+                    <p style="margin: 5px 0 0 0;">הדר נציגת שירות מערכת בקרת חניה מתקדמת</p>
+                </div>
+                <div style="padding: 20px;">
+                    ${message.replace(/\n/g, '<br>')}
+                </div>
+        `;
+        
+        const attachments = [];
+        
+        if (req.files && req.files.length > 0) {
+            console.log(`📎 מצרף ${req.files.length} תמונות`);
+            htmlContent += '<br><h3 style="color: #2c3e50;">📷 תמונות מצורפות:</h3>';
+            
+            req.files.forEach((file, index) => {
+                const cid = `image${index + 1}`;
+                attachments.push({
+                    filename: file.originalname || `image_${index + 1}.jpg`,
+                    content: file.buffer,
+                    cid: cid
+                });
+                htmlContent += `<p><img src="cid:${cid}" style="max-width: 500px; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" alt="תמונה ${index + 1}"></p>`;
+            });
+        }
+        
+        htmlContent += `
+                <hr style="margin: 30px 0; border: none; border-top: 2px solid #ecf0f1;">
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
+                    <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
+                        הודעה זו נשלחה ממערכת שיידט את בכמן<br>
+                        📧 לפניות: Report@sbparking.co.il | 🚗 מערכת ניהול חניות מתקדמת
+                    </p>
+                </div>
+            </div>
+        `;
+        
+        const mailOptions = {
+            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+            to: to,
+            subject: subject,
+            html: htmlContent,
+            attachments: attachments
+        };
+        
+        const result = await transporter.sendMail(mailOptions);
+        console.log('✅ אימייל נשלח בהצלחה:', result.messageId);
+        
+        res.send(`
+            <div dir="rtl" style="font-family: Arial; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 50px 0;">
+                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                    <div style="text-align: center; margin-bottom: 30px;">
+                        <h1 style="color: #27ae60; margin: 0;">✅ האימייל נשלח בהצלחה!</h1>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                        <p><strong>📧 נמען:</strong> ${to}</p>
+                        <p><strong>📝 נושא:</strong> ${subject}</p>
+                        <p><strong>📷 תמונות:</strong> ${req.files ? req.files.length : 0}</p>
+                        <p><strong>🆔 Message ID:</strong> <code>${result.messageId}</code></p>
+                    </div>
+                    <div style="text-align: center; margin-top: 30px;">
+                        <a href="/" style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">🔙 חזור למערכת</a>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+    } catch (error) {
         console.error('❌ שגיאה בשליחת אימייל:', error);
         res.status(500).send(`
             <div dir="rtl" style="font-family: Arial; margin: 50px; background: #e74c3c; min-height: 100vh; padding: 50px 0;">
@@ -529,7 +1026,6 @@ function generateAlertEmail(phoneNumber, customerName, messageText, response, cu
 function findCustomerByPhone(phoneNumber) {
     if (!phoneNumber) return null;
     
-    // ניקוי מספר הטלפון מתווים מיותרים
     const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
     
     return customers.find(customer => {
@@ -537,7 +1033,6 @@ function findCustomerByPhone(phoneNumber) {
         
         const customerPhone = customer.phone.replace(/[^\d]/g, '');
         
-        // בדיקות שונות לקידומות
         return customerPhone === cleanPhone || 
                customerPhone === cleanPhone.substring(3) || 
                ('972' + customerPhone) === cleanPhone ||
@@ -548,22 +1043,18 @@ function findCustomerByPhone(phoneNumber) {
 
 // פונקציה לחיפוש לקוח גם לפי שם החניון
 function findCustomerByPhoneOrSite(phoneNumber, message = '') {
-    // חיפוש ראשון לפי מספר טלפון
     let customer = findCustomerByPhone(phoneNumber);
     
     if (customer) {
         return customer;
     }
     
-    // אם לא נמצא לפי טלפון, ננסה לפי שם אתר בהודעה
     const messageWords = message.toLowerCase();
     
-    // חיפוש בהודעה שמות של אתרי חניה
     const foundSite = customers.find(c => {
         const siteName = c.site.toLowerCase();
         const siteWords = siteName.split(' ');
         
-        // בדיקה אם יש התאמה חלקית לשם האתר
         return siteWords.some(word => 
             word.length > 2 && messageWords.includes(word)
         );
@@ -721,153 +1212,6 @@ app.get('/memory-dashboard', (req, res) => {
     `);
 });
 
-// 🧪 בדיקת זיכרון מתקדמת
-app.get('/test-memory', async (req, res) => {
-    try {
-        const testCustomer = customers.find(c => c.id === 186); // נועם מIBM
-        const testPhone = '972545484210';
-        
-        // דמיון שיחה עם זיכרון
-        const testMessages = [
-            { message: "שלום הדר", sender: "customer", delay: 0 },
-            { message: "יש לי בעיה בכניסה", sender: "customer", delay: 2000 },
-            { message: "מחסום 120 לא מנפיק כרטיסים", sender: "customer", delay: 4000 },
-            { message: "עשיתי אתחול כמו שאמרת, עדיין לא עובד", sender: "customer", delay: 6000 },
-            { message: "כן, שלח בבקשה סיכום למייל", sender: "customer", delay: 8000 }
-        ];
-        
-        let conversationLog = [];
-        
-        // הרצת דמיון השיחה
-        for (let i = 0; i < testMessages.length; i++) {
-            const testMsg = testMessages[i];
-            
-            if (testMsg.sender === "customer") {
-                // הוספת הודעת לקוח לזיכרון
-                conversationMemory.addMessage(testPhone, testMsg.message, 'customer', testCustomer);
-                
-                // קבלת הקשר
-                const context = conversationMemory.getConversationContext(testPhone, testCustomer);
-                
-                // יצירת תגובת הדר
-                const hadarResponse = await generateAIResponseWithMemory(
-                    testMsg.message, 
-                    testCustomer.name, 
-                    testCustomer, 
-                    testPhone, 
-                    context
-                );
-                
-                // הוספת תגובת הדר לזיכרון
-                conversationMemory.addMessage(testPhone, hadarResponse, 'hadar', testCustomer);
-                
-                conversationLog.push({
-                    step: i + 1,
-                    customerMessage: testMsg.message,
-                    hadarResponse: hadarResponse,
-                    context: context,
-                    messagesInMemory: context ? context.conversationLength : 0
-                });
-                
-                // השהיה קטנה
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        }
-        
-        // קבלת הקשר מלא בסוף
-        const finalContext = conversationMemory.getConversationContext(testPhone, testCustomer);
-        
-        res.send(`
-            <div dir="rtl" style="font-family: Arial; padding: 30px; max-width: 1200px; margin: 0 auto;">
-                <h1>🧪 בדיקת זיכרון מתקדמת - הדר</h1>
-                
-                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
-                    <h3>👤 לקוח לבדיקה:</h3>
-                    <p><strong>שם:</strong> ${testCustomer.name}</p>
-                    <p><strong>אתר:</strong> ${testCustomer.site}</p>
-                    <p><strong>טלפון:</strong> ${testPhone}</p>
-                    <p><strong>מזוהה:</strong> ✅ כן</p>
-                </div>
-                
-                <div style="background: #e8f4f8; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
-                    <h3>🧠 סיכום הזיכרון בסוף הבדיקה:</h3>
-                    <p><strong>סה"כ הודעות בזיכרון:</strong> ${finalContext ? finalContext.conversationLength : 0}</p>
-                    <p><strong>סטטוס שיחה:</strong> ${finalContext ? finalContext.status : 'לא ידוע'}</p>
-                    <p><strong>התחלת שיחה:</strong> ${finalContext ? new Date(finalContext.startTime).toLocaleString('he-IL') : 'לא ידוע'}</p>
-                    ${finalContext ? `
-                    <div style="background: white; padding: 15px; border-radius: 8px; margin-top: 10px;">
-                        <strong>📋 סיכום אוטומטי:</strong><br>
-                        <small>${finalContext.summary.replace(/\n/g, '<br>')}</small>
-                    </div>
-                    ` : ''}
-                </div>
-                
-                <h2>💬 מהלך הבדיקה שלב אחר שלב</h2>
-                
-                ${conversationLog.map(log => `
-                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
-                        <div style="background: #3498db; color: white; padding: 15px;">
-                            <h3 style="margin: 0;">שלב ${log.step} - זיכרון: ${log.messagesInMemory} הודעות</h3>
-                        </div>
-                        
-                        <div style="padding: 20px;">
-                            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                <strong>👤 ${testCustomer.name}:</strong>
-                                <p style="margin: 5px 0; font-style: italic;">"${log.customerMessage}"</p>
-                            </div>
-                            
-                            <div style="background: #e8f5e8; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                                <strong>👩‍💼 הדר (עם זיכרון):</strong>
-                                <p style="margin: 5px 0; white-space: pre-line;">${log.hadarResponse}</p>
-                            </div>
-                            
-                            ${log.context && log.context.messageHistory.length > 1 ? `
-                            <div style="background: #fff3cd; padding: 15px; border-radius: 8px;">
-                                <strong>🧠 הדר זוכרת:</strong>
-                                <ul style="margin: 5px 0;">
-                                    ${log.context.messageHistory.slice(-3).map(msg => 
-                                        `<li><strong>${msg.sender === 'customer' ? 'לקוח' : 'הדר'}:</strong> "${msg.message.substring(0, 50)}..."</li>`
-                                    ).join('')}
-                                </ul>
-                            </div>
-                            ` : `
-                            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
-                                <p style="margin: 0; color: #666;"><strong>🆕 זוהי ההודעה הראשונה - אין זיכרון קודם</strong></p>
-                            </div>
-                            `}
-                        </div>
-                    </div>
-                `).join('')}
-                
-                <div style="margin-top: 40px; text-align: center;">
-                    <h3>✅ תוצאות הבדיקה</h3>
-                    <div style="background: #d4edda; padding: 20px; border-radius: 10px;">
-                        <p>✅ <strong>זיכרון עובד:</strong> הדר זוכרת הודעות קודמות</p>
-                        <p>✅ <strong>הקשר נשמר:</strong> התגובות מתבססות על השיחה</p>
-                        <p>✅ <strong>זיהוי לקוח:</strong> פרטים נשמרים במשך השיחה</p>
-                        <p>✅ <strong>סיכום אוטומטי:</strong> המערכת יוצרת סיכום של השיחה</p>
-                    </div>
-                    
-                    <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
-                        <a href="/memory-dashboard" style="background: #3498db; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🧠 דשבורד זיכרון</a>
-                        <a href="/test-conversation" style="background: #9b59b6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">📊 השוואה לגרסה ישנה</a>
-                        <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🔙 חזור למערכת</a>
-                    </div>
-                </div>
-            </div>
-        `);
-        
-    } catch (error) {
-        res.status(500).send(`
-            <div dir="rtl" style="font-family: Arial; padding: 50px; text-align: center;">
-                <h1 style="color: #e74c3c;">❌ שגיאה בבדיקת הזיכרון</h1>
-                <p><strong>פרטי השגיאה:</strong> ${error.message}</p>
-                <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">🔙 חזור למערכת</a>
-            </div>
-        `);
-    }
-});
-
 // API לניקוי שיחות ישנות ידנית
 app.post('/cleanup-conversations', (req, res) => {
     try {
@@ -966,134 +1310,6 @@ app.post('/send-whatsapp', async (req, res) => {
     }
 });
 
-// עמוד סטטיסטיקות ולקוחות מעודכן
-app.get('/dashboard', (req, res) => {
-    const totalCustomers = customers.length;
-    const uniqueCities = [...new Set(customers.map(c => c.address.split(',')[0]).filter(c => c))].length;
-    const customersWithEmail = customers.filter(c => c.email).length;
-    const memoryStats = conversationMemory.getStats();
-    
-    res.send(`
-        <!DOCTYPE html>
-        <html dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>דשבורד מתקדם - שיידט את בכמן</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-                .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
-                .header { background: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center; }
-                .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
-                .stat-card { background: white; padding: 25px; border-radius: 15px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-                .stat-number { font-size: 2.5em; font-weight: bold; color: #3498db; margin: 10px 0; }
-                .memory-card { background: linear-gradient(45deg, #667eea, #764ba2); color: white; }
-                .memory-card .stat-number { color: white; }
-                .customers-table { background: white; border-radius: 15px; overflow: hidden; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-                .table-header { background: #3498db; color: white; padding: 20px; }
-                .customer-row { padding: 15px 20px; border-bottom: 1px solid #ecf0f1; display: grid; grid-template-columns: 2fr 2fr 1.5fr 2fr; gap: 15px; align-items: center; }
-                .customer-row:hover { background: #f8f9fa; }
-                .back-btn { display: inline-block; background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 20px 0; }
-                .quick-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin: 20px 0; }
-                .quick-btn { padding: 15px; color: white; text-decoration: none; border-radius: 8px; text-align: center; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h1>📊 דשבורד מתקדם - שיידט את בכמן</h1>
-                    <p>מעקב ובקרה על מערכת ניהול החניות עם AI מתקדם</p>
-                </div>
-                
-                <div class="stats-grid">
-                    <div class="stat-card">
-                        <h3>👥 סה"כ לקוחות</h3>
-                        <div class="stat-number">${totalCustomers}</div>
-                        <p>אתרי חניה פעילים</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>🏙️ ערים</h3>
-                        <div class="stat-number">${uniqueCities}</div>
-                        <p>ערים עם אתרי חניה</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>📧 עם אימייל</h3>
-                        <div class="stat-number">${customersWithEmail}</div>
-                        <p>לקוחות עם כתובת אימייל</p>
-                    </div>
-                    <div class="stat-card memory-card">
-                        <h3>🧠 זיכרון הדר</h3>
-                        <div class="stat-number">${memoryStats.active}</div>
-                        <p>שיחות פעילות בזיכרון</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>✅ שיחות נפתרות</h3>
-                        <div class="stat-number">${memoryStats.resolved}</div>
-                        <p>שיחות שהסתיימו בהצלחה</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>📲 WhatsApp</h3>
-                        <div class="stat-number">פעיל</div>
-                        <p>בוט AI עם זיכרון</p>
-                    </div>
-                </div>
-                
-                <div class="quick-actions">
-                    <a href="/memory-dashboard" class="quick-btn" style="background: #9b59b6;">🧠 דשבורד זיכרון</a>
-                    <a href="/test-memory" class="quick-btn" style="background: #e67e22;">🧪 בדיקת זיכרון</a>
-                    <a href="/test-conversation" class="quick-btn" style="background: #f39c12;">💬 בדיקת שיחה</a>
-                    <a href="/test-connection" class="quick-btn" style="background: #27ae60;">🔧 בדיקת חיבור</a>
-                </div>
-                
-                <div class="customers-table">
-                    <div class="table-header">
-                        <h2>👥 רשימת לקוחות</h2>
-                    </div>
-                    <div class="customer-row" style="background: #ecf0f1; font-weight: bold;">
-                        <div>שם ואתר</div>
-                        <div>פרטי קשר</div>
-                        <div>מספר לקוח</div>
-                        <div>כתובת</div>
-                    </div>
-                    ${customers.slice(0, 20).map(c => `
-                        <div class="customer-row">
-                            <div>
-                                <strong>${c.name}</strong><br>
-                                <small style="color: #666;">${c.site}</small>
-                            </div>
-                            <div>
-                                📞 ${c.phone}<br>
-                                📧 ${c.email}
-                            </div>
-                            <div>#${c.id}</div>
-                            <div>${c.address}</div>
-                        </div>
-                    `).join('')}
-                    ${customers.length > 20 ? `
-                        <div style="padding: 20px; text-align: center; background: #f8f9fa;">
-                            <p>ועוד ${customers.length - 20} לקוחות נוספים...</p>
-                        </div>
-                    ` : ''}
-                </div>
-                
-                <div style="background: white; padding: 20px; border-radius: 15px; margin: 20px 0;">
-                    <h3>🚀 שיפורים במערכת החדשה:</h3>
-                    <ul>
-                        <li>🧠 <strong>זיכרון שיחות:</strong> הדר זוכרת הקשר משיחות קודמות</li>
-                        <li>🔄 <strong>ניקוי אוטומטי:</strong> שיחות ישנות מנוקות אוטומטית אחרי 24 שעות</li>
-                        <li>📧 <strong>סיכום שיחות:</strong> סיכום מפורט נשלח בסוף כל שיחה</li>
-                        <li>⚡ <strong>מניעת 429:</strong> בקרת קצב מתקדמת למניעת שגיאות API</li>
-                        <li>📊 <strong>דשבורד זיכרון:</strong> מעקב אחר כל השיחות והסטטוסים</li>
-                        <li>🧪 <strong>מצב בדיקה:</strong> בדיקות מתקדמות לוודא שהכל עובד</li>
-                    </ul>
-                </div>
-                
-                <a href="/" class="back-btn">🔙 חזור למערכת הראשית</a>
-            </div>
-        </body>
-        </html>
-    `);
-});
-
 // הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -1130,514 +1346,3 @@ const initialStats = conversationMemory.getStats();
 console.log(`📊 סטטיסטיקות זיכרון: ${initialStats.total} שיחות (${initialStats.active} פעילות)`);
 
 module.exports = app;
-                log('🧠 מערכת זיכרון הדר הופעלה');
-    }
-    
-    // יצירת מפתח ייחודי לשיחה
-    createConversationKey(phoneNumber, customerData = null) {
-        const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
-        return customerData ? `${customerData.id}_${cleanPhone}` : cleanPhone;
-    }
-    
-    // הוספת הודעה לשיחה
-    addMessage(phoneNumber, message, sender, customerData = null) {
-        const key = this.createConversationKey(phoneNumber, customerData);
-        
-        if (!this.conversations.has(key)) {
-            this.conversations.set(key, {
-                phoneNumber: phoneNumber,
-                customer: customerData,
-                messages: [],
-                startTime: new Date(),
-                lastActivity: new Date(),
-                status: 'active' // active, resolved, waiting_for_technician
-            });
-        }
-        
-        const conversation = this.conversations.get(key);
-        conversation.messages.push({
-            timestamp: new Date(),
-            sender: sender, // 'customer' or 'hadar'
-            message: message,
-            messageId: Date.now().toString()
-        });
-        
-        conversation.lastActivity = new Date();
-        
-        console.log(`💬 הודעה נוספה לשיחה ${key}: ${sender} - "${message.substring(0, 50)}..."`);
-        return conversation;
-    }
-    
-    // קבלת הקשר השיחה
-    getConversationContext(phoneNumber, customerData = null) {
-        const key = this.createConversationKey(phoneNumber, customerData);
-        const conversation = this.conversations.get(key);
-        
-        if (!conversation) {
-            return null;
-        }
-        
-        // בניית הקשר לצורך ה-AI
-        const context = {
-            customer: conversation.customer,
-            messageHistory: conversation.messages.slice(-10), // רק 10 הודעות אחרונות
-            conversationLength: conversation.messages.length,
-            startTime: conversation.startTime,
-            status: conversation.status,
-            summary: this.buildConversationSummary(conversation)
-        };
-        
-        return context;
-    }
-    
-    // בניית סיכום השיחה
-    buildConversationSummary(conversation) {
-        const messages = conversation.messages;
-        if (messages.length === 0) return "שיחה ריקה";
-        
-        const customerMessages = messages.filter(m => m.sender === 'customer');
-        const hadarMessages = messages.filter(m => m.sender === 'hadar');
-        
-        let summary = `שיחה עם ${conversation.customer ? conversation.customer.name : 'לקוח לא מזוהה'}:\n`;
-        summary += `• התחלה: ${conversation.startTime.toLocaleString('he-IL')}\n`;
-        summary += `• מספר הודעות: ${messages.length} (לקוח: ${customerMessages.length}, הדר: ${hadarMessages.length})\n`;
-        
-        // זיהוי נושא השיחה
-        const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
-        if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
-            summary += `• נושא: טיפול בתקלה\n`;
-        } else if (allCustomerText.includes('מחיר') || allCustomerText.includes('הצעה')) {
-            summary += `• נושא: הצעת מחיר\n`;
-        } else if (allCustomerText.includes('נזק') || allCustomerText.includes('שבור')) {
-            summary += `• נושא: דיווח נזק\n`;
-        } else {
-            summary += `• נושא: שאלות כלליות\n`;
-        }
-        
-        return summary;
-    }
-    
-    // סיום שיחה
-    endConversation(phoneNumber, customerData = null) {
-        const key = this.createConversationKey(phoneNumber, customerData);
-        const conversation = this.conversations.get(key);
-        
-        if (conversation) {
-            conversation.status = 'resolved';
-            conversation.endTime = new Date();
-            console.log(`✅ שיחה ${key} הסתיימה`);
-            return conversation;
-        }
-        
-        return null;
-    }
-    
-    // ניקוי שיחות ישנות
-    cleanupOldConversations() {
-        const now = new Date();
-        let cleanedCount = 0;
-        
-        for (const [key, conversation] of this.conversations.entries()) {
-            const age = now - conversation.lastActivity;
-            
-            if (age > this.maxConversationAge) {
-                this.conversations.delete(key);
-                cleanedCount++;
-            }
-        }
-        
-        if (cleanedCount > 0) {
-            console.log(`🗑️ נוקו ${cleanedCount} שיחות ישנות. סה"כ פעילות: ${this.conversations.size}`);
-        }
-    }
-    
-    // סטטיסטיקות
-    getStats() {
-        const active = Array.from(this.conversations.values()).filter(c => c.status === 'active').length;
-        const resolved = Array.from(this.conversations.values()).filter(c => c.status === 'resolved').length;
-        
-        return {
-            total: this.conversations.size,
-            active: active,
-            resolved: resolved,
-            waiting: Array.from(this.conversations.values()).filter(c => c.status === 'waiting_for_technician').length
-        };
-    }
-}
-
-// יצירת מערכת הזיכרון
-const conversationMemory = new ConversationMemory();
-
-// 🚦 מערכת בקרת קצב API (למניעת 429)
-class RateLimiter {
-    constructor() {
-        this.requestTimes = [];
-        this.maxRequestsPerMinute = 20; // מקסימום 20 בקשות לדקה
-        this.baseDelay = 3000; // 3 שניות בסיס
-        this.lastRequestTime = 0;
-    }
-    
-    async getOptimalDelay() {
-        const now = Date.now();
-        
-        // ניקוי בקשות ישנות (מעל דקה)
-        this.requestTimes = this.requestTimes.filter(time => now - time < 60000);
-        
-        // אם יש יותר מדי בקשות - השהיה ארוכה יותר
-        let delay = this.baseDelay;
-        
-        if (this.requestTimes.length >= this.maxRequestsPerMinute * 0.8) {
-            delay = 5000; // 5 שניות אם מתקרבים למגבלה
-            console.log('⚠️ מתקרבים למגבלת קצב - השהיה מוגברת');
-        }
-        
-        if (this.requestTimes.length >= this.maxRequestsPerMinute) {
-            delay = 10000; // 10 שניות אם חרגנו
-            console.log('🛑 חרגנו ממגבלת קצב - השהיה ארוכה');
-        }
-        
-        // ודא שלא עברה מספיק זמן מהבקשה הקודמת
-        const timeSinceLastRequest = now - this.lastRequestTime;
-        if (timeSinceLastRequest < delay) {
-            delay = delay - timeSinceLastRequest + 1000; // תוספת של שנייה
-        }
-        
-        return delay;
-    }
-    
-    async waitForNextRequest() {
-        const delay = await this.getOptimalDelay();
-        
-        console.log(`⏳ המתנה ${delay/1000} שניות לפני הבקשה הבאה...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        
-        this.requestTimes.push(Date.now());
-        this.lastRequestTime = Date.now();
-    }
-}
-
-const rateLimiter = new RateLimiter();
-
-// הגדרות בסיסיות
-app.use(express.json());
-app.use(express.static('public'));
-
-// הגדרת nodemailer עם השרת שלך
-const transporter = nodemailer.createTransporter({
-    host: process.env.EMAIL_HOST || 'smtp.012.net.il',
-    port: parseInt(process.env.EMAIL_PORT) || 465,
-    secure: process.env.EMAIL_SECURE === 'true',
-    auth: {
-        user: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-        pass: process.env.EMAIL_PASS || 'o51W38D5'
-    }
-});
-
-// הגדרת multer להעלאת תמונות
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
-            cb(null, true);
-        } else {
-            cb(new Error('רק תמונות מותרות'));
-        }
-    }
-});
-
-// עמוד הבית המעודכן - טופס אימייל
-app.get('/', (req, res) => {
-    const memoryStats = conversationMemory.getStats();
-    
-    res.send(`
-        <!DOCTYPE html>
-        <html dir="rtl">
-        <head>
-            <meta charset="UTF-8">
-            <title>מערכת בקרת חניה מתקדמת - שיידט את בכמן</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-                .container { max-width: 700px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); }
-                h1 { color: #2c3e50; text-align: center; margin-bottom: 30px; }
-                .company-header { text-align: center; background: #3498db; color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; }
-                .hadar-info { background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #27ae60; }
-                .memory-stats { background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #ffc107; }
-                .stats { display: flex; justify-content: space-around; margin: 20px 0; }
-                .stat { text-align: center; background: #ecf0f1; padding: 15px; border-radius: 8px; }
-                input, textarea, button, select { 
-                    width: 100%; 
-                    padding: 12px; 
-                    margin: 10px 0; 
-                    box-sizing: border-box;
-                    border: 2px solid #ddd;
-                    border-radius: 8px;
-                    font-size: 14px;
-                }
-                button { 
-                    background: linear-gradient(45deg, #3498db, #2980b9); 
-                    color: white; 
-                    border: none; 
-                    cursor: pointer;
-                    font-size: 16px;
-                    font-weight: bold;
-                    transition: all 0.3s;
-                }
-                button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-                .customer-search { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
-                .quick-btn { padding: 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 8px; text-align: center; }
-                .quick-btn:hover { background: #219a52; }
-                .service-areas { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .service-area { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-right: 4px solid #3498db; }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="company-header">
-                    <h1>🚗 שיידט את בכמן</h1>
-                    <p>מערכת בקרת חניה מתקדמת עם AI מתקדם</p>
-                </div>
-                
-                <div class="hadar-info">
-                    <h3>👩‍💼 הדר - נציגת שירות לקוחות חכמה</h3>
-                    <p><strong>🧠 עכשיו עם זיכרון שיחות מתקדם!</strong></p>
-                    <ul>
-                        <li>🔧 שירות ודיווח על תקלות עם המשכיות</li>
-                        <li>💰 הצעות מחיר לציוד</li>
-                        <li>📋 דיווח על נזקים</li>
-                        <li>📚 הדרכות תפעול</li>
-                        <li>🔄 זיכרון הקשר משיחות קודמות</li>
-                    </ul>
-                    <p><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
-                    <small>שעות פעילות: א'-ה' 8:15-17:00</small>
-                </div>
-                
-                <div class="memory-stats">
-                    <h3>📊 סטטיסטיקות זיכרון הדר:</h3>
-                    <p>💬 <strong>שיחות פעילות:</strong> ${memoryStats.active}</p>
-                    <p>✅ <strong>שיחות מסוימות:</strong> ${memoryStats.resolved}</p>
-                    <p>🔧 <strong>ממתינות לטכנאי:</strong> ${memoryStats.waiting}</p>
-                    <p>📋 <strong>סה"כ שיחות:</strong> ${memoryStats.total}</p>
-                </div>
-                
-                <div class="stats">
-                    <div class="stat">
-                        <h3>📧 שירות אימייל</h3>
-                        <small>smtp.012.net.il</small>
-                    </div>
-                    <div class="stat">
-                        <h3>🤖 הדר AI Bot</h3>
-                        <small>עם זיכרון</small>
-                    </div>
-                    <div class="stat">
-                        <h3>👥 לקוחות רשומים</h3>
-                        <small>${customers.length} אתרים</small>
-                    </div>
-                </div>
-                
-                <div class="service-areas">
-                    <h3>🛠️ תחומי שירות</h3>
-                    <div class="service-area">
-                        <strong>ציוד בקרת חניה:</strong> כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, תחנת עבודה
-                    </div>
-                    <div class="service-area">
-                        <strong>טווחי יחידות:</strong> 100-199 כניסות | 200-299 יציאות | 300-399 מעברים | 600-699 אוטומטיות | 700-799 קופות ידניות
-                    </div>
-                </div>
-                
-                <div class="quick-actions">
-                    <a href="#email-form" class="quick-btn">📧 שליחת אימייל</a>
-                    <a href="#customer-search" class="quick-btn">🔍 חיפוש לקוח</a>
-                    <a href="/memory-dashboard" class="quick-btn">🧠 דשבורד זיכרון</a>
-                    <a href="/test-memory" class="quick-btn">🧪 בדיקת זיכרון</a>
-                </div>
-                
-                <div id="customer-search" class="customer-search">
-                    <h3>🔍 חיפוש מהיר בלקוחות</h3>
-                    <input type="text" id="searchBox" placeholder="חפש לפי שם, אתר, טלפון או אימייל..." onkeyup="searchCustomers()">
-                    <div id="searchResults"></div>
-                </div>
-                
-                <div id="email-form">
-                    <h2>📧 שליחת אימייל ללקוח</h2>
-                    <form action="/send-email" method="POST" enctype="multipart/form-data">
-                        <label>בחר לקוח:</label>
-                        <select name="customer" id="customerSelect" onchange="fillCustomerDetails()">
-                            <option value="">-- בחר לקוח או הזן ידנית --</option>
-                            ${customers.map(c => `<option value="${c.email}" data-name="${c.name}" data-site="${c.site}">${c.name} - ${c.site}</option>`).join('')}
-                        </select>
-                        
-                        <label>כתובת אימייל:</label>
-                        <input type="email" name="to" id="emailInput" required placeholder="customer@example.com">
-                        
-                        <label>נושא:</label>
-                        <input type="text" name="subject" required placeholder="נושא האימייל">
-                        
-                        <label>הודעה:</label>
-                        <textarea name="message" rows="6" required placeholder="שלום,\n\nכותב אליך מחברת שיידט את בכמן בנוגע ל..."></textarea>
-                        
-                        <label>תמונות (אופציונלי):</label>
-                        <input type="file" name="images" multiple accept="image/*">
-                        
-                        <button type="submit">שלח אימייל 📨</button>
-                    </form>
-                </div>
-                
-                <div style="margin-top: 30px; padding: 20px; background: #ecf0f1; border-radius: 10px;">
-                    <h3>📊 מידע טכני מתקדם</h3>
-                    <p><strong>WhatsApp Webhook:</strong> <code>/webhook/whatsapp</code></p>
-                    <p><strong>מספר מחובר:</strong> 972545484210</p>
-                    <p><strong>שרת אימייל:</strong> smtp.012.net.il</p>
-                    <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי בקרת חניה</p>
-                    <p><strong>נציגת שירות:</strong> הדר - AI מתקדם עם זיכרון</p>
-                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת 24 שעות, ניקוי אוטומטי</p>
-                    <p><strong>⚡ בקרת קצב:</strong> מניעת שגיאות 429</p>
-                </div>
-            </div>
-            
-            <script>
-                const customers = ${JSON.stringify(customers)};
-                
-                function fillCustomerDetails() {
-                    const select = document.getElementById('customerSelect');
-                    const emailInput = document.getElementById('emailInput');
-                    
-                    if (select.value) {
-                        emailInput.value = select.value;
-                    }
-                }
-                
-                function searchCustomers() {
-                    const query = document.getElementById('searchBox').value.toLowerCase();
-                    const results = document.getElementById('searchResults');
-                    
-                    if (query.length < 2) {
-                        results.innerHTML = '';
-                        return;
-                    }
-                    
-                    const matches = customers.filter(c => 
-                        c.name.toLowerCase().includes(query) ||
-                        c.site.toLowerCase().includes(query) ||
-                        c.phone.includes(query) ||
-                        c.email.toLowerCase().includes(query)
-                    );
-                    
-                    if (matches.length > 0) {
-                        results.innerHTML = '<h4>תוצאות חיפוש:</h4>' + 
-                        matches.slice(0, 5).map(c => 
-                            \`<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
-                                <strong>\${c.name}</strong> - \${c.site}<br>
-                                <small>📞 \${c.phone} | 📧 \${c.email} | #\${c.id}</small>
-                                <button onclick="selectCustomer('\${c.email}', '\${c.name}', '\${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
-                            </div>\`
-                        ).join('');
-                    } else {
-                        results.innerHTML = '<p style="color: #e74c3c;">לא נמצאו תוצאות</p>';
-                    }
-                }
-                
-                function selectCustomer(email, name, site) {
-                    document.getElementById('emailInput').value = email;
-                    document.getElementById('customerSelect').value = email;
-                    document.getElementById('searchBox').value = name + ' - ' + site;
-                    document.getElementById('searchResults').innerHTML = '';
-                }
-            </script>
-        </body>
-        </html>
-    `);
-});
-
-// 📧 API לשליחת אימייל עם תמונות (ללא שינוי)
-app.post('/send-email', upload.array('images', 5), async (req, res) => {
-    try {
-        console.log('📧 מתחיל לשלוח אימייל...');
-        
-        const { to, subject, message } = req.body;
-        
-        let htmlContent = `
-            <div dir="rtl" style="font-family: Arial, sans-serif;">
-                <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">🚗 שיידט את בכמן</h2>
-                    <p style="margin: 5px 0 0 0;">הדר נציגת שירות מערכת בקרת חניה מתקדמת</p>
-                </div>
-                <div style="padding: 20px;">
-                    ${message.replace(/\n/g, '<br>')}
-                </div>
-        `;
-        
-        const attachments = [];
-        
-        if (req.files && req.files.length > 0) {
-            console.log(`📎 מצרף ${req.files.length} תמונות`);
-            htmlContent += '<br><h3 style="color: #2c3e50;">📷 תמונות מצורפות:</h3>';
-            
-            req.files.forEach((file, index) => {
-                const cid = `image${index + 1}`;
-                attachments.push({
-                    filename: file.originalname || `image_${index + 1}.jpg`,
-                    content: file.buffer,
-                    cid: cid
-                });
-                htmlContent += `<p><img src="cid:${cid}" style="max-width: 500px; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" alt="תמונה ${index + 1}"></p>`;
-            });
-        }
-        
-        htmlContent += `
-                <hr style="margin: 30px 0; border: none; border-top: 2px solid #ecf0f1;">
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                    <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
-                        הודעה זו נשלחה ממערכת שיידט את בכמן<br>
-                        📧 לפניות: Report@sbparking.co.il | 🚗 מערכת ניהול חניות מתקדמת
-                    </p>
-                </div>
-            </div>
-        `;
-        
-        const mailOptions = {
-            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-            to: to,
-            subject: subject,
-            html: htmlContent,
-            attachments: attachments
-        };
-        
-        const result = await transporter.sendMail(mailOptions);
-        console.log('✅ אימייל נשלח בהצלחה:', result.messageId);
-        
-        res.send(`
-            <div dir="rtl" style="font-family: Arial; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 50px 0;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #27ae60; margin: 0;">✅ האימייל נשלח בהצלחה!</h1>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                        <p><strong>📧 נמען:</strong> ${to}</p>
-                        <p><strong>📝 נושא:</strong> ${subject}</p>
-                        <p><strong>📷 תמונות:</strong> ${req.files ? req.files.length : 0}</p>
-                        <p><strong>🆔 Message ID:</strong> <code>${result.messageId}</code></p>
-                    </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">🔙 חזור למערכת</a>
-                    </div>
-                </div>
-            </div>
-                                `);
-        
-    } catch (error) {
-        console.error('❌ שגיאה בשליחת אימייל:', error);
-        res.status(500).send(`
-            <div dir="rtl" style="font-family: Arial; margin: 50px; background: #e74c3c; min-height: 100vh; padding: 50px 0;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px;">
-                    <h2 style="color: #e74c3c; text-align: center;">❌ שגיאה בשליחת האימייל</h2>
-                    <p><strong>פרטי השגיאה:</strong> ${error.message}</p>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">🔙 חזור לנסות שוב</a>
-                    </div>
-                </div>
-            </div>
-        `);
-    }
-});
