@@ -714,8 +714,6 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 	    }
 	}
 
-	ConversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
-
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
             
@@ -745,9 +743,8 @@ if (hasFiles && fileInfo) {
         conversationContext
     );
 }
-            
             // הוספת תגובת הדר לזיכרון
-conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
