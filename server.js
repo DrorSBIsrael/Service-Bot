@@ -865,7 +865,7 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
                 }
             }
 
-	ConversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
 
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
@@ -1877,7 +1877,7 @@ app.get('/test-bot-direct', (req, res) => {
 
             <script>
                 function testBot(type, message) {
-                    const phone = type === 'dror' ? '0545484210' : '0501234567';
+                    const phone = type === 'dror' ? '0545484222' : '0501234567';
                     const name = type === 'dror' ? 'דרור פרינץ' : 'יוסי';
                     const resultId = type === 'dror' ? 'dror-results' : 'unknown-results';
                     
