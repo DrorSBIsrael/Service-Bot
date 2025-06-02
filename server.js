@@ -134,35 +134,67 @@ function generateRepairRecommendations(equipmentType, issues) {
         recommendations.push(`📋 **בעיות נפוצות בציוד זה:** ${equipmentType.commonIssues.join(', ')}`);
     }
     
+    if (issues.length > 0) {
+        recommendations.push(`🚨 **בעיות שזוהו בתמונה:** ${issues.join(', ')}`);
+        
+        // המלצות ספציפיות לפי הבעיה
+        issues.forEach(issue => {
+            switch(issue) {
+                case "מסך לא פעיל":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק חיבור חשמל, נסה רסט למערכת (כפתור reset)");
+                    break;
+                case "שער תקוע":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק שאין חסימה פיזית, בדוק מנוע השער וחיישני הבטיחות");
+                    break;
+                case "בעיה בקריאת כרטיסים":
+                    recommendations.push("💡 **פתרון מוצע:** נקה את קורא הכרטיסים, בדוק עם כרטיס בדיקה");
+                    break;
+                case "בעיה בתשלום":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק מלאי מזומנים, נקה את מקבל השטרות");
+                    break;
+                case "בעיה בתאורה":
+                    recommendations.push("💡 **פתרון מוצע:** החלף נורות שרופות, בדוק חיבורי חשמל");
+                    break;
+            }
+        });
+    } else if (equipmentType) {
+        recommendations.push("✅ **מצב:** לא זוהו בעיות ברורות בתמונה");
+    }
+    
+    return recommendations;
+}
+
 // פונקציה לזיהוי בקשה לסגירת שיחה
 function shouldCloseConversation(messageText) {
     const closeKeywords = [
         'סגור שיחה', 'סיום שיחה', 'סיום', 'תודה וסיום',
         'שיחה חדשה', 'התחל מחדש', 'נקה זיכרון', 'מחק היסטוריה',
-        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה' , 'תקלה חדשה'
+        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה', 'תקלה חדשה'
     ];
     
+    console.log(`🔍 בודק אם לסגור שיחה: "${messageText}"`);
     const lowerMessage = messageText.toLowerCase();
-    return closeKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
+    const shouldClose = closeKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
+    console.log(`🔍 תוצאה: ${shouldClose}`);
+    
+    return shouldClose;
 }
 
 // פונקציה לטיפול בסגירת שיחה
 function handleConversationClose(phoneNumber, customerData) {
     try {
+        console.log(`🔄 מנסה לסגור שיחה עבור: ${phoneNumber}`);
+        
         // סיום השיחה במערכת הזיכרון
         const conversation = conversationMemory.endConversation(phoneNumber, customerData);
         
-        if (conversation) {
-            console.log(`✅ שיחה נסגרה: ${phoneNumber}`);
-            
-            // מחיקת השיחה מהזיכרון לגמרי
-            const key = conversationMemory.createConversationKey(phoneNumber, customerData);
-            conversationMemory.conversations.delete(key);
-            
-            return { success: true };
-        } else {
-            return { success: false };
-        }
+        // מחיקת השיחה מהזיכרון לגמרי
+        const key = conversationMemory.createConversationKey(phoneNumber, customerData);
+        conversationMemory.conversations.delete(key);
+        
+        console.log(`✅ שיחה נסגרה והזיכרון נוקה: ${phoneNumber}`);
+        return { success: true };
+        
     } catch (error) {
         console.error('❌ שגיאה בסגירת שיחה:', error);
         return { success: false };
