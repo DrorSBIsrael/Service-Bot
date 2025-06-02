@@ -6,21 +6,31 @@ const multer = require('multer');
 const axios = require('axios');
 const app = express();
 
-// מסד נתוני לקוחות
-const customers = [
-    { id: 186, name: "נועם", site: "IBM", phone: "052-6737198", address: "אנדריי סחרוב 9, חיפה", email: "noamha@matam-park.co.il" },
-    { id: 137, name: "טלי", site: "אולימפיה", phone: "050-8671000", address: "הירקון 164 תא", email: "bk@zvieli.com" },
-    { id: 248, name: "מוטי", site: "אומגה חיפה", phone: "054-2449356", address: "מרכז אומגה ת.ד 15007", email: "motik@dorsel.co.il" },
-    { id: 302, name: "ראיף", site: "אושילנד כפר סבא", phone: "054-5343079", address: "עתיר ידע 4", email: "raefzo@promall.co.il" },
-    { id: 197, name: "יוליה", site: "אושירה באר שבע", phone: "052-5465969", address: "באר שבע", email: "ramot.carassoa@012.net.il" },
-    { id: 568, name: "אנסטסיה", site: "אייקון", phone: "058-5507000", address: "", email: "admin.icon@iconcbre.co.il" },
-    { id: 82, name: "חן", site: "אינפיניטי", phone: "050-2904443", address: "רח הפנינה 2 – רעננה", email: "ganeis@epstein-fm.co.il" },
-    { id: 280, name: "קרני", site: "אלון אחזקה", phone: "054-8742017", address: "יגאל אלון 94", email: "alonparkingmng@arielgroup.co.il" },
-    { id: 412, name: "אבי חכים", site: "אלייד", phone: "054-6648803", address: "הלחי 9", email: "lehimng@amot4u.co.il" },
-    { id: 308, name: "גיל", site: "אלייד ביביסי", phone: "052-8019160", address: "", email: "admin@ramot-allied.co.il" },
-    { id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }
-    // יוסיפו כאן עוד לקוחות לפי הצורך
-];
+// טעינת מסד נתוני לקוחות מקובץ חיצוני
+const fs = require('fs');
+
+let customers = [];
+try {
+    const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
+    
+    // המרה לפורמט הנכון
+    customers = customersData.map(client => ({
+        id: client["מספר לקוח"],
+        name: client["שם לקוח"],
+        site: client["שם החניון"],
+        phone: client["טלפון"],
+        address: client["כתובת הלקוח"],
+        email: client["מייל"]
+    }));
+    
+    console.log(`✅ נטענו ${customers.length} לקוחות מהקובץ`);
+} catch (error) {
+    console.error('❌ שגיאה בטעינת קובץ הלקוחות:', error.message);
+    // רשימה בסיסית כגיבוי
+    customers = [
+        { id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }
+    ];
+}
 
 // הגדרות בסיסיות
 app.use(express.json());
