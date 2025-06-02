@@ -238,7 +238,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
 // פונקציה לשליחת הודעות WhatsApp
 async function sendWhatsAppMessage(phoneNumber, message) {
     const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const token = process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     
     try {
