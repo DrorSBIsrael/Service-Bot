@@ -914,3 +914,83 @@ app.get('/test-hadar', async (req, res) => {
         res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
     }
 });
+
+// בדיקת לקוח רגיל (לא מזוהה)
+app.get('/test-customer', async (req, res) => {
+    try {
+        const testResponse = await generateAIResponse(
+            'שלום, יש לי בעיה בחניה', 
+            'יוסי כהן', 
+            null, // לקוח לא מזוהה
+            '972501234567' // מספר רנדומלי
+        );
+        
+        res.send(`
+            <div dir="rtl" style="font-family: Arial; padding: 50px;">
+                <h1>👤 בדיקת לקוח רגיל</h1>
+                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>📞 פרטי הלקוח:</h3>
+                    <p><strong>שם:</strong> יוסי כהן</p>
+                    <p><strong>טלפון:</strong> 972501234567</p>
+                    <p><strong>סטטוס:</strong> ❌ לא מזוהה במערכת</p>
+                    <p><strong>הודעה:</strong> "שלום, יש לי בעיה בחניה"</p>
+                </div>
+                
+                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>🤖 תגובת הדר:</h3>
+                    <p style="background: white; padding: 15px; border-radius: 5px; border-right: 4px solid #27ae60;">${testResponse.replace(/\n/g, '<br>')}</p>
+                </div>
+                
+                <div style="display: flex; gap: 15px; margin: 20px 0;">
+                    <a href="/test-hadar" style="background: #3498db; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🧪 בדיקת מצב</a>
+                    <a href="/test-known-customer" style="background: #27ae60; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">✅ לקוח מזוהה</a>
+                    <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור</a>
+                </div>
+            </div>
+        `);
+    } catch (error) {
+        res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
+    }
+});
+
+// בדיקת לקוח מזוהה
+app.get('/test-known-customer', async (req, res) => {
+    try {
+        const knownCustomer = customers.find(c => c.id === 186); // נועם מIBM
+        
+        const testResponse = await generateAIResponse(
+            'יש תקלה במחסום הכניסה, לא מנפיק כרטיס', 
+            knownCustomer.name, 
+            knownCustomer,
+            knownCustomer.phone.replace(/[^\d]/g, '')
+        );
+        
+        res.send(`
+            <div dir="rtl" style="font-family: Arial; padding: 50px;">
+                <h1>✅ בדיקת לקוח מזוהה</h1>
+                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>👤 פרטי הלקוח:</h3>
+                    <p><strong>שם:</strong> ${knownCustomer.name}</p>
+                    <p><strong>אתר:</strong> ${knownCustomer.site}</p>
+                    <p><strong>מספר לקוח:</strong> #${knownCustomer.id}</p>
+                    <p><strong>טלפון:</strong> ${knownCustomer.phone}</p>
+                    <p><strong>סטטוס:</strong> ✅ מזוהה במערכת</p>
+                    <p><strong>הודעה:</strong> "יש תקלה במחסום הכניסה, לא מנפיק כרטיס"</p>
+                </div>
+                
+                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>🤖 תגובת הדר:</h3>
+                    <p style="background: white; padding: 15px; border-radius: 5px; border-right: 4px solid #27ae60;">${testResponse.replace(/\n/g, '<br>')}</p>
+                </div>
+                
+                <div style="display: flex; gap: 15px; margin: 20px 0;">
+                    <a href="/test-customer" style="background: #f39c12; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">❌ לקוח לא מזוהה</a>
+                    <a href="/test-hadar" style="background: #3498db; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🧪 בדיקת מצב</a>
+                    <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור</a>
+                </div>
+            </div>
+        `);
+    } catch (error) {
+        res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
+    }
+});
