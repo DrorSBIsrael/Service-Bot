@@ -191,10 +191,17 @@ function generateRepairRecommendations(equipmentType, issues) {
         recommendations.push("✅ **מצב:** לא זוהו בעיות ברורות בתמונה");
     }
     
-    return recommendations;
+return recommendations;
 }
 
 // ========== סוף פונקציות OCR וזיהוי ציוד ==========
+
+// פונקציה ליצירת מספר קריאת שירות
+function generateServiceCallNumber() {
+    const callNumber = `HSC-${serviceCallCounter}`;
+    serviceCallCounter++;
+    return callNumber;
+}
 
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
