@@ -200,7 +200,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 response += `נציג שירות יחזור אליך בהקדם.\nתודה על פנייתך ל-SB Parking! 🙏`;
             } else {
                 response += `קיבלתי את ההודעה שלך: "${messageText}"\n\n`;
-                response += `אני בוט שירות לקוחות של SB Parking 🚗\n`;
+                response += `אני בוט שירות לקוחות של שיידט את בכמן 🚗\n`;
                 response += `נציג יחזור אליך בהקדם!`;
             }
             
