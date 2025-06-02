@@ -1567,4 +1567,90 @@ console.log('   - API לניהול הזיכרון');
 const initialStats = conversationMemory.getStats();
 console.log(`📊 סטטיסטיקות זיכרון: ${initialStats.total} שיחות (${initialStats.active} פעילות)`);
 
+// 🧪 עמוד בדיקת קבצים
+app.get('/test-files', (req, res) => {
+    res.send(`
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>🧪 בדיקת מערכת קבצים - הדר</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 0; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+                .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+                .header { background: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; text-align: center; }
+                .test-section { background: white; padding: 25px; border-radius: 15px; margin-bottom: 20px; }
+                .status { padding: 15px; margin: 15px 0; border-radius: 8px; }
+                .status.success { background: #d4edda; color: #155724; border-right: 4px solid #28a745; }
+                .status.error { background: #f8d7da; color: #721c24; border-right: 4px solid #dc3545; }
+                .supported-files { background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0; }
+                .back-btn { background: #27ae60; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🧪 בדיקת מערכת קבצים</h1>
+                    <p>הדר - בוט שירות לקוחות עם תמיכה בקבצים</p>
+                </div>
+                
+                <div class="test-section">
+                    <h2>✅ מערכת קבצים מוכנה!</h2>
+                    <div class="status success">
+                        <h3>🎯 מה המערכת יכולה לעשות עכשיו:</h3>
+                        <ul>
+                            <li>📸 <strong>תמונות תקלות:</strong> הדר תזהה תמונות ותספק הנחיות ראשוניות</li>
+                            <li>📄 <strong>מסמכים:</strong> PDF וקבצי טקסט לבקשות הצעות מחיר</li>
+                            <li>🚨 <strong>זיהוי דחיפות:</strong> זיהוי אוטומטי של מילות מפתח לתקלות</li>
+                            <li>🧠 <strong>שילוב עם זיכרון:</strong> הקבצים נשמרים בהקשר השיחה</li>
+                            <li>📧 <strong>התראות לצוות:</strong> הצוות יקבל התראה על קבצים שהתקבלו</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="supported-files">
+                    <h3>✅ סוגי קבצים נתמכים:</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                        <div>
+                            <h4>📸 תמונות:</h4>
+                            <small>JPG, PNG, GIF, WebP</small>
+                        </div>
+                        <div>
+                            <h4>📄 מסמכים:</h4>
+                            <small>PDF</small>
+                        </div>
+                        <div>
+                            <h4>📝 טקסט:</h4>
+                            <small>TXT, CSV</small>
+                        </div>
+                    </div>
+                    <p><strong>⚠️ מגבלות:</strong> עד 10MB לקובץ, מקסימום 10 קבצים בבת אחת</p>
+                </div>
+                
+                <div class="test-section">
+                    <h3>🧪 איך לבדוק:</h3>
+                    <ol>
+                        <li><strong>שלח תמונה ב-WhatsApp</strong> למספר הבוט עם הודעה "יש לי תקלה"</li>
+                        <li><strong>שלח PDF</strong> עם הודעה "רוצה הצעת מחיר"</li>
+                        <li><strong>בדוק את התגובות</strong> - הדר אמורה לזהות ולהגיב בהתאם</li>
+                        <li><strong>בדוק במייל</strong> - הצוות יקבל התראות</li>
+                    </ol>
+                    
+                    <div class="status success">
+                        📱 <strong>מספר הבדיקה:</strong> ${process.env.TEST_PHONE_NUMBER || 'לא מוגדר'}<br>
+                        📧 <strong>התראות נשלחות ל:</strong> Dror@sbparking.co.il<br>
+                        🤖 <strong>AI מופעל:</strong> ${process.env.OPENAI_API_KEY ? '✅ כן' : '❌ לא'}
+                    </div>
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                    <a href="/" class="back-btn">🔙 חזור למערכת הראשית</a>
+                    <a href="/memory-dashboard" class="back-btn" style="background: #f39c12; margin-right: 15px;">🧠 דשבורד זיכרון</a>
+                </div>
+            </div>
+        </body>
+        </html>
+    `);
+});
+
 module.exports = app;
