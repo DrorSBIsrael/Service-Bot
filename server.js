@@ -181,7 +181,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
     try {
         console.log('📩 WhatsApp Webhook received:', JSON.stringify(req.body, null, 2));
         
-        // בדיקת פורמט Green API
+        // רק הודעות נכנסות - לא סטטוסים
         if (req.body.typeWebhook === 'incomingMessageReceived') {
             const messageData = req.body.messageData;
             const senderData = req.body.senderData;
@@ -191,18 +191,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             console.log(`📱 הודעה מ-${phoneNumber}: ${messageText}`);
             
-            // יצירת תגובה אישית
-            let response = `שלום! 👋\n\n`;
-            
-            if (messageText.includes('חניה') || messageText.includes('parking')) {
-                response += `קיבלתי את פנייתך בנושא חניה.\nאנחנו כאן לעזור! 🚗\n\n`;
-                response += `הודעתך: "${messageText}"\n\n`;
-                response += `נציג שירות יחזור אליך בהקדם.\nתודה על פנייתך ל-SB Parking! 🙏`;
-            } else {
-                response += `קיבלתי את ההודעה שלך: "${messageText}"\n\n`;
-                response += `אני בוט שירות לקוחות של שיידט את בכמן 🚗\n`;
-                response += `נציג יחזור אליך בהקדם!`;
-            }
+            // יצירת תגובה
+            let response = `שלום! 👋\n\nקיבלתי את ההודעה שלך: "${messageText}"\n\nאני בוט שירות לקוחות של SB Parking 🚗\nנציג יחזור אליך בהקדם!`;
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
@@ -226,6 +216,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
             } catch (emailError) {
                 console.error('❌ שגיאה בשליחת התראה:', emailError);
             }
+        } else {
+            console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
         }
         
         res.status(200).json({ status: 'OK' });
