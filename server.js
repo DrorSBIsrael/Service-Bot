@@ -139,7 +139,7 @@ function shouldCloseConversation(messageText) {
     const closeKeywords = [
         'סגור שיחה', 'סיום שיחה', 'סיום', 'תודה וסיום',
         'שיחה חדשה', 'התחל מחדש', 'נקה זיכרון', 'מחק היסטוריה',
-        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה'
+        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה' , 'תקלה חדשה'
     ];
     
     const lowerMessage = messageText.toLowerCase();
@@ -900,6 +900,24 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
             }
 
 	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+
+	// בדיקה אם הלקוח מבקש לסגור את השיחה
+	            if (shouldCloseConversation(messageText)) {
+                const closeResult = handleConversationClose(phoneNumber, customer);
+                
+                let closeResponse;
+                if (customer) {
+                    closeResponse = `שלום ${customer.name} 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\n\nהשיחה הבאה תתחיל מחדש ללא זיכרון קודם.\n\nאיך אוכל לעזור לך? 😊`;
+                } else {
+                    closeResponse = `שלום 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\n\nהשיחה הבאה תתחיל מחדש.\n\nאיך אוכל לעזור לך?`;
+                }
+                
+                // שליחת תגובה וסיום
+                await sendWhatsAppMessage(phoneNumber, closeResponse);
+                
+                console.log(`🔄 שיחה נסגרה עבור ${phoneNumber}`);
+                return res.status(200).json({ status: 'OK - Conversation closed' });
+            }
 
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
