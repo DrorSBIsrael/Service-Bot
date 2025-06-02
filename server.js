@@ -1,4 +1,4 @@
-// קובץ : server-fixed.js
+// קובץ: server-fixed.js
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -823,6 +823,48 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 	    }
 	}
 
+// עיבוד תמונות חכם אם יש קבצים
+            let imageAnalysisText = '';
+            if (hasFiles && fileInfo && fileInfo.mimeType && fileInfo.mimeType.startsWith('image/')) {
+                try {
+                    console.log('📸 מעבד תמונה בצורה חכמה:', fileInfo.fileName);
+                    
+                    // בניית טקסט לניתוח מהשם והתיאור
+                    const analysisText = `${fileInfo.fileName} ${messageText}`;
+                    
+                    // זיהוי קודי שגיאה
+                    const errorCodes = analyzeErrorCodes(analysisText);
+                    
+                    // זיהוי סוג ציוד
+                    const equipmentType = identifyEquipmentType(analysisText);
+                    
+                    // ניתוח בעיות חזותיות
+                    const visualIssues = analyzeVisualIssues(analysisText);
+                    
+                    // יצירת המלצות תיקון
+                    const recommendations = generateRepairRecommendations(equipmentType, visualIssues);
+                    
+                    // בניית טקסט ניתוח התמונה
+                    if (errorCodes.length > 0) {
+                        imageAnalysisText += `\n\n🔍 **קודי שגיאה שזוהו:** ${errorCodes.join(', ')}`;
+                    }
+                    
+                    if (recommendations.length > 0) {
+                        imageAnalysisText += `\n\n🤖 **ניתוח חכם של התמונה:**\n${recommendations.join('\n')}`;
+                    }
+                    
+                    if (equipmentType && visualIssues.length > 0) {
+                        imageAnalysisText += `\n\n🚨 **התראה:** זוהתה תקלה ב${equipmentType.name} - קריאת שירות עדיפות גבוהה`;
+                    }
+                    
+                    console.log('✅ ניתוח תמונה הושלם:', equipmentType ? equipmentType.name : 'לא זוהה ציוד');
+                    
+                } catch (error) {
+                    console.error('❌ שגיאה בעיבוד תמונה:', error);
+                    imageAnalysisText = '\n\n📸 קיבלתי את התמונה ואני בודקת אותה.';
+                }
+            }
+
 	ConversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
 
             // קבלת הקשר השיחה
@@ -854,6 +896,11 @@ if (hasFiles && fileInfo) {
         conversationContext
     );
 }
+            
+// הוספת ניתוח התמונה לתגובה
+            if (imageAnalysisText) {
+                response += imageAnalysisText;
+            }
             
             // הוספת תגובת הדר לזיכרון
 conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
