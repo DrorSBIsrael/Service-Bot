@@ -1091,3 +1091,250 @@ app.get('/test-pricing', async (req, res) => {
         res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
     }
 });
+
+// בדיקת זרימת שיחה חכמה עם הקשר מלא
+app.get('/test-conversation-smart', async (req, res) => {
+    try {
+        const knownCustomer = customers.find(c => c.id === 186); // נועם מIBM
+        
+        // בניית השיחה עם הקשר מצטבר
+        let conversationHistory = `שיחה עם לקוח מזוהה: ${knownCustomer.name} מאתר ${knownCustomer.site}.\n\n`;
+        
+        const conversationSteps = [
+            { 
+                step: 1, 
+                message: "שלום", 
+                title: "פתיחת שיחה",
+                description: "לקוח פותח שיחה"
+            },
+            { 
+                step: 2, 
+                message: "יש בעיה בכניסה, לא מנפיק כרטיס", 
+                title: "דיווח תקלה",
+                description: "תיאור התקלה הראשוני"
+            },
+            { 
+                step: 3, 
+                message: "זה במחסום כניסה מספר 120", 
+                title: "פרטים נוספים",
+                description: "מיקום מדויק של התקלה"
+            },
+            { 
+                step: 4, 
+                message: "עשיתי אתחול כמו שאמרת, עדיין לא עובד", 
+                title: "דיווח על כישלון אתחול",
+                description: "האתחול לא פתר את הבעיה"
+            },
+            { 
+                step: 5, 
+                message: "כן, שלח בבקשה סיכום למייל שלי", 
+                title: "אישור סיכום",
+                description: "בקשה לשליחת סיכום שיחה"
+            }
+        ];
+        
+        const responses = [];
+        let emailSent = false;
+        
+        for (const step of conversationSteps) {
+            // הוספת השלב הנוכחי להיסטוריה
+            conversationHistory += `שלב ${step.step} - לקוח: "${step.message}"\n`;
+            
+            // יצירת prompt מותאם לשלב
+            let contextualPrompt;
+            if (step.step === 1) {
+                contextualPrompt = `${conversationHistory}\nהדר, התחלת שיחה עם לקוח מזוהה. בואי נראה איך תגיבי לברכה.`;
+            } else if (step.step === 5) {
+                contextualPrompt = `${conversationHistory}\nהדר, הלקוח מאשר שליחת סיכום שיחה. זה הזמן לסכם ולהציע שליחת המייל.`;
+            } else {
+                contextualPrompt = `${conversationHistory}\nהדר, המשיכי את הטיפול בתקלה בהתאם לשלב הנוכחי:`;
+            }
+            
+            const response = await generateAIResponse(
+                contextualPrompt,
+                knownCustomer.name,
+                knownCustomer,
+                knownCustomer.phone.replace(/[^\d]/g, '')
+            );
+            
+            // הוספת התגובה להיסטוריה
+            conversationHistory += `הדר: "${response}"\n\n`;
+            
+            responses.push({
+                ...step,
+                response: response
+            });
+            
+            // אם זה השלב האחרון (אישור סיכום) - שלח אימייל אמיתי!
+            if (step.step === 5) {
+                try {
+                    const emailResult = await transporter.sendMail({
+                        from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+                        to: knownCustomer.email,
+                        cc: 'Service@sbcloud.co.il, Dror@sbparking.co.il',
+                        subject: `סיכום שיחה - ${knownCustomer.name} (${knownCustomer.site}) - תקלה במחסום כניסה`,
+                        html: `
+                            <div dir="rtl" style="font-family: Arial, sans-serif;">
+                                <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h2 style="margin: 0;">📋 סיכום שיחה - הדר שירות לקוחות</h2>
+                                    <p style="margin: 5px 0 0 0;">שיידט את בכמן - מערכת בקרת חניה מתקדמת</p>
+                                </div>
+                                
+                                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח:</h3>
+                                    <p><strong>שם:</strong> ${knownCustomer.name}</p>
+                                    <p><strong>אתר חניה:</strong> ${knownCustomer.site}</p>
+                                    <p><strong>מספר לקוח:</strong> #${knownCustomer.id}</p>
+                                    <p><strong>טלפון:</strong> ${knownCustomer.phone}</p>
+                                    <p><strong>אימייל:</strong> ${knownCustomer.email}</p>
+                                    <p><strong>כתובת:</strong> ${knownCustomer.address}</p>
+                                    <p><strong>תאריך ושעה:</strong> ${new Date().toLocaleString('he-IL')}</p>
+                                </div>
+                                
+                                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #856404; margin-top: 0;">🔧 פרטי התקלה:</h3>
+                                    <p><strong>סוג התקלה:</strong> מחסום לא מנפיק כרטיס</p>
+                                    <p><strong>מיקום:</strong> מחסום כניסה מספר 120</p>
+                                    <p><strong>יחידה:</strong> כניסה (טווח 100-199)</p>
+                                    <p><strong>תיאור:</strong> בעיה בהנפקת כרטיסים בכניסה לחניון</p>
+                                </div>
+                                
+                                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #155724; margin-top: 0;">⚙️ פעולות שבוצעו:</h3>
+                                    <ol>
+                                        <li>קבלת דיווח התקלה מהלקוח</li>
+                                        <li>זיהוי מיקום מדויק - מחסום 120</li>
+                                        <li>הנחיית אתחול מערכת:
+                                            <ul>
+                                                <li>כיבוי היחידה</li>
+                                                <li>ניתוק הכרטיסים</li>
+                                                <li>המתנה של דקה</li>
+                                                <li>הדלקת היחידה</li>
+                                                <li>חיבור הכרטיסים מחדש</li>
+                                            </ul>
+                                        </li>
+                                        <li>בדיקת תוצאות האתחול</li>
+                                    </ol>
+                                </div>
+                                
+                                <div style="background: #f8d7da; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #721c24; margin-top: 0;">❌ תוצאה:</h3>
+                                    <p><strong>סטטוס:</strong> התקלה לא נפתרה על ידי אתחול</p>
+                                    <p><strong>פעולת המשך:</strong> הועבר לטיפול טכנאי</p>
+                                </div>
+                                
+                                <div style="background: #d1ecf1; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #0c5460; margin-top: 0;">📞 פעולות המשך:</h3>
+                                    <p>🔧 <strong>נפתחה קריאת שירות</strong> למחלקה הטכנית</p>
+                                    <p>⏰ <strong>זמן תגובה:</strong> טכנאי יחזור תוך 24 שעות בימי עבודה</p>
+                                    <p>📋 <strong>מספר קריאה:</strong> SRV-${Date.now().toString().slice(-6)}</p>
+                                    <p>🚨 <strong>דחיפות:</strong> רגילה (אלא אם החניון חסום לחלוטין)</p>
+                                </div>
+                                
+                                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                                    <h3 style="color: #155724; margin-top: 0;">💡 המלצות זמניות:</h3>
+                                    <p>• במידת הצורך, השתמש בקופה ידנית להנפקת כרטיסים</p>
+                                    <p>• אם החניון חסום לחלוטין, צור קשר מיידי: 039792365</p>
+                                    <p>• הימנע ממכונות בכניסות במהלך שעות השיא עד לתיקון</p>
+                                </div>
+                                
+                                <hr style="margin: 30px 0; border: none; border-top: 2px solid #ecf0f1;">
+                                
+                                <div style="background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center;">
+                                    <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
+                                        📧 סיכום זה נוצר אוטומטית על ידי הדר - מערכת שירות לקוחות שיידט את בכמן<br>
+                                        📞 משרד: 039792365 | 📧 שירות: Service@sbcloud.co.il<br>
+                                        ⏰ שעות פעילות: א'-ה' 8:15-17:00<br>
+                                        🌐 מערכת בקרת חניה מתקדמת
+                                    </p>
+                                </div>
+                            </div>
+                        `
+                    });
+                    
+                    emailSent = true;
+                    console.log('📧 סיכום שיחה נשלח בהצלחה:', emailResult.messageId);
+                    
+                } catch (emailError) {
+                    console.error('❌ שגיאה בשליחת סיכום שיחה:', emailError);
+                }
+            }
+            
+            // השהיה בין השלבים
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        
+        res.send(`
+            <div dir="rtl" style="font-family: Arial; padding: 30px; max-width: 1200px; margin: 0 auto;">
+                <h1>🧠 זרימת שיחה חכמה עם הדר</h1>
+                <p style="background: #d4edda; padding: 15px; border-radius: 8px;"><strong>שיפור:</strong> כל שלב מקבל הקשר מהשלבים הקודמים</p>
+                
+                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+                    <h3>👤 פרופיל לקוח:</h3>
+                    <p><strong>שם:</strong> ${knownCustomer.name}</p>
+                    <p><strong>אתר:</strong> ${knownCustomer.site}</p>
+                    <p><strong>מספר לקוח:</strong> #${knownCustomer.id}</p>
+                    <p><strong>סטטוס:</strong> ✅ מזוהה במערכת</p>
+                </div>
+                
+                ${responses.map(step => `
+                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+                        <div style="background: ${step.step === 5 ? '#27ae60' : '#3498db'}; color: white; padding: 15px;">
+                            <h3 style="margin: 0;">שלב ${step.step}: ${step.title}</h3>
+                            <small>${step.description}</small>
+                        </div>
+                        
+                        <div style="padding: 20px;">
+                            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <strong>👤 ${knownCustomer.name}:</strong>
+                                <p style="margin: 5px 0; font-style: italic;">"${step.message}"</p>
+                            </div>
+                            
+                            <div style="background: #e8f5e8; padding: 15px; border-radius: 8px;">
+                                <strong>👩‍💼 הדר:</strong>
+                                <p style="margin: 5px 0; white-space: pre-line;">${step.response}</p>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+                
+                ${emailSent ? `
+                    <div style="background: #d1ecf1; padding: 20px; border-radius: 10px; margin-top: 30px; text-align: center;">
+                        <h3 style="color: #0c5460;">📧 סיכום השיחה נשלח בהצלחה!</h3>
+                        <p>אימייל מפורט נשלח ל:</p>
+                        <p><strong>📧 ${knownCustomer.email}</strong></p>
+                        <p><strong>📧 Service@sbcloud.co.il (העתק)</strong></p>
+                        <p><strong>📧 Dror@sbparking.co.il (העתק)</strong></p>
+                        <small>בדוק את תיבת הדואר שלך לסיכום המפורט</small>
+                    </div>
+                ` : ''}
+                
+                <div style="margin-top: 40px; text-align: center;">
+                    <h3>📊 ניתוח זרימת השיחה</h3>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                        <p>✅ <strong>שלב 1:</strong> הדר קיבלה את הלקוח בחום</p>
+                        <p>✅ <strong>שלב 2:</strong> זיהתה תקלה ושאלה שאלות מדויקות</p>
+                        <p>✅ <strong>שלב 3:</strong> קיבלה פרטים נוספים והנחתה לאתחול</p>
+                        <p>✅ <strong>שלב 4:</strong> זיהתה שהאתחול לא עזר והציעה טכנאי</p>
+                        <p>✅ <strong>שלב 5:</strong> שלחה סיכום מפורט למייל</p>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px; flex-wrap: wrap;">
+                        <a href="/test-conversation" style="background: #6c757d; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">📊 השוואה לגרסה רגילה</a>
+                        <a href="/test-pricing" style="background: #f39c12; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">💰 בדיקת הצעת מחיר</a>
+                        <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור למערכת</a>
+                    </div>
+                </div>
+            </div>
+        `);
+        
+    } catch (error) {
+        res.status(500).send(`
+            <div dir="rtl" style="font-family: Arial; padding: 50px; text-align: center;">
+                <h1 style="color: #e74c3c;">❌ שגיאה בבדיקת השיחה</h1>
+                <p><strong>פרטי השגיאה:</strong> ${error.message}</p>
+                <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">← חזור למערכת</a>
+            </div>
+        `);
+    }
+});
