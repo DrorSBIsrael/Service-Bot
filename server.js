@@ -901,8 +901,6 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
                 }
             }
 
-	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
-
 	// בדיקה פשוטה לסגירת שיחה
             if (messageText.includes('סיום') || messageText.includes('תקלה חדשה') || messageText.includes('שיחה חדשה') || messageText.includes('נקה זיכרון')) {
                 console.log(`🔄 מנקה זיכרון עבור: ${phoneNumber} - הודעה: "${messageText}"`);
@@ -961,7 +959,7 @@ if (hasFiles && fileInfo) {
             }
             
             // הוספת תגובת הדר לזיכרון
-conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
