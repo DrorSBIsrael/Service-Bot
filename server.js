@@ -616,10 +616,35 @@ app.post('/webhook/whatsapp', async (req, res) => {
             const messageData = req.body.messageData;
             const senderData = req.body.senderData;
             
-            const phoneNumber = senderData.sender.replace('@c.us', '');
-            const messageText = messageData.textMessageData?.textMessage || 'הודעה ללא טקסט';
-            const customerName = senderData.senderName || 'לקוח';
-            
+const phoneNumber = senderData.sender.replace('@c.us', '');
+let messageText = '';
+let hasFiles = false;
+let fileInfo = null;
+const customerName = senderData.senderName || 'לקוח';
+
+// זיהוי סוג ההודעה - טקסט או קובץ
+if (messageData.textMessageData) {
+    // הודעת טקסט רגילה
+    messageText = messageData.textMessageData.textMessage || 'הודעה ללא טקסט';
+} else if (messageData.fileMessageData) {
+    // הודעה עם קובץ
+    hasFiles = true;
+    messageText = messageData.fileMessageData.caption || 'שלח קובץ';
+    
+    // פרטי הקובץ מ-WhatsApp
+    fileInfo = {
+        fileName: messageData.fileMessageData.fileName || 'קובץ ללא שם',
+        mimeType: messageData.fileMessageData.mimeType || 'application/octet-stream',
+        fileSize: messageData.fileMessageData.fileSize || 0,
+        downloadUrl: messageData.fileMessageData.downloadUrl || null
+    };
+    
+    console.log(`📁 קובץ התקבל: ${fileInfo.fileName} (${fileInfo.mimeType}, ${formatFileSize(fileInfo.fileSize)})`);
+} else {
+    messageText = 'הודעה מסוג לא זוהה';
+}
+
+console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}${hasFiles ? ' + קובץ' : ''}`);            
             console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}`);
             
             // חיפוש לקוח במסד הנתונים
