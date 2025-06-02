@@ -692,7 +692,7 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 	    }
 	}
 
-c	onversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+	ConversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
 
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
@@ -700,16 +700,32 @@ c	onversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', custom
             // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
             await rateLimiter.waitForNextRequest();
             
-            const response = await generateAIResponseWithMemory(
-                messageText, 
-                customerName, 
-                customer, 
-                phoneNumber,
-                conversationContext
-            );
+let response;
+if (hasFiles && fileInfo) {
+    // תגובה מותאמת לקבצים
+    const fileAnalysis = analyzeFileForTroubleshooting(fileInfo, messageText);
+    response = await generateFileHandlingResponse(
+        messageText,
+        fileInfo,
+        fileAnalysis,
+        customerName,
+        customer,
+        phoneNumber,
+        conversationContext
+    );
+} else {
+    // תגובה רגילה לטקסט
+    response = await generateAIResponseWithMemory(
+        messageText,
+        customerName,
+        customer,
+        phoneNumber,
+        conversationContext
+    );
+}
             
             // הוספת תגובת הדר לזיכרון
-            conversationMemory.addMessage(phoneNumber, response, 'hadar', customer);
+conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
