@@ -1,4 +1,4 @@
-// קובץ: server-fixed.js
+// קובץ:server-fixed.js
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
