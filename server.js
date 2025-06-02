@@ -10,6 +10,7 @@ const app = express();
 const fs = require('fs');
 
 let customers = [];
+let serviceCallCounter = 10001; // התחלה מ-HSC-10001
 
 // פונקציות עזר נוספות לטיפול בקבצים ב-WhatsApp
 function createFileInfoFromWhatsApp(fileData) {
@@ -34,6 +35,27 @@ function analyzeFileForTroubleshooting(fileInfo, messageText) {
         needsTechnician: category === 'image' && isUrgent,
         description: createFileDescription(fileInfo)
     };
+}
+
+function analyzeFileForTroubleshooting(fileInfo, messageText) {
+    const category = getFileCategory(fileInfo.mimetype);
+    const isUrgent = messageText.toLowerCase().includes('תקלה') || 
+                     messageText.toLowerCase().includes('בעיה') || 
+                     messageText.toLowerCase().includes('לא עובד');
+    
+    return {
+        category: category,
+        isUrgent: isUrgent,
+        needsTechnician: category === 'image' && isUrgent,
+        description: createFileDescription(fileInfo)
+    };
+}
+
+// פונקציה ליצירת מספר קריאת שירות
+function generateServiceCallNumber() {
+    const callNumber = `HSC-${serviceCallCounter}`;
+    serviceCallCounter++;
+    return callNumber;
 }
 
 try {
@@ -908,41 +930,46 @@ ${customerData ? `
         // תגובות fallback מותאמות להדר עם זיכרון
         let fallbackMessage;
         
-        if (error.response?.status === 429) {
-            console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר עם זיכרון');
-            
-            if (customerData) {
-                if (conversationContext && conversationContext.conversationLength > 1) {
-                    fallbackMessage = `שלום ${customerData.name} 👋
+const serviceNumber = generateServiceCallNumber();
+const currentTime = new Date().toLocaleString('he-IL');
 
-אני זוכרת את השיחה שלנו מקודם.
-יש לי בעיה טכנית זמנית, אבל אני כאן לעזור!
+if (error.response?.status === 429) {
+    console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר עם זיכרון');
+    
+    if (customerData) {
+        if (conversationContext && conversationContext.conversationLength > 1) {
+            fallbackMessage = `שלום ${customerData.name} 👋
 
-🔧 תקלות | 💰 הצעות מחיר | 📋 נזקים | 📚 הדרכות
+🔧 נפתחה קריאת שירות למחלקה הטכנית
+⏰ **זמן תגובה:** טכנאי יחזור תוך 4 שעות בימי עבודה
+📋 **מספר קריאה:** ${serviceNumber}
+
+אני זוכרת את השיחה שלנו מקודם ואטפל בהתאם.
 
 📞 039792365 | 📧 Service@sbcloud.co.il`;
-                } else {
-                    fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
+        } else {
+            fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
 
-אני הדר מחברת שיידט את בכמן.
+🔧 נפתחה קריאת שירות למחלקה הטכנית  
+⏰ **זמן תגובה:** טכנאי יחזור תוך 4 שעות בימי עבודה
+📋 **מספר קריאה:** ${serviceNumber}
+
 איך אוכל לעזור לך היום?
 
-🔧 תקלות | 💰 הצעות מחיר | 📋 נזקים | 📚 הדרכות
-
 📞 039792365 | 📧 Service@sbcloud.co.il`;
-                }
-            } else {
-                fallbackMessage = `שלום ${customerName} 👋
+        }
+    } else {
+        fallbackMessage = `שלום ${customerName} 👋
 
-אני הדר מחברת שיידט את בכמן.
+🔧 נפתחה קריאת שירות 
+⏰ **זמן תגובה:** טכנאי יחזור תוך 4 שעות בימי עבודה  
+📋 **מספר קריאה:** ${serviceNumber}
+
 כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
-
-• שם מלא
-• שם החניון/אתר החניה
-• מספר לקוח (אם ידוע)
+- שם מלא • שם החניון • מספר לקוח
 
 📞 039792365`;
-            }
+    }
         } else {
             fallbackMessage = `שלום ${customerName} 👋
 
