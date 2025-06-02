@@ -884,3 +884,33 @@ transporter.verify()
     .catch((error) => {
         console.error('? בעיה בחיבור לשרת אימייל:', error.message);
     });
+
+// בדיקת מצב הדר - פשוט מאוד
+app.get('/test-hadar', async (req, res) => {
+    try {
+        const testResponse = await generateAIResponse(
+            'בדיקה: מערכת פעילה', 
+            'מצב בדיקה', 
+            customers[0], // לקוח ראשון
+            '972545484210'
+        );
+        
+        res.send(`
+            <div dir="rtl" style="font-family: Arial; padding: 50px;">
+                <h1>🧪 בדיקת מצב הדר</h1>
+                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>תגובת הדר:</h3>
+                    <p style="background: white; padding: 15px; border-radius: 5px; border-right: 4px solid green;">${testResponse.replace(/\n/g, '<br>')}</p>
+                </div>
+                <div style="background: #f8f9fa; padding: 15px; border-radius: 10px;">
+                    <p><strong>לקוח לבדיקה:</strong> ${customers[0]?.name} - ${customers[0]?.site}</p>
+                    <p><strong>מספר בדיקה:</strong> 972545484210</p>
+                </div>
+                <br>
+                <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">← חזור למערכת</a>
+            </div>
+        `);
+    } catch (error) {
+        res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
+    }
+});
