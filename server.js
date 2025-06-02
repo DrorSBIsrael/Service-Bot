@@ -366,7 +366,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
             const response = await generateAIResponse(messageText, senderData.senderName || 'לקוח', customer, phoneNumber);
-
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
             
@@ -458,7 +457,7 @@ function findCustomerByPhone(phoneNumber) {
     });
 }
 
-// פונקציית AI מתקדמת - הדר נציגת שירות לקוחות
+// פונקציית AI מתקדמת - הדר חכמה עם זיהוי שלבי שיחה
 async function generateAIResponse(message, customerName, customerData = null, phoneNumber = null) {
     try {
         // בדיקה אם זה מספר הבדיקה
@@ -467,20 +466,16 @@ async function generateAIResponse(message, customerName, customerData = null, ph
             if (message.startsWith('בדיקה:')) {
                 const testMessage = message.replace('בדיקה:', '').trim();
                 console.log(`🧪 מצב בדיקה פעיל: ${testMessage}`);
-                
                 return `🧪 מצב בדיקה - הדר פעילה!\n\nהודעה: "${testMessage}"\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n\nהמערכת עובדת! ✅`;
             }
         }
-        
+
         // השהיה למניעת rate limiting
         await new Promise(resolve => setTimeout(resolve, 1500));
-
+        
         const systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
 
 🔍 כללי זיהוי לקוח:
-אני מעניקה מענה מקצועי למזוהים בלבד, בהתבסס על מאגר מידע קיים של החברה.
-אם הלקוח לא מזוהה במערכת - אבקש ממנו פרטי זיהוי (שם, חניון, מספר לקוח).
-
 ${customerData ? `
 ✅ לקוח מזוהה במערכת:
 - שם: ${customerData.name}
@@ -488,39 +483,71 @@ ${customerData ? `
 - מספר לקוח: #${customerData.id}
 - טלפון: ${customerData.phone}
 - אימייל: ${customerData.email}
-- כתובת: ${customerData.address}
 
-מכיוון שהלקוח מזוהה, אוכל לטפל בפנייתו לפי סדר הטיפול.
+מכיוון שהלקוח מזוהה, אני אוכל לטפל בפנייתו לפי סדר הטיפול.
 ` : `
 ⚠️ לקוח לא מזוהה במערכת!
 אני חייבת לזהות את הלקוח קודם כל. אבקש:
 - שם מלא
-- שם החניון/אתר החניה
+- שם החניון/אתר החניה  
 - מספר לקוח (אם יודע)
 ללא זיהוי לא אוכל לטפל בפנייה.
 `}
 
-📋 תחומי התמחותי (רק ללקוחות מזוהים):
-1. שירות ודיווח על תקלות
-2. הצעות מחיר (כרטיסים, גלילי קבלה, זרועות מחסום)
-3. דיווח על נזקים
-4. הדרכות תפעול
+📋 סדר הטיפול בפניות (ללקוחות מזוהים בלבד):
 
-🛠️ ציוד בחניון שאני מטפלת בו:
-כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, מחשב אשראי, תחנת עבודה, מרכזיית אינטרקום, טלפון.
+1. 🔧 שירות ודיווח על תקלות:
+   - זיהוי סוג התקלה: "איפה התקלה? כניסה/יציאה/קופה?"
+   - הנחיה לאתחול: כיבוי → ניתוק כרטיסים → דקה המתנה → הדלקה → חיבור כרטיסים
+   - אזהרה: "במהלך האתחול אסור שרכב יהיה בנתיב"
+   - אם לא עזר: "אפתח דיווח תקלה לטכנאי"
+
+2. 💰 הצעות מחיר:
+   - כרטיסי נייר (לבנים/עם גרפיקה)
+   - גלילי קבלה לעמדות יציאה  
+   - זרועות למחסום (ישרה/פריקה + אורך)
+   - שאלות: סוג? כמות? גרפיקה? כתובת משלוח?
+
+3. 📋 דיווח על נזקים:
+   - תיאור הנזק
+   - מיקום מדויק
+   - העברה לטכנאי
+
+4. 📚 הדרכות תפעול:
+   - נושא ההדרכה
+   - הפניה לקובץ רלוונטי או הסבר
+
+🛠️ ציוד שאני מטפלת בו:
+כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, מחשב אשראי, תחנת עבודה, מרכזיית אינטרקום.
+
+🔢 טווחי יחידות:
+- 100-199: כניסות
+- 200-299: יציאות  
+- 300-399: מעברים
+- 600-699: אוטומטיות
+- 700-799: קופות ידניות
 
 📞 פרטי קשר:
-- טלפון משרד: 039792365
-- מייל שירות: Service@sbcloud.co.il
-- מייל משרד: Office@sbcloud.co.il
-- שעות פעילות: א'-ה' 8:15-17:00
+- משרד: 039792365
+- שירות: Service@sbcloud.co.il  
+- שעות: א'-ה' 8:15-17:00
+
+🧠 זיהוי שלב השיחה:
+- הודעה כללית/ברכה → "איך אוכל לעזור?"
+- "בעיה/תקלה" → שאלות זיהוי מדויקות
+- תיאור תקלה → הנחיות אתחול מפורטות
+- "לא עזר/עדיין לא עובד" → "אפתח דיווח לטכנאי"
+- "הצעת מחיר" → שאלות מפורטות על הפריטים
+- "נזק" → פרטי הנזק והמיקום
+- "הדרכה" → איזה נושא?
+- סיום טיפול → "האם לשלוח סיכום שיחה לאימייל?"
 
 כללי תגובה:
-- אדיבה, מקצועית, עניינית וקצרה
-- לא נותנת מידע טכני שאינו במאגר
-- אם אין תשובה ברורה - מפנה לנציג אנושי
-- לא שולחת אימייל אלא בסוף שיחה ובאישור הלקוח
-- שומרת על דיסקרטיות ומתעדת כל אינטראקציה`;
+- אדיבה, מקצועית, עניינית
+- שאלות מדויקות לפי הנושא
+- לא מעבירה לנציג אלא אם כן באמת צריך
+- בסיום - תמיד שואלת על שליחת סיכום
+- מקפידה על זיהוי לקוח לפני כל טיפול`;
 
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
@@ -534,8 +561,8 @@ ${customerData ? `
                     content: `הלקוח ${customerName} שלח: "${message}"`
                 }
             ],
-            max_tokens: 200,
-            temperature: 0.3 // נמוך יותר למקצועיות
+            max_tokens: 250,
+            temperature: 0.2 // נמוך למקצועיות ועקביות
         }, {
             headers: {
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -549,47 +576,42 @@ ${customerData ? `
     } catch (error) {
         console.error('❌ שגיאה ב-OpenAI:', error.message);
         
-        // תגובות fallback מותאמות לפי הדר
+        // תגובות fallback מותאמות להדר
         let fallbackMessage;
         
         if (error.response?.status === 429) {
             console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר סטנדרטית');
             
             if (customerData) {
-                // לקוח מזוהה
                 fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
 
-אני הדר משירות הלקוחות של שיידט את בכמן.
-קיבלתי את פנייתך ואעביר אותה לטיפול מיידי.
+אני הדר מחברת שיידט את בכמן.
+איך אוכל לעזור לך היום?
 
-נציג יחזור אליך בהקדם.
+🔧 תקלות | 💰 הצעות מחיר | 📋 נזקים | 📚 הדרכות
 
-📞 לדחוף: 039792365
-📧 Service@sbcloud.co.il`;
+📞 039792365 | 📧 Service@sbcloud.co.il`;
             } else {
-                // לקוח לא מזוהה
                 fallbackMessage = `שלום ${customerName} 👋
 
 אני הדר מחברת שיידט את בכמן.
 כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
 
 • שם מלא
-• שם החניון/אתר החניה  
+• שם החניון/אתר החניה
 • מספר לקוח (אם ידוע)
 
-📞 039792365 | 📧 Service@sbcloud.co.il`;
+📞 039792365`;
             }
         } else {
             fallbackMessage = `שלום ${customerName} 👋
 
-אני הדר מחברת שיידט את בכמן.
 יש לי בעיה טכנית זמנית.
-
 אנא פנה ישירות:
+
 📞 039792365 
 📧 Service@sbcloud.co.il
-
-שעות פעילות: א'-ה' 8:15-17:00`;
+⏰ א'-ה' 8:15-17:00`;
         }
         
         return fallbackMessage;
@@ -915,81 +937,156 @@ app.get('/test-hadar', async (req, res) => {
     }
 });
 
-// בדיקת לקוח רגיל (לא מזוהה)
-app.get('/test-customer', async (req, res) => {
+// בדיקת זרימת שיחה מלאה - דמיון שיחה אמיתית
+app.get('/test-conversation', async (req, res) => {
     try {
-        const testResponse = await generateAIResponse(
-            'שלום, יש לי בעיה בחניה', 
-            'יוסי כהן', 
-            null, // לקוח לא מזוהה
-            '972501234567' // מספר רנדומלי
-        );
+        const knownCustomer = customers.find(c => c.id === 186); // נועם מIBM
+        
+        // שלבי השיחה
+        const conversationSteps = [
+            {
+                step: 1,
+                title: "פתיחת שיחה",
+                message: "שלום",
+                description: "לקוח מתחיל שיחה"
+            },
+            {
+                step: 2, 
+                title: "דיווח תקלה",
+                message: "יש בעיה בכניסה, לא מנפיק כרטיס",
+                description: "תיאור התקלה"
+            },
+            {
+                step: 3,
+                title: "מתן פרטים נוספים", 
+                message: "זה במחסום כניסה מספר 120",
+                description: "פרטים מדויקים על המיקום"
+            },
+            {
+                step: 4,
+                title: "אחרי הנחיות אתחול",
+                message: "עשיתי אתחול, עדיין לא עובד",
+                description: "אתחול לא עזר"
+            },
+            {
+                step: 5,
+                title: "אישור סיכום",
+                message: "כן, שלח סיכום למייל",
+                description: "אישור לשליחת סיכום"
+            }
+        ];
+        
+        // הרצת כל השלבים
+        const responses = [];
+        for (const step of conversationSteps) {
+            const response = await generateAIResponse(
+                step.message,
+                knownCustomer.name,
+                knownCustomer,
+                knownCustomer.phone.replace(/[^\d]/g, '')
+            );
+            
+            responses.push({
+                ...step,
+                response: response
+            });
+            
+            // השהיה קטנה בין השלבים
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
         
         res.send(`
-            <div dir="rtl" style="font-family: Arial; padding: 50px;">
-                <h1>👤 בדיקת לקוח רגיל</h1>
-                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>📞 פרטי הלקוח:</h3>
-                    <p><strong>שם:</strong> יוסי כהן</p>
-                    <p><strong>טלפון:</strong> 972501234567</p>
-                    <p><strong>סטטוס:</strong> ❌ לא מזוהה במערכת</p>
-                    <p><strong>הודעה:</strong> "שלום, יש לי בעיה בחניה"</p>
+            <div dir="rtl" style="font-family: Arial; padding: 30px; max-width: 1000px; margin: 0 auto;">
+                <h1>💬 דמיון שיחה מלאה עם הדר</h1>
+                
+                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin-bottom: 30px;">
+                    <h3>👤 פרופיל לקוח:</h3>
+                    <p><strong>שם:</strong> ${knownCustomer.name}</p>
+                    <p><strong>אתר:</strong> ${knownCustomer.site}</p>
+                    <p><strong>מספר לקוח:</strong> #${knownCustomer.id}</p>
+                    <p><strong>סטטוס:</strong> ✅ מזוהה במערכת</p>
                 </div>
                 
-                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>🤖 תגובת הדר:</h3>
-                    <p style="background: white; padding: 15px; border-radius: 5px; border-right: 4px solid #27ae60;">${testResponse.replace(/\n/g, '<br>')}</p>
-                </div>
+                ${responses.map(step => `
+                    <div style="margin-bottom: 30px; border: 1px solid #ddd; border-radius: 10px; overflow: hidden;">
+                        <div style="background: #3498db; color: white; padding: 15px;">
+                            <h3 style="margin: 0;">שלב ${step.step}: ${step.title}</h3>
+                        </div>
+                        
+                        <div style="padding: 20px;">
+                            <div style="background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                                <strong>👤 ${knownCustomer.name}:</strong>
+                                <p style="margin: 5px 0; font-style: italic;">"${step.message}"</p>
+                                <small style="color: #666;">${step.description}</small>
+                            </div>
+                            
+                            <div style="background: #e8f5e8; padding: 15px; border-radius: 8px;">
+                                <strong>👩‍💼 הדר:</strong>
+                                <p style="margin: 5px 0; white-space: pre-line;">${step.response}</p>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
                 
-                <div style="display: flex; gap: 15px; margin: 20px 0;">
-                    <a href="/test-hadar" style="background: #3498db; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🧪 בדיקת מצב</a>
-                    <a href="/test-known-customer" style="background: #27ae60; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">✅ לקוח מזוהה</a>
-                    <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור</a>
+                <div style="margin-top: 40px; text-align: center;">
+                    <h3>📊 ניתוח השיחה</h3>
+                    <p>הדר זיהתה נכון את השלבים והגיבה בהתאם לפרוטוקול</p>
+                    
+                    <div style="display: flex; gap: 15px; justify-content: center; margin-top: 20px;">
+                        <a href="/test-pricing" style="background: #f39c12; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">💰 בדיקת הצעת מחיר</a>
+                        <a href="/test-damage" style="background: #e74c3c; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">📋 בדיקת נזק</a>
+                        <a href="/test-training" style="background: #9b59b6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">📚 בדיקת הדרכה</a>
+                        <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור</a>
+                    </div>
                 </div>
             </div>
         `);
+        
     } catch (error) {
         res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
     }
 });
 
-// בדיקת לקוח מזוהה
-app.get('/test-known-customer', async (req, res) => {
+// בדיקת הצעת מחיר
+app.get('/test-pricing', async (req, res) => {
     try {
-        const knownCustomer = customers.find(c => c.id === 186); // נועם מIBM
+        const customer = customers[1]; // טלי מאולימפיה
         
-        const testResponse = await generateAIResponse(
-            'יש תקלה במחסום הכניסה, לא מנפיק כרטיס', 
-            knownCustomer.name, 
-            knownCustomer,
-            knownCustomer.phone.replace(/[^\d]/g, '')
-        );
+        const pricingFlow = [
+            "שלום, אני צריך הצעת מחיר",
+            "כרטיסי נייר לכניסה",
+            "500 יחידות לבנות, לשלוח לאתר שלנו"
+        ];
+        
+        const responses = [];
+        for (const message of pricingFlow) {
+            const response = await generateAIResponse(message, customer.name, customer, customer.phone.replace(/[^\d]/g, ''));
+            responses.push({ message, response });
+            await new Promise(resolve => setTimeout(resolve, 500));
+        }
         
         res.send(`
-            <div dir="rtl" style="font-family: Arial; padding: 50px;">
-                <h1>✅ בדיקת לקוח מזוהה</h1>
-                <div style="background: #d4edda; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>👤 פרטי הלקוח:</h3>
-                    <p><strong>שם:</strong> ${knownCustomer.name}</p>
-                    <p><strong>אתר:</strong> ${knownCustomer.site}</p>
-                    <p><strong>מספר לקוח:</strong> #${knownCustomer.id}</p>
-                    <p><strong>טלפון:</strong> ${knownCustomer.phone}</p>
-                    <p><strong>סטטוס:</strong> ✅ מזוהה במערכת</p>
-                    <p><strong>הודעה:</strong> "יש תקלה במחסום הכניסה, לא מנפיק כרטיס"</p>
+            <div dir="rtl" style="font-family: Arial; padding: 30px;">
+                <h1>💰 בדיקת זרימת הצעת מחיר</h1>
+                <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                    <h3>👤 לקוח: ${customer.name} - ${customer.site}</h3>
                 </div>
                 
-                <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>🤖 תגובת הדר:</h3>
-                    <p style="background: white; padding: 15px; border-radius: 5px; border-right: 4px solid #27ae60;">${testResponse.replace(/\n/g, '<br>')}</p>
-                </div>
+                ${responses.map((item, index) => `
+                    <div style="margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 10px;">
+                        <div style="background: #e3f2fd; padding: 10px; border-radius: 5px; margin-bottom: 10px;">
+                            <strong>לקוח:</strong> "${item.message}"
+                        </div>
+                        <div style="background: #e8f5e8; padding: 10px; border-radius: 5px;">
+                            <strong>הדר:</strong> ${item.response.replace(/\n/g, '<br>')}
+                        </div>
+                    </div>
+                `).join('')}
                 
-                <div style="display: flex; gap: 15px; margin: 20px 0;">
-                    <a href="/test-customer" style="background: #f39c12; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">❌ לקוח לא מזוהה</a>
-                    <a href="/test-hadar" style="background: #3498db; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">🧪 בדיקת מצב</a>
-                    <a href="/" style="background: #95a5a6; color: white; padding: 15px 20px; text-decoration: none; border-radius: 8px;">← חזור</a>
-                </div>
+                <a href="/test-conversation" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">← חזור לבדיקות</a>
             </div>
         `);
+        
     } catch (error) {
         res.status(500).send(`<h1>שגיאה: ${error.message}</h1>`);
     }
