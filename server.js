@@ -958,6 +958,100 @@ ${customerData ? `
     }
 }
 
+// 🤖 פונקציה ליצירת תגובה מותאמת לקבצים
+async function generateFileHandlingResponse(messageText, fileInfo, fileAnalysis, customerName, customerData, phoneNumber, conversationContext) {
+    try {
+        // אם זה מספר הבדיקה
+        const testPhone = process.env.TEST_PHONE_NUMBER;
+        if (testPhone && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
+            return `🧪 בדיקת קבצים הצליחה!\n\nהתקבל קובץ: ${fileInfo.fileName}\nסוג: ${fileAnalysis.category}\n${fileAnalysis.isUrgent ? '🚨 זוהה כדחוף' : '✅ רגיל'}\n\nהמערכת עובדת!`;
+        }
+
+        let systemPrompt = `אני הדר, נציגת שירות לקוחות של שיידט את בכמן.
+הלקוח ${customerName} שלח קובץ.
+
+🔍 פרטי הקובץ:
+- שם: ${fileInfo.fileName}
+- סוג: ${fileAnalysis.category}
+- גודל: ${formatFileSize(fileInfo.size)}
+- דחיפות: ${fileAnalysis.isUrgent ? 'גבוהה' : 'רגילה'}
+
+${customerData ? `
+✅ לקוח מזוהה: ${customerData.name} מ${customerData.site}
+` : `
+⚠️ לקוח לא מזוהה - אבקש זיהוי לפני טיפול
+`}
+
+🎯 הנחיות לתגובה:
+
+אם זה תמונה של תקלה:
+- "רואה את התמונה, מנתח את התקלה..."
+- זיהוי מה נראה בתמונה (כללי)
+- המלצות ראשוניות
+- אם דחוף: "אפתח דיווח תקלה לטכנאי עם התמונה"
+
+אם זה מסמך:
+- "קיבלתי את המסמך, אעבור עליו ואחזור אליך"
+- אם מפרט: "אכין הצעת מחיר לפי המפרט"
+
+אם לקוח לא מזוהה:
+- "קיבלתי את הקובץ, אבל צריכה לזהות אותך קודם"
+- בקשת פרטי זיהוי
+
+תמיד אאשר קבלת הקובץ ואסביר את הצעד הבא.`;
+
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: systemPrompt
+                },
+                {
+                    role: 'user',
+                    content: `הלקוח שלח: "${messageText}" עם קובץ: ${fileInfo.fileName}`
+                }
+            ],
+            max_tokens: 200,
+            temperature: 0.3
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 20000
+        });
+
+        return response.data.choices[0].message.content.trim();
+        
+    } catch (error) {
+        console.error('❌ שגיאה ב-OpenAI לקבצים:', error.message);
+        
+        // תגובת fallback לקבצים
+        if (customerData) {
+            return `שלום ${customerData.name} 👋
+
+קיבלתי את הקובץ: ${fileInfo.fileName}
+${fileAnalysis.isUrgent ? '🚨 זוהה כתקלה דחופה' : '📁 בבדיקה'}
+
+אני בודקת ואחזור אליך בהקדם.
+במקרה דחוף: 📞 039792365
+
+הדר - שיידט את בכמן`;
+        } else {
+            return `שלום ${customerName} 👋
+
+קיבלתי קובץ, אבל כדי לטפל בפנייה אני צריכה לזהות אותך קודם:
+
+- שם מלא
+- שם החניון/אתר החניה  
+- מספר לקוח
+
+📞 039792365`;
+        }
+    }
+}
+
 // 📋 פונקציה לבדיקה אם השיחה הסתיימה
 function checkIfConversationEnded(lastCustomerMessage, hadarResponse) {
     const customerMsg = lastCustomerMessage.toLowerCase();
