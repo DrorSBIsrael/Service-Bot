@@ -762,9 +762,10 @@ conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', custome
             
             // שליחת אימייל התראה למנהל
             try {
-                const emailSubject = customer ? 
-                    `הודעה מ-${customer.name} (${customer.site})` : 
-                    `הודעה חדשה מ-WhatsApp: ${phoneNumber}`;
+	const serviceNumber = generateServiceCallNumber();
+	const emailSubject = customer ? 
+	    `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
+	    `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
                 
                 await transporter.sendMail({
                     from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
