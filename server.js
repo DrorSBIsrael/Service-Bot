@@ -365,8 +365,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
             }
             
             // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
-            const response = await generateAIResponse(messageText, senderData.senderName || 'לקוח', customer);
-            
+            const response = await generateAIResponse(messageText, senderData.senderName || 'לקוח', customer, phoneNumber);
+
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
             
