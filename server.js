@@ -235,7 +235,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // הגדרת nodemailer עם השרת שלך
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.012.net.il',
     port: parseInt(process.env.EMAIL_PORT) || 465,
     secure: process.env.EMAIL_SECURE === 'true',
