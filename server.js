@@ -1,4 +1,4 @@
-// קובץ:server-fixed.js
+// קובץ: server-fixed.js
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -162,43 +162,6 @@ function generateRepairRecommendations(equipmentType, issues) {
     }
     
     return recommendations;
-}
-
-// פונקציה לזיהוי בקשה לסגירת שיחה
-function shouldCloseConversation(messageText) {
-    const closeKeywords = [
-        'סגור שיחה', 'סיום שיחה', 'סיום', 'תודה וסיום',
-        'שיחה חדשה', 'התחל מחדש', 'נקה זיכרון', 'מחק היסטוריה',
-        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה', 'תקלה חדשה'
-    ];
-    
-    console.log(`🔍 בודק אם לסגור שיחה: "${messageText}"`);
-    const lowerMessage = messageText.toLowerCase();
-    const shouldClose = closeKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
-    console.log(`🔍 תוצאה: ${shouldClose}`);
-    
-    return shouldClose;
-}
-
-// פונקציה לטיפול בסגירת שיחה
-function handleConversationClose(phoneNumber, customerData) {
-    try {
-        console.log(`🔄 מנסה לסגור שיחה עבור: ${phoneNumber}`);
-        
-        // סיום השיחה במערכת הזיכרון
-        const conversation = conversationMemory.endConversation(phoneNumber, customerData);
-        
-        // מחיקת השיחה מהזיכרון לגמרי
-        const key = conversationMemory.createConversationKey(phoneNumber, customerData);
-        conversationMemory.conversations.delete(key);
-        
-        console.log(`✅ שיחה נסגרה והזיכרון נוקה: ${phoneNumber}`);
-        return { success: true };
-        
-    } catch (error) {
-        console.error('❌ שגיאה בסגירת שיחה:', error);
-        return { success: false };
-    }
 }
 
     if (issues.length > 0) {
@@ -933,9 +896,13 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 
 	conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
 
-	// בדיקה אם הלקוח מבקש לסגור את השיחה
-	            if (shouldCloseConversation(messageText)) {
-                const closeResult = handleConversationClose(phoneNumber, customer);
+	// בדיקה פשוטה לסגירת שיחה
+            if (messageText.includes('סיום') || messageText.includes('תקלה חדשה') || messageText.includes('שיחה חדשה') || messageText.includes('נקה זיכרון')) {
+                console.log(`🔄 מנקה זיכרון עבור: ${phoneNumber} - הודעה: "${messageText}"`);
+                
+                // מחיקת הזיכרון
+                const key = conversationMemory.createConversationKey(phoneNumber, customer);
+                conversationMemory.conversations.delete(key);
                 
                 let closeResponse;
                 if (customer) {
@@ -947,7 +914,7 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
                 // שליחת תגובה וסיום
                 await sendWhatsAppMessage(phoneNumber, closeResponse);
                 
-                console.log(`🔄 שיחה נסגרה עבור ${phoneNumber}`);
+                console.log(`✅ זיכרון נוקה עבור ${phoneNumber}`);
                 return res.status(200).json({ status: 'OK - Conversation closed' });
             }
 
