@@ -10,6 +10,32 @@ const app = express();
 const fs = require('fs');
 
 let customers = [];
+
+// פונקציות עזר נוספות לטיפול בקבצים ב-WhatsApp
+function createFileInfoFromWhatsApp(fileData) {
+    return {
+        originalname: fileData.fileName,
+        mimetype: fileData.mimeType,
+        size: fileData.fileSize,
+        buffer: null, // יושלם בהורדה
+        downloadUrl: fileData.downloadUrl
+    };
+}
+
+function analyzeFileForTroubleshooting(fileInfo, messageText) {
+    const category = getFileCategory(fileInfo.mimetype);
+    const isUrgent = messageText.toLowerCase().includes('תקלה') || 
+                     messageText.toLowerCase().includes('בעיה') || 
+                     messageText.toLowerCase().includes('לא עובד');
+    
+    return {
+        category: category,
+        isUrgent: isUrgent,
+        needsTechnician: category === 'image' && isUrgent,
+        description: createFileDescription(fileInfo)
+    };
+}
+
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
     
@@ -22,7 +48,7 @@ try {
         address: client["כתובת הלקוח"],
         email: client["מייל"]
     }));
-    
+
     console.log(`📊 נטענו ${customers.length} לקוחות מהקובץ`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת קובץ הלקוחות:', error.message);
