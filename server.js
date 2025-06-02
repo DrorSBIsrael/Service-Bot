@@ -262,15 +262,16 @@ const upload = multer({
             'text/plain', 'text/csv'
         ];
         
-        if (allowedMimeTypes.includes(file.mimetype)) {
+if (allowedMimeTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
             console.log(`❌ סוג קובץ לא מותר: ${file.mimetype}`);
             cb(new Error(`סוג קובץ לא מותר. מותר: תמונות, PDF, טקסט`));
         }
     }
+});
 
-// פונקציה לזיהוי סוג קובץ
+// פונקציות עזר לטיפול בקבצים
 function getFileCategory(mimetype) {
     if (mimetype.startsWith('image/')) return 'image';
     if (mimetype.includes('pdf')) return 'document';
@@ -278,7 +279,6 @@ function getFileCategory(mimetype) {
     return 'other';
 }
 
-// פונקציה לפורמט גודל קובץ
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -287,7 +287,6 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// פונקציה ליצירת תיאור מפורט של קובץ
 function createFileDescription(file) {
     const category = getFileCategory(file.mimetype);
     const size = formatFileSize(file.size);
@@ -310,7 +309,6 @@ function createFileDescription(file) {
     
     return description;
 }
-});
 
 // עמוד הבית המעודכן - טופס אימייל
 app.get('/', (req, res) => {
