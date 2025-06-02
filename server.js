@@ -714,6 +714,19 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 	    }
 	}
 
+// בדיקה פשוטה לסגירת שיחה
+if (messageText.includes('תקלה חדשה') || messageText.includes('סיום') || messageText.includes('שיחה חדשה')) {
+    console.log(`🔄 מנקה זיכרון עבור: ${phoneNumber}`);
+    const key = conversationMemory.createConversationKey(phoneNumber, customer);
+    conversationMemory.conversations.delete(key);
+    
+    let closeResponse = customer ? 
+        `שלום ${customer.name} 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\nאיך אוכל לעזור לך?` :
+        `שלום 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\nאיך אוכל לעזור לך?`;
+    
+    await sendWhatsAppMessage(phoneNumber, closeResponse);
+    return res.status(200).json({ status: 'OK - Conversation closed' });
+}
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
             
