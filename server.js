@@ -245,15 +245,28 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// הגדרת multer להעלאת תמונות
+// הגדרת multer להעלאת תמונות ומסמכים
 const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { 
+        fileSize: 10 * 1024 * 1024, // 10MB במקום 5MB
+        files: 10 // מקסימום 10 קבצים
+    },
     fileFilter: (req, file, cb) => {
-        if (file.mimetype.startsWith('image/')) {
+        console.log(`📁 קובץ שהועלה: ${file.originalname} (${file.mimetype})`);
+        
+        // רשימת סוגי קבצים מותרים
+        const allowedMimeTypes = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+            'application/pdf',
+            'text/plain', 'text/csv'
+        ];
+        
+        if (allowedMimeTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
-            cb(new Error('רק תמונות מותרות'));
+            console.log(`❌ סוג קובץ לא מותר: ${file.mimetype}`);
+            cb(new Error(`סוג קובץ לא מותר. מותר: תמונות, PDF, טקסט`));
         }
     }
 });
