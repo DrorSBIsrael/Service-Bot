@@ -59,6 +59,114 @@ function generateServiceCallNumber() {
     return callNumber;
 }
 
+// ========== פונקציות OCR וזיהוי ציוד (שלב 1 + שלב 2) ==========
+
+// זיהוי קודי שגיאה ספציפיים (שלב 1)
+function analyzeErrorCodes(text) {
+    const errorPatterns = [
+        /ERROR\s*\d+/gi,           // קודי שגיאה באנגלית
+        /שגיאה\s*\d+/gi,           // קודי שגיאה בעברית
+        /FAULT\s*\d+/gi,          // תקלות
+        /\d{4}-\d{4}/g,           // מספרי כרטיסים
+        /כרטיס\s*\d+/gi           // מספרי כרטיסים בעברית
+    ];
+
+    const foundErrors = [];
+    errorPatterns.forEach(pattern => {
+        const matches = text.match(pattern);
+        if (matches) {
+            foundErrors.push(...matches);
+        }
+    });
+
+    return foundErrors;
+}
+
+// זיהוי סוג ציוד לפי טקסט שזוהה (שלב 2)
+function identifyEquipmentType(text) {
+    if (!text) return null;
+    
+    const lowerText = text.toLowerCase();
+    
+    for (const [type, info] of Object.entries(equipmentDB.equipment_types)) {
+        for (const keyword of info.keywords) {
+            if (lowerText.includes(keyword.toLowerCase())) {
+                return {
+                    type: type,
+                    name: info.name,
+                    commonIssues: info.common_issues
+                };
+            }
+        }
+    }
+    
+    return null;
+}
+
+// ניתוח בעיות חזותיות (שלב 2)
+function analyzeVisualIssues(text) {
+    if (!text) return [];
+    
+    const visualIssues = [];
+    
+    const issuePatterns = [
+        { pattern: /מסך.*כהה|מסך.*שחור|מסך.*לא.*עובד|שחור|כהה/gi, issue: "מסך לא פעיל" },
+        { pattern: /נורה.*כבויה|נורה.*שבורה|אור.*לא.*עובד|לא.*נדלק/gi, issue: "בעיה בתאורה" },
+        { pattern: /לא.*קורא|לא.*זיהה|כרטיס.*לא.*עובד|error.*card/gi, issue: "בעיה בקריאת כרטיסים" },
+        { pattern: /שער.*תקוע|שער.*לא.*זז|barrier.*stuck|לא.*עולה/gi, issue: "שער תקוע" },
+        { pattern: /תשלום.*לא.*עובד|לא.*מקבל.*כסף|מזומן.*תקוע/gi, issue: "בעיה בתשלום" }
+    ];
+    
+    issuePatterns.forEach(({ pattern, issue }) => {
+        if (pattern.test(text)) {
+            visualIssues.push(issue);
+        }
+    });
+    
+    return visualIssues;
+}
+
+// המלצות תיקון (שלב 2)
+function generateRepairRecommendations(equipmentType, issues) {
+    const recommendations = [];
+    
+    if (equipmentType) {
+        recommendations.push(`🔧 **זוהה ציוד:** ${equipmentType.name}`);
+        recommendations.push(`📋 **בעיות נפוצות בציוד זה:** ${equipmentType.commonIssues.join(', ')}`);
+    }
+    
+    if (issues.length > 0) {
+        recommendations.push(`🚨 **בעיות שזוהו בתמונה:** ${issues.join(', ')}`);
+        
+        // המלצות ספציפיות לפי הבעיה
+        issues.forEach(issue => {
+            switch(issue) {
+                case "מסך לא פעיל":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק חיבור חשמל, נסה רסט למערכת (כפתור reset)");
+                    break;
+                case "שער תקוע":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק שאין חסימה פיזית, בדוק מנוע השער וחיישני הבטיחות");
+                    break;
+                case "בעיה בקריאת כרטיסים":
+                    recommendations.push("💡 **פתרון מוצע:** נקה את קורא הכרטיסים, בדוק עם כרטיס בדיקה");
+                    break;
+                case "בעיה בתשלום":
+                    recommendations.push("💡 **פתרון מוצע:** בדוק מלאי מזומנים, נקה את מקבל השטרות");
+                    break;
+                case "בעיה בתאורה":
+                    recommendations.push("💡 **פתרון מוצע:** החלף נורות שרופות, בדוק חיבורי חשמל");
+                    break;
+            }
+        });
+    } else if (equipmentType) {
+        recommendations.push("✅ **מצב:** לא זוהו בעיות ברורות בתמונה");
+    }
+    
+    return recommendations;
+}
+
+// ========== סוף פונקציות OCR וזיהוי ציוד ==========
+
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
     
