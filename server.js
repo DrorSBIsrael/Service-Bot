@@ -126,7 +126,6 @@ function analyzeVisualIssues(text) {
     return visualIssues;
 }
 
-// המלצות תיקון (שלב 2)
 function generateRepairRecommendations(equipmentType, issues) {
     const recommendations = [];
     
@@ -135,6 +134,41 @@ function generateRepairRecommendations(equipmentType, issues) {
         recommendations.push(`📋 **בעיות נפוצות בציוד זה:** ${equipmentType.commonIssues.join(', ')}`);
     }
     
+// פונקציה לזיהוי בקשה לסגירת שיחה
+function shouldCloseConversation(messageText) {
+    const closeKeywords = [
+        'סגור שיחה', 'סיום שיחה', 'סיום', 'תודה וסיום',
+        'שיחה חדשה', 'התחל מחדש', 'נקה זיכרון', 'מחק היסטוריה',
+        'רסט שיחה', 'reset', 'התחלה חדשה', 'סגור קריאה'
+    ];
+    
+    const lowerMessage = messageText.toLowerCase();
+    return closeKeywords.some(keyword => lowerMessage.includes(keyword.toLowerCase()));
+}
+
+// פונקציה לטיפול בסגירת שיחה
+function handleConversationClose(phoneNumber, customerData) {
+    try {
+        // סיום השיחה במערכת הזיכרון
+        const conversation = conversationMemory.endConversation(phoneNumber, customerData);
+        
+        if (conversation) {
+            console.log(`✅ שיחה נסגרה: ${phoneNumber}`);
+            
+            // מחיקת השיחה מהזיכרון לגמרי
+            const key = conversationMemory.createConversationKey(phoneNumber, customerData);
+            conversationMemory.conversations.delete(key);
+            
+            return { success: true };
+        } else {
+            return { success: false };
+        }
+    } catch (error) {
+        console.error('❌ שגיאה בסגירת שיחה:', error);
+        return { success: false };
+    }
+}
+
     if (issues.length > 0) {
         recommendations.push(`🚨 **בעיות שזוהו בתמונה:** ${issues.join(', ')}`);
         
