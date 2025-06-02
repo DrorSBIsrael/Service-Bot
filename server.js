@@ -1861,8 +1861,8 @@ app.get('/test-bot-direct', (req, res) => {
                             <p><strong>מסוימות:</strong> \${stats.resolved}</p>
                             <p><strong>ממתינות לטכנאי:</strong> \${stats.waiting}</p>
                             <p><strong>סה"כ:</strong> \${stats.total}</p>
-                        \`;
-                        addToLog(\`📊 סטטיסטיקות: \${stats.total} שיחות (\${stats.active} פעילות)\`);
+`;
+                        addToLog(`📊 סטטיסטיקות: ${stats.total} שיחות (${stats.active} פעילות)`);
                     });
                 }
                 
@@ -1870,12 +1870,12 @@ app.get('/test-bot-direct', (req, res) => {
                     fetch('/api/test-email-alert', {method: 'POST'})
                     .then(r => r.json())
                     .then(data => {
-                        document.getElementById('memory-results').innerHTML = \`
+                        document.getElementById('memory-results').innerHTML = `
                             <h4>📧 בדיקת אימייל:</h4>
-                            <p>\${data.success ? '✅ אימייל נשלח בהצלחה!' : '❌ שגיאה באימייל'}</p>
-                            <p><strong>נושא:</strong> \${data.subject || 'לא זמין'}</p>
-                        \`;
-                        addToLog(\`📧 אימייל בדיקה: \${data.success ? 'הצלחה' : 'כישלון'}\`);
+                            <p>${data.success ? '✅ אימייל נשלח בהצלחה!' : '❌ שגיאה באימייל'}</p>
+                            <p><strong>נושא:</strong> ${data.subject || 'לא זמין'}</p>
+                        `;
+                        addToLog(`📧 אימייל בדיקה: ${data.success ? 'הצלחה' : 'כישלון'}`);
                     });
                 }
                 
@@ -1907,14 +1907,14 @@ app.post('/api/check-last-response', async (req, res) => {
         if (customer) {
             if (message.toLowerCase().includes('תקלה') || message.toLowerCase().includes('בעיה')) {
                 serviceNumber = generateServiceCallNumber();
-                botResponse = \`שלום \${customer.name} מ\${customer.site}. נפתחה קריאת שירות \${serviceNumber}. טכנאי יחזור תוך 4 שעות.\`;
+                botResponse = `שלום ${customer.name} מ${customer.site}. נפתחה קריאת שירות ${serviceNumber}. טכנאי יחזור תוך 4 שעות.`;
             } else if (message.toLowerCase().includes('מחיר')) {
                 serviceNumber = generateServiceCallNumber();
-                botResponse = \`שלום \${customer.name}. קריאה \${serviceNumber} נפתחה להצעת מחיר.\`;
+                botResponse = `שלום ${customer.name}. קריאה ${serviceNumber} נפתחה להצעת מחיר.`;
             } else if (message.toLowerCase().includes('סיכום')) {
-                botResponse = \`תודה \${customer.name}! אשלח סיכום לאימייל \${customer.email}\`;
+                botResponse = `תודה ${customer.name}! אשלח סיכום לאימייל ${customer.email}`;
             } else {
-                botResponse = \`שלום \${customer.name} מ\${customer.site}. איך אוכל לעזור?\`;
+                botResponse = `שלום ${customer.name} מ${customer.site}. איך אוכל לעזור?`;
             }
         } else {
             botResponse = 'שלום, כדי לטפל בפנייתך אני זקוקה לפרטי זיהוי: שם מלא ושם החניון.';
@@ -1922,12 +1922,22 @@ app.post('/api/check-last-response', async (req, res) => {
         
         res.json({
             botResponse: botResponse,
-            customerFound: customer ? \`\${customer.name} - \${customer.site}\` : null,
+            customerFound: customer ? `${customer.name} - ${customer.site}` : null,
             serviceNumber: serviceNumber,
-            emailSent: true, // כי הבוט תמיד שולח התראה
+            emailSent: true,
             conversationLength: context ? context.conversationLength : 1
         });
         
+    } catch (error) {
+        res.json({ 
+            botResponse: 'שגיאה במערכת',
+            customerFound: null,
+            serviceNumber: null,
+            emailSent: false
+        });
+    }
+});
+
     } catch (error) {
         res.json({ 
             botResponse: 'שגיאה במערכת',
