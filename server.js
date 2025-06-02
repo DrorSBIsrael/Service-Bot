@@ -8,6 +8,7 @@ const app = express();
 
 // טעינת מסד נתוני לקוחות מקובץ חיצוני
 const fs = require('fs');
+const equipmentDB = require('./equipment_database.json');
 
 let customers = [];
 let serviceCallCounter = 10001; // התחלה מ-HSC-10001
