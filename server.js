@@ -198,24 +198,27 @@ app.post('/webhook/whatsapp', async (req, res) => {
             await sendWhatsAppMessage(phoneNumber, response);
             
             // שליחת אימייל התראה למנהל
-            try {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-                    to: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-                    subject: `הודעה חדשה מ-WhatsApp: ${phoneNumber}`,
-                    html: `
-                        <div dir="rtl">
-                            <h2>הודעה חדשה מוואטסאפ</h2>
-                            <p><strong>מספר:</strong> ${phoneNumber}</p>
-                            <p><strong>הודעה:</strong> ${messageText}</p>
-                            <p><strong>זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
-                        </div>
-                    `
-                });
-                console.log('📧 התראה נשלחה למנהל');
-            } catch (emailError) {
-                console.error('❌ שגיאה בשליחת התראה:', emailError);
-            }
+try {
+    await transporter.sendMail({
+        from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+        to: 'Dror@sbparking.co.il', // הכתובת הנכונה של המנהל
+        subject: `הודעה חדשה מ-WhatsApp: ${phoneNumber}`,
+        html: `
+            <div dir="rtl">
+                <h2>הודעה חדשה מוואטסאפ - SB Parking</h2>
+                <p><strong>מספר שולח:</strong> ${phoneNumber}</p>
+                <p><strong>שם:</strong> ${senderData.senderName || 'לא זמין'}</p>
+                <p><strong>הודעה:</strong> ${messageText}</p>
+                <p><strong>זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
+                <hr>
+                <p style="color: #666; font-size: 12px;">הודעה זו נשלחה אוטומטית ממערכת שירות הלקוחות</p>
+            </div>
+        `
+    });
+    console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+} catch (emailError) {
+    console.error('❌ שגיאה בשליחת התראה:', emailError);
+}
         } else {
             console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
         }
