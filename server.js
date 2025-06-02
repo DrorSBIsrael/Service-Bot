@@ -682,9 +682,18 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
                 console.log(`⚠️ לקוח לא מזוהה: ${phoneNumber}`);
             }
             
-            // הוספת ההודעה לזיכרון
-            conversationMemory.addMessage(phoneNumber, messageText, 'customer', customer);
-            
+	// הוספת ההודעה לזיכרון (עם פרטי קבצים אם יש)
+	let messageForMemory = messageText;
+	if (hasFiles && fileInfo) {
+	    const fileAnalysis = analyzeFileForTroubleshooting(fileInfo, messageText);
+	    messageForMemory += `\n\n📎 קובץ מצורף:\n${fileAnalysis.description}`;
+	    if (fileAnalysis.isUrgent) {
+	        messageForMemory += '\n🚨 זוהה כתקלה דחופה';
+	    }
+	}
+
+c	onversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+
             // קבלת הקשר השיחה
             const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
             
