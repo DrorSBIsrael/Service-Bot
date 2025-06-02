@@ -237,19 +237,21 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
 // פונקציה לשליחת הודעות WhatsApp
 async function sendWhatsAppMessage(phoneNumber, message) {
-    const instanceId = '7105253183';
+    const instanceId = process.env.WHATSAPP_INSTANCE || '7105253183';
     const token = process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     
     try {
         const response = await axios.post(url, {
             chatId: `${phoneNumber}@c.us`,
-            message: message
+            message: {
+                text: message
+            }
         });
         console.log('✅ הודעת WhatsApp נשלחה:', response.data);
         return response.data;
     } catch (error) {
-        console.error('❌ שגיאה בשליחת WhatsApp:', error.message);
+        console.error('❌ שגיאה בשליחת WhatsApp:', error.response?.data || error.message);
         throw error;
     }
 }
