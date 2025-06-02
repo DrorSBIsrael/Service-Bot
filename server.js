@@ -191,8 +191,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             console.log(`📱 הודעה מ-${phoneNumber}: ${messageText}`);
             
-            // יצירת תגובה
-            let response = `שלום! 👋\n\nקיבלתי את ההודעה שלך: "${messageText}"\n\nאני בוט שירות לקוחות של SB Parking 🚗\nנציג יחזור אליך בהקדם!`;
+            // יצירת תגובה עם AI
+            const response = await generateAIResponse(messageText, senderData.senderName || 'לקוח');
             
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
