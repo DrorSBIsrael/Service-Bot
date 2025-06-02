@@ -7,10 +7,15 @@ const axios = require('axios');
 const fs = require('fs');
 const app = express();
 
-// ====================== מערכת זיכרון שיחות ======================
+// ======================= מערכת זיכרון שיחות =======================
 
 // זיכרון שיחות פעילות
 const activeChats = new Map();
+
+// מעקב בקשות AI למניעת rate limiting
+let lastAIRequest = 0;
+const AI_REQUEST_INTERVAL = 10000; // 10 שניות בין בקשות
+let emergencyMode = false; // מצב חירום ללא AI
 
 // מחלקה לניהול שיחה
 class ChatSession {
@@ -49,6 +54,71 @@ class ChatSession {
     getDuration() {
         return Math.round((this.lastActivity - this.startTime) / (1000 * 60)); // דקות
     }
+}
+
+// פונקציית תגובה חירום ללא AI
+function getEmergencyResponse(message, customerData, chatSession) {
+    const msgLower = message.toLowerCase();
+    
+    if (!customerData) {
+        return `שלום 👋
+
+אני הדר מחברת שיידט את בכמן.
+כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
+
+• שם מלא
+• שם החניון/אתר החניה
+• מספר לקוח (אם ידוע)
+
+📞 039792365 במקרה דחוף`;
+    }
+    
+    // תקלות
+    if (msgLower.includes('תקלה') || msgLower.includes('בעיה') || msgLower.includes('לא עובד')) {
+        return `שלום ${customerData.name} 👋
+
+קיבלתי את הדיווח על התקלה.
+אנא נסה אתחול מלא:
+
+1️⃣ כבה את היחידה
+2️⃣ נתק את הכרטיסים  
+3️⃣ המתן דקה שלמה
+4️⃣ הדלק את היחידה
+5️⃣ חבר את הכרטיסים
+
+⚠️ וודא שאין רכב בנתיב במהלך האתחול
+
+האם זה עזר?
+
+📞 039792365 במקרה דחוף`;
+    }
+    
+    // הצעת מחיר
+    if (msgLower.includes('מחיר') || msgLower.includes('כרטיסים') || msgLower.includes('הזמנה')) {
+        return `שלום ${customerData.name} 👋
+
+לקבלת הצעת מחיר מדויקת, אני זקוקה לפרטים:
+
+• סוג הפריט (כרטיסים/גלילי קבלה/זרועות)
+• כמות נדרשת
+• דרישות מיוחדות
+
+📞 039792365 
+📧 Service@sbcloud.co.il
+
+הצעת המחיר תישלח תוך 24 שעות`;
+    }
+    
+    // כללי
+    return `שלום ${customerData.name} מ${customerData.site} 👋
+
+איך אוכל לעזור לך היום?
+
+🔧 תקלות | 💰 הצעות מחיר | 📋 נזקים | 📚 הדרכות
+
+📞 039792365 
+📧 Service@sbcloud.co.il
+⏰ א'-ה' 8:15-17:00`;
 }
 
 // פונקציה לניקוי שיחות ישנות
@@ -236,8 +306,26 @@ async function generateAIResponseWithContext(contextMessage, currentMessage, cus
             }
         }
 
-        // השהיה למניעת rate limiting (גדולה יותר)
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // אם אנחנו במצב חירום - תגובה ידנית ללא AI
+        if (emergencyMode) {
+            console.log('🚨 מצב חירום פעיל - תגובה ללא AI');
+            return getEmergencyResponse(currentMessage, customerData, chatSession);
+        }
+
+        // בדיקת מרווח זמן בין בקשות AI
+        const now = Date.now();
+        const timeSinceLastRequest = now - lastAIRequest;
+        
+        if (timeSinceLastRequest < AI_REQUEST_INTERVAL) {
+            const waitTime = AI_REQUEST_INTERVAL - timeSinceLastRequest;
+            console.log(`⏳ המתנה ${Math.round(waitTime/1000)} שניות לבקשת AI הבאה...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+        }
+        
+        lastAIRequest = Date.now();
+
+        // השהיה למניעת rate limiting (גדולה משמעותית יותר)
+        await new Promise(resolve => setTimeout(resolve, 8000));
         
         const systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
 
@@ -332,7 +420,7 @@ ${customerData ? `
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
                 'Content-Type': 'application/json'
             },
-            timeout: 20000
+            timeout: 30000
         });
 
         return response.data.choices[0].message.content.trim();
@@ -344,9 +432,17 @@ ${customerData ? `
         let fallbackMessage;
         
         if (error.response?.status === 429) {
-            console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר סטנדרטית');
+            console.log('⏱️ מכסת OpenAI מלאה - מעבר למצב חירום');
+            emergencyMode = true;
             
-            if (customerData) {
+            // איפוס המצב חירום אחרי שעה
+            setTimeout(() => {
+                emergencyMode = false;
+                console.log('🔄 יציאה ממצב חירום - OpenAI זמין שוב');
+            }, 60 * 60 * 1000);
+            
+            return getEmergencyResponse(currentMessage, customerData, chatSession);
+        } else {
                 // התאמה לשלב השיחה
                 if (chatSession && chatSession.currentTopic === 'תקלה') {
                     fallbackMessage = `שלום ${customerData.name},
@@ -363,26 +459,7 @@ ${customerData ? `
 
 📞 039792365 במקרה דחוף`;
                 } else {
-                    fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
-
-איך אוכל לעזור לך היום?
-
-🔧 תקלות | 💰 הצעות מחיר | 📋 נזקים | 📚 הדרכות
-
-📞 039792365`;
-                }
-            } else {
-                fallbackMessage = `שלום ${customerName} 👋
-
-אני הדר מחברת שיידט את בכמן.
-לטיפול בפנייתך אני זקוקה לפרטי זיהוי:
-
-• שם מלא
-• שם החניון/אתר החניה
-• מספר לקוח (אם ידוע)
-
-📞 039792365`;
-            }
+            return getEmergencyResponse(currentMessage, customerData, chatSession);
         } else {
             fallbackMessage = `שלום ${customerName} 👋
 
@@ -649,8 +726,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 chatSession.status = 'completed';
             }
             
-            // שליחת אימייל התראה למנהל (עם היסטוריה)
-            await sendManagerAlert(phoneNumber, messageText, response, customer, chatSession);
+            // שליחת אימייל התראה למנהל (עם היסטוריה) - תמיד!
+            try {
+                await sendManagerAlert(phoneNumber, messageText, response, customer, chatSession);
+            } catch (alertError) {
+                console.error('❌ שגיאה בשליחת התראה למנהל:', alertError);
+            }
             
             console.log(`💬 שיחה עם ${phoneNumber}: ${chatSession.messages.length} הודעות, נושא: ${chatSession.currentTopic || 'כללי'}`);
             
