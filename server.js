@@ -459,11 +459,22 @@ function findCustomerByPhone(phoneNumber) {
 }
 
 // פונקציית AI מתקדמת - הדר נציגת שירות לקוחות
-async function generateAIResponse(message, customerName, customerData = null) {
+async function generateAIResponse(message, customerName, customerData = null, phoneNumber = null) {
     try {
+        // בדיקה אם זה מספר הבדיקה
+        const testPhone = process.env.TEST_PHONE_NUMBER;
+        if (testPhone && phoneNumber && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
+            if (message.startsWith('בדיקה:')) {
+                const testMessage = message.replace('בדיקה:', '').trim();
+                console.log(`🧪 מצב בדיקה פעיל: ${testMessage}`);
+                
+                return `🧪 מצב בדיקה - הדר פעילה!\n\nהודעה: "${testMessage}"\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n\nהמערכת עובדת! ✅`;
+            }
+        }
+        
         // השהיה למניעת rate limiting
         await new Promise(resolve => setTimeout(resolve, 1500));
-        
+
         const systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
 
 🔍 כללי זיהוי לקוח:
