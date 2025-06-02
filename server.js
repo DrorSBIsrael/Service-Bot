@@ -236,9 +236,7 @@ async function sendWhatsAppMessage(phoneNumber, message) {
     try {
         const response = await axios.post(url, {
             chatId: `${phoneNumber}@c.us`,
-            message: {
-                text: message
-            }
+            message: message  // פשוט string, לא אובייקט!
         });
         console.log('✅ הודעת WhatsApp נשלחה:', response.data);
         return response.data;
