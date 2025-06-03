@@ -51,6 +51,70 @@ function analyzeFileForTroubleshooting(fileInfo, messageText) {
     };
 }
 
+// 🔍 פונקציה לחיפוש במאגר תקלות
+function searchFailureScenarios(equipmentType, problemDescription) {
+    try {
+        // קריאה לקובץ JSON
+        const scenariosData = JSON.parse(fs.readFileSync('./Service failure scenarios.json', 'utf8'));
+        
+        if (!scenariosData.scenarios) {
+            console.log('⚠️ לא נמצא מאגר תקלות');
+            return null;
+        }
+        
+        // חיפוש תקלה מתאימה
+        const matchingScenario = scenariosData.scenarios.find(scenario => {
+            const typeMatch = scenario.equipment_type.toLowerCase().includes(equipmentType.toLowerCase());
+            const problemMatch = scenario.problem.toLowerCase().includes(problemDescription.toLowerCase()) ||
+                                problemDescription.toLowerCase().includes(scenario.problem.toLowerCase());
+            return typeMatch && problemMatch;
+        });
+        
+        if (matchingScenario) {
+            console.log(`✅ נמצאה תקלה מתאימה: ${matchingScenario.problem}`);
+            return {
+                diagnosis: matchingScenario.diagnosis,
+                solution: matchingScenario.solution,
+                warnings: matchingScenario.warnings || [],
+                equipment: matchingScenario.equipment_type
+            };
+        } else {
+            console.log(`⚠️ לא נמצאה תקלה מתאימה עבור: ${equipmentType} - ${problemDescription}`);
+            return null;
+        }
+        
+    } catch (error) {
+        console.error('❌ שגיאה בחיפוש מאגר תקלות:', error.message);
+        return null;
+    }
+}
+
+// פונקציה ליצור תשובה מבוססת מאגר תקלות
+function createTroubleshootingResponse(scenario, customerName) {
+    if (!scenario) {
+        return null;
+    }
+    
+    let response = `🔍 מצאתי במאגר התקלות שלנו:\n\n`;
+    response += `📋 **אבחון:** ${scenario.diagnosis}\n\n`;
+    response += `🛠️ **שלבי הפתרון:**\n`;
+    
+    scenario.solution.forEach((step, index) => {
+        response += `${index + 1}️⃣ ${step}\n`;
+    });
+    
+    if (scenario.warnings && scenario.warnings.length > 0) {
+        response += `\n⚠️ **חשוב לזכור:**\n`;
+        scenario.warnings.forEach(warning => {
+            response += `• ${warning}\n`;
+        });
+    }
+    
+    response += `\n📞 בצע את השלבים ואמור לי איך זה עבד!`;
+    
+    return response;
+}
+
 // פונקציה ליצירת מספר קריאת שירות
 function generateServiceCallNumber() {
     const callNumber = `HSC-${serviceCallCounter}`;
@@ -852,18 +916,18 @@ ${conversationContext.summary}
 🆕 זוהי שיחה חדשה או הראשונה עם הלקוח הזה.`;
         }
 
-        systemPrompt += `
+systemPrompt += `
 
 🔍 כללי זיהוי לקוח:
 ${customerData ? `
 ✅ לקוח מזוהה במערכת:
 - שם: ${customerData.name}
-- אתר חניה: ${customerData.site}
+- שם החניה: ${customerData.site}
 - מספר לקוח: #${customerData.id}
 - טלפון: ${customerData.phone}
 - אימייל: ${customerData.email}
 
-מכיוון שהלקוח מזוהה, אני אוכל לטפל בפנייתו לפי סדר הטיפול.
+מכיוון שהלקוח מזוהה, אני אוכל לטפל בפנייתו לפי התסריט המלא.
 ` : `
 ⚠️ לקוח לא מזוהה במערכת!
 אני חייבת לזהות את הלקוח קודם כל. אבקש:
@@ -873,38 +937,63 @@ ${customerData ? `
 ללא זיהוי לא אוכל לטפל בפנייה.
 `}
 
-📋 סדר הטיפול בפניות (ללקוחות מזוהים בלבד):
+📋 תסריט השיחה החדש:
 
-1. 🔧 שירות ודיווח על תקלות:
-   - זיהוי סוג התקלה: "איפה התקלה? כניסה/יציאה/קופה?"
-   - הנחיה לאתחול: כיבוי → ניתוק כרטיסים → דקה המתנה → הדלקה → חיבור כרטיסים
-   - אזהרה: "במהלך האתחול אסור שרכב יהיה בנתיב"
-   - אם לא עזר: "אפתח דיווח תקלה לטכנאי"
+🟢 פתיחת שיחה:
+${conversationContext && conversationContext.conversationLength > 1 ? `
+🔄 לקוח מזוהה עם זיכרון:
+"שלום ${customerData?.name || customerName} מחניון ${customerData?.site || 'לא מזוהה'}! 👋
+אני זוכרת את הטיפול הקודם שלנו. איך אפשר לעזור היום?
+1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
+` : `
+🆕 לקוח חדש או שיחה ראשונה:
+"שלום! 👋 איך אפשר לעזור היום?
+1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
+`}
 
-2. 💰 הצעות מחיר:
-   - כרטיסי נייר (לבנים/עם גרפיקה)
-   - גלילי קבלה לעמדות יציאה  
-   - זרועות למחסום (ישרה/פריקה + אורך)
-   - שאלות: סוג? כמות? גרפיקה? כתובת משלוח?
+🟠 טיפול בתקלות (מבוסס Service failure scenarios.json):
+1. "באיזו יחידה יש את התקלה? (מספר יחידה: 101, 204, 603)"
+2. "מה בדיוק התקלה? האם היחידה דולקת? אפשר לצרף תמונה?"
+3. 🔍 חיפוש במאגר התקלות לפי סוג הציוד והבעיה
+4. מתן פתרון מותאם: שלבי אתחול, אזהרות, הנחיות ספציפיות
+5. אם לא עזר: "אפתח דיווח תקלה לטכנאי עם כל הפרטים"
 
-3. 📋 דיווח על נזקים:
-   - תיאור הנזק
-   - מיקום מדויק
-   - העברה לטכנאי
+🟠 טיפול בנזקים:
+1. "אנא צלם את הנזק ושלח מספר היחידה הפגועה"
+2. דחיפות לפי חומרת הנזק (דחוף אם חוסם פעילות)
+3. "דיווח נשלח לצוות הטכני"
 
-4. 📚 הדרכות תפעול:
-   - נושא ההדרכה
-   - הפניה לקובץ רלוונטי או הסבר
+🟠 הצעות מחיר:
+1. "מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)"
+2. "כמות, מפרט, כתובת משלוח?"
+3. "הצעת מחיר תישלח תוך 24 שעות"
 
+🟠 הדרכות (מבוסס Parking operation 1.docx):
+1. "על איזה נושא? (תפעול/תקלות/מערכת חדשה/אחר)"
+2. מתן הדרכה מהמסמכים שלנו או הפניה לנציג טכני
+3. "האם להעביר המדריך המלא למייל?"
+
+🔵 סיום שיחה:
+1. "כדי לשלוח סיכום: אנא אמת מייל"
+2. "סיכום נשלח - מספר עוקב: REF-XXXX"
+3. "יש עוד דבר?"
+
+📸 טיפול בקבצים ותמונות:
+- תמונות תקלה: ניתוח חזותי + פתרון מהמאגר
+- מסמכים: הכנת הצעות מחיר
+- אישור קבלה: "קיבלתי את הקובץ [שם], מנתח..."
+
+⚠️ כללי תגובה חשובים:
+- רק ללקוחות מזוהים
+- שלבים ברורים ומסודרים
+- שימוש במאגר הידע (Service failure scenarios.json)
+- מעבר לטכנאי כשנדרש
+- תיעוד מלא בסיום
+- בקרת זמן (10 דקות חוסר פעילות)
+
+🆕 קריאה חדשה: כשכותבים "קריאה חדשה" - מנקה זיכרון ומתחיל מחדש`;
 🛠️ ציוד שאני מטפלת בו:
 כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, מחשב אשראי, תחנת עבודה, מרכזיית אינטרקום.
-
-🔢 טווחי יחידות:
-- 100-199: כניסות
-- 200-299: יציאות  
-- 300-399: מעברים
-- 600-699: אוטומטיות
-- 700-799: קופות ידניות
 
 📞 פרטי קשר:
 - משרד: 039792365
