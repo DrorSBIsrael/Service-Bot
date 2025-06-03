@@ -1,4 +1,4 @@
-// קובץ: server-fixed.js - עם כל התיקונים
+// קובץ: server.js - קובץ מלא וגמור עם כל התיקונים
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -10,7 +10,7 @@ const app = express();
 const fs = require('fs');
 
 let customers = [];
-let serviceCallCounter = 10001; // התחלה מ-HSC-10001
+let serviceCallCounter = 10001;
 
 // פונקציות עזר נוספות לטיפול בקבצים ב-WhatsApp
 function createFileInfoFromWhatsApp(fileData) {
@@ -18,7 +18,7 @@ function createFileInfoFromWhatsApp(fileData) {
         originalname: fileData.fileName,
         mimetype: fileData.mimeType,
         size: fileData.fileSize,
-        buffer: null, // יושלם בהורדה
+        buffer: null,
         downloadUrl: fileData.downloadUrl
     };
 }
@@ -37,70 +37,6 @@ function analyzeFileForTroubleshooting(fileInfo, messageText) {
     };
 }
 
-// 🔍 פונקציה לחיפוש במאגר תקלות
-function searchFailureScenarios(equipmentType, problemDescription) {
-    try {
-        // קריאה לקובץ JSON
-        const scenariosData = JSON.parse(fs.readFileSync('./Service failure scenarios.json', 'utf8'));
-        
-        if (!scenariosData.scenarios) {
-            console.log('⚠️ לא נמצא מאגר תקלות');
-            return null;
-        }
-        
-        // חיפוש תקלה מתאימה
-        const matchingScenario = scenariosData.scenarios.find(scenario => {
-            const typeMatch = scenario.equipment_type.toLowerCase().includes(equipmentType.toLowerCase());
-            const problemMatch = scenario.problem.toLowerCase().includes(problemDescription.toLowerCase()) ||
-                                problemDescription.toLowerCase().includes(scenario.problem.toLowerCase());
-            return typeMatch && problemMatch;
-        });
-        
-        if (matchingScenario) {
-            console.log(`✅ נמצאה תקלה מתאימה: ${matchingScenario.problem}`);
-            return {
-                diagnosis: matchingScenario.diagnosis,
-                solution: matchingScenario.solution,
-                warnings: matchingScenario.warnings || [],
-                equipment: matchingScenario.equipment_type
-            };
-        } else {
-            console.log(`⚠️ לא נמצאה תקלה מתאימה עבור: ${equipmentType} - ${problemDescription}`);
-            return null;
-        }
-        
-    } catch (error) {
-        console.error('❌ שגיאה בחיפוש מאגר תקלות:', error.message);
-        return null;
-    }
-}
-
-// פונקציה ליצור תשובה מבוססת מאגר תקלות
-function createTroubleshootingResponse(scenario, customerName) {
-    if (!scenario) {
-        return null;
-    }
-    
-    let response = `🔍 מצאתי במאגר התקלות שלנו:\n\n`;
-    response += `📋 **אבחון:** ${scenario.diagnosis}\n\n`;
-    response += `🛠️ **שלבי הפתרון:**\n`;
-    
-    scenario.solution.forEach((step, index) => {
-        response += `${index + 1}️⃣ ${step}\n`;
-    });
-    
-    if (scenario.warnings && scenario.warnings.length > 0) {
-        response += `\n⚠️ **חשוב לזכור:**\n`;
-        scenario.warnings.forEach(warning => {
-            response += `• ${warning}\n`;
-        });
-    }
-    
-    response += `\n📞 בצע את השלבים ואמור לי איך זה עבד!`;
-    
-    return response;
-}
-
 // פונקציה ליצירת מספר קריאת שירות
 function generateServiceCallNumber() {
     const callNumber = `HSC-${serviceCallCounter}`;
@@ -111,7 +47,6 @@ function generateServiceCallNumber() {
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
     
-    // המרה לפורמט הנכון
     customers = customersData.map(client => ({
         id: client["מספר לקוח"],
         name: client["שם לקוח"],
@@ -124,7 +59,6 @@ try {
     console.log(`📊 נטענו ${customers.length} לקוחות מהקובץ`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת קובץ הלקוחות:', error.message);
-    // רשימה בסיסית כגיבוי - תוקן לדרור פרינץ
     customers = [
         { id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }
     ];
@@ -134,22 +68,19 @@ try {
 class ConversationMemory {
     constructor() {
         this.conversations = new Map();
-        this.maxConversationAge = 4 * 60 * 60 * 1000; // תוקן ל-4 שעות
-        this.cleanupInterval = 60 * 60 * 1000; // ניקוי כל שעה
+        this.maxConversationAge = 4 * 60 * 60 * 1000;
+        this.cleanupInterval = 60 * 60 * 1000;
         
-        // הפעלת ניקוי אוטומטי
         setInterval(() => this.cleanupOldConversations(), this.cleanupInterval);
         
         console.log('🧠 מערכת זיכרון הדר הופעלה (4 שעות)');
     }
     
-    // יצירת מפתח ייחודי לשיחה
     createConversationKey(phoneNumber, customerData = null) {
         const cleanPhone = phoneNumber.replace(/[^\d]/g, '');
         return customerData ? `${customerData.id}_${cleanPhone}` : cleanPhone;
     }
     
-    // הוספת הודעה לשיחה
     addMessage(phoneNumber, message, sender, customerData = null) {
         const key = this.createConversationKey(phoneNumber, customerData);
         
@@ -160,14 +91,14 @@ class ConversationMemory {
                 messages: [],
                 startTime: new Date(),
                 lastActivity: new Date(),
-                status: 'active' // active, resolved, waiting_for_technician
+                status: 'active'
             });
         }
         
         const conversation = this.conversations.get(key);
         conversation.messages.push({
             timestamp: new Date(),
-            sender: sender, // 'customer' or 'hadar'
+            sender: sender,
             message: message,
             messageId: Date.now().toString()
         });
@@ -178,7 +109,6 @@ class ConversationMemory {
         return conversation;
     }
     
-    // קבלת הקשר השיחה
     getConversationContext(phoneNumber, customerData = null) {
         const key = this.createConversationKey(phoneNumber, customerData);
         const conversation = this.conversations.get(key);
@@ -187,10 +117,9 @@ class ConversationMemory {
             return null;
         }
         
-        // בניית הקשר לצורך ה-AI
         const context = {
             customer: conversation.customer,
-            messageHistory: conversation.messages.slice(-10), // רק 10 הודעות אחרונות
+            messageHistory: conversation.messages.slice(-10),
             conversationLength: conversation.messages.length,
             startTime: conversation.startTime,
             status: conversation.status,
@@ -200,7 +129,6 @@ class ConversationMemory {
         return context;
     }
     
-    // בניית סיכום השיחה
     buildConversationSummary(conversation) {
         const messages = conversation.messages;
         if (messages.length === 0) return "שיחה ריקה";
@@ -212,7 +140,6 @@ class ConversationMemory {
         summary += `• התחלה: ${conversation.startTime.toLocaleString('he-IL')}\n`;
         summary += `• מספר הודעות: ${messages.length} (לקוח: ${customerMessages.length}, הדר: ${hadarMessages.length})\n`;
         
-        // זיהוי נושא השיחה
         const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
         if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
             summary += `• נושא: טיפול בתקלה (זיכרון 4 שעות)\n`;
@@ -228,7 +155,6 @@ class ConversationMemory {
         return summary;
     }
     
-    // סיום שיחה
     endConversation(phoneNumber, customerData = null) {
         const key = this.createConversationKey(phoneNumber, customerData);
         const conversation = this.conversations.get(key);
@@ -243,7 +169,6 @@ class ConversationMemory {
         return null;
     }
     
-    // ניקוי שיחות ישנות
     cleanupOldConversations() {
         const now = new Date();
         let cleanedCount = 0;
@@ -262,7 +187,6 @@ class ConversationMemory {
         }
     }
     
-    // סטטיסטיקות
     getStats() {
         const active = Array.from(this.conversations.values()).filter(c => c.status === 'active').length;
         const resolved = Array.from(this.conversations.values()).filter(c => c.status === 'resolved').length;
@@ -276,41 +200,37 @@ class ConversationMemory {
     }
 }
 
-// יצירת מערכת הזיכרון
 const conversationMemory = new ConversationMemory();
 
-// 🚦 מערכת בקרת קצב API (למניעת 429)
+// 🚦 מערכת בקרת קצב API
 class RateLimiter {
     constructor() {
         this.requestTimes = [];
-        this.maxRequestsPerMinute = 20; // מקסימום 20 בקשות לדקה
-        this.baseDelay = 3000; // 3 שניות בסיס
+        this.maxRequestsPerMinute = 20;
+        this.baseDelay = 3000;
         this.lastRequestTime = 0;
     }
     
     async getOptimalDelay() {
         const now = Date.now();
         
-        // ניקוי בקשות ישנות (מעל דקה)
         this.requestTimes = this.requestTimes.filter(time => now - time < 60000);
         
-        // אם יש יותר מדי בקשות - השהיה ארוכה יותר
         let delay = this.baseDelay;
         
         if (this.requestTimes.length >= this.maxRequestsPerMinute * 0.8) {
-            delay = 5000; // 5 שניות אם מתקרבים למגבלה
+            delay = 5000;
             console.log('⚠️ מתקרבים למגבלת קצב - השהיה מוגברת');
         }
         
         if (this.requestTimes.length >= this.maxRequestsPerMinute) {
-            delay = 10000; // 10 שניות אם חרגנו
+            delay = 10000;
             console.log('🛑 חרגנו ממגבלת קצב - השהיה ארוכה');
         }
         
-        // ודא שלא עברה מספיק זמן מהבקשה הקודמת
         const timeSinceLastRequest = now - this.lastRequestTime;
         if (timeSinceLastRequest < delay) {
-            delay = delay - timeSinceLastRequest + 1000; // תוספת של שנייה
+            delay = delay - timeSinceLastRequest + 1000;
         }
         
         return delay;
@@ -329,11 +249,10 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
-// 🎯 פונקציה חדשה לזיהוי בחירות חכם
+// 🎯 פונקציה לזיהוי בחירות חכם
 function analyzeCustomerChoice(message, conversationContext) {
     const msg = message.trim().toLowerCase();
     
-    // זיהוי בחירות מספריות
     if (msg === '1' || msg.includes('תקלה')) {
         return {
             type: 'troubleshooting',
@@ -366,7 +285,6 @@ function analyzeCustomerChoice(message, conversationContext) {
         };
     }
     
-    // זיהוי מספרי יחידות
     const unitMatch = msg.match(/\b(10[0-9]|20[0-9]|30[0-9]|60[0-9])\b/);
     if (unitMatch) {
         return {
@@ -377,7 +295,6 @@ function analyzeCustomerChoice(message, conversationContext) {
         };
     }
     
-    // אם יש הקשר קודם - בדוק את השלב הנוכחי
     if (conversationContext && conversationContext.messageHistory.length > 0) {
         const lastHadarMessage = conversationContext.messageHistory
             .filter(m => m.sender === 'hadar')
@@ -403,16 +320,13 @@ function analyzeCustomerChoice(message, conversationContext) {
         }
     }
     
-    return null; // לא זוהתה בחירה ספציפית
+    return null;
 }
 
 // 🧠 פונקציה לFallback חכם
 function generateIntelligentFallback(message, customerData, conversationContext, customerName) {
-    const serviceNumber = generateServiceCallNumber();
-    
     console.log('🧠 Fallback חכם פעיל');
     
-    // זיהוי בחירות גם ב-fallback
     const choice = analyzeCustomerChoice(message, conversationContext);
     
     if (choice) {
@@ -452,17 +366,13 @@ function generateIntelligentFallback(message, customerData, conversationContext,
         }
     }
     
-    // אם לא זוהתה בחירה ספציפית
     if (customerData) {
         if (conversationContext && conversationContext.conversationLength > 1) {
-            // אם זה המשך שיחה עם זיכרון
             return `שלום ${customerData.name} 👋\n\nאני זוכרת את השיחה שלנו מקודם.\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
         } else {
-            // שיחה חדשה עם לקוח מזוהה
             return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
         }
     } else {
-        // לקוח לא מזוהה
         return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא • שם החניון • מספר לקוח\n\n📞 039792365`;
     }
 }
@@ -471,7 +381,7 @@ function generateIntelligentFallback(message, customerData, conversationContext,
 app.use(express.json());
 app.use(express.static('public'));
 
-// הגדרת nodemailer עם השרת שלך
+// הגדרת nodemailer
 const transporter = nodemailer.createTransporter({
     host: process.env.EMAIL_HOST || 'smtp.012.net.il',
     port: parseInt(process.env.EMAIL_PORT) || 465,
@@ -482,17 +392,16 @@ const transporter = nodemailer.createTransporter({
     }
 });
 
-// הגדרת multer להעלאת תמונות ומסמכים
+// הגדרת multer
 const upload = multer({
     storage: multer.memoryStorage(),
     limits: { 
-        fileSize: 10 * 1024 * 1024, // 10MB במקום 5MB
-        files: 10 // מקסימום 10 קבצים
+        fileSize: 10 * 1024 * 1024,
+        files: 10
     },
     fileFilter: (req, file, cb) => {
         console.log(`📁 קובץ שהועלה: ${file.originalname} (${file.mimetype})`);
         
-        // רשימת סוגי קבצים מותרים
         const allowedMimeTypes = [
             'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
             'application/pdf',
@@ -547,7 +456,7 @@ function createFileDescription(file) {
     return description;
 }
 
-// עמוד הבית המעודכן - טופס אימייל
+// עמוד הבית
 app.get('/', (req, res) => {
     const memoryStats = conversationMemory.getStats();
     
@@ -638,54 +547,6 @@ app.get('/', (req, res) => {
                     </div>
                 </div>
                 
-                <div class="service-areas">
-                    <h3>🛠️ תחומי שירות</h3>
-                    <div class="service-area">
-                        <strong>ציוד בקרת חניה:</strong> כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, תחנת עבודה
-                    </div>
-                    <div class="service-area">
-                        <strong>טווחי יחידות:</strong> 100 כניסות | 200 יציאות | 300 מעברים | 600 אוטומטיות 
-                    </div>
-                </div>
-                
-                <div class="quick-actions">
-                    <a href="#email-form" class="quick-btn">📧 שליחת אימייל</a>
-                    <a href="#customer-search" class="quick-btn">🔍 חיפוש לקוח</a>
-                    <a href="/memory-dashboard" class="quick-btn">🧠 דשבורד זיכרון</a>
-                    <a href="/test-memory" class="quick-btn">🧪 בדיקת זיכרון</a>
-                </div>
-                
-                <div id="customer-search" class="customer-search">
-                    <h3>🔍 חיפוש מהיר בלקוחות</h3>
-                    <input type="text" id="searchBox" placeholder="חפש לפי שם, אתר, טלפון או אימייל..." onkeyup="searchCustomers()">
-                    <div id="searchResults"></div>
-                </div>
-                
-                <div id="email-form">
-                    <h2>📧 שליחת אימייל ללקוח</h2>
-                    <form action="/send-email" method="POST" enctype="multipart/form-data">
-                        <label>בחר לקוח:</label>
-                        <select name="customer" id="customerSelect" onchange="fillCustomerDetails()">
-                            <option value="">-- בחר לקוח או הזן ידנית --</option>
-                            ${customers.map(c => `<option value="${c.email}" data-name="${c.name}" data-site="${c.site}">${c.name} - ${c.site}</option>`).join('')}
-                        </select>
-                        
-                        <label>כתובת אימייל:</label>
-                        <input type="email" name="to" id="emailInput" required placeholder="customer@example.com">
-                        
-                        <label>נושא:</label>
-                        <input type="text" name="subject" required placeholder="נושא האימייל">
-                        
-                        <label>הודעה:</label>
-                        <textarea name="message" rows="6" required placeholder="שלום,\n\nכותב אליך מחברת שיידט את בכמן בנוגע ל..."></textarea>
-                        
-                        <label>תמונות (אופציונלי):</label>
-                        <input type="file" name="images" multiple accept="image/*">
-                        
-                        <button type="submit">שלח אימייל 📨</button>
-                    </form>
-                </div>
-                
                 <div style="margin-top: 30px; padding: 20px; background: #ecf0f1; border-radius: 10px;">
                     <h3>📊 מידע טכני מתקדם</h3>
                     <p><strong>WhatsApp Webhook:</strong> <code>/webhook/whatsapp</code></p>
@@ -695,153 +556,12 @@ app.get('/', (req, res) => {
                     <p><strong>נציגת שירות:</strong> הדר - AI מתקדם עם זיכרון</p>
                     <p><strong>🧠 מערכת זיכרון:</strong> שמירת 4 שעות, קריאות מרובות, ניקוי אוטומטי</p>
                     <p><strong>⚡ בקרת קצב:</strong> מניעת שגיאות 429</p>
+                    <p><strong>✅ תיקונים:</strong> מיילים חכמים, זיהוי בחירות, fallback משופר</p>
                 </div>
             </div>
-            
-            <script>
-                const customers = ${JSON.stringify(customers)};
-                
-                function fillCustomerDetails() {
-                    const select = document.getElementById('customerSelect');
-                    const emailInput = document.getElementById('emailInput');
-                    
-                    if (select.value) {
-                        emailInput.value = select.value;
-                    }
-                }
-                
-                function searchCustomers() {
-                    const query = document.getElementById('searchBox').value.toLowerCase();
-                    const results = document.getElementById('searchResults');
-                    
-                    if (query.length < 2) {
-                        results.innerHTML = '';
-                        return;
-                    }
-                    
-                    const matches = customers.filter(c => 
-                        c.name.toLowerCase().includes(query) ||
-                        c.site.toLowerCase().includes(query) ||
-                        c.phone.includes(query) ||
-                        c.email.toLowerCase().includes(query)
-                    );
-                    
-                    if (matches.length > 0) {
-                        results.innerHTML = '<h4>תוצאות חיפוש:</h4>' + 
-                        matches.slice(0, 5).map(c => 
-                            `<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
-                                <strong>${c.name}</strong> - ${c.site}<br>
-                                <small>📞 ${c.phone} | 📧 ${c.email} | #${c.id}</small>
-                                <button onclick="selectCustomer('${c.email}', '${c.name}', '${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
-                            </div>`
-                        ).join('');
-                    } else {
-                        results.innerHTML = '<p style="color: #e74c3c;">לא נמצאו תוצאות</p>';
-                    }
-                }
-                
-                function selectCustomer(email, name, site) {
-                    document.getElementById('emailInput').value = email;
-                    document.getElementById('customerSelect').value = email;
-                    document.getElementById('searchBox').value = name + ' - ' + site;
-                    document.getElementById('searchResults').innerHTML = '';
-                }
-            </script>
         </body>
         </html>
     `);
-});
-
-// 📧 API לשליחת אימייל עם תמונות
-app.post('/send-email', upload.array('images', 5), async (req, res) => {
-    try {
-        console.log('📧 מתחיל לשלוח אימייל...');
-        
-        const { to, subject, message } = req.body;
-        
-        let htmlContent = `
-            <div dir="rtl" style="font-family: Arial, sans-serif;">
-                <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                    <h2 style="margin: 0;">🚗 שיידט את בכמן</h2>
-                    <p style="margin: 5px 0 0 0;">הדר נציגת שירות מערכת בקרת חניה מתקדמת</p>
-                </div>
-                <div style="padding: 20px;">
-                    ${message.replace(/\n/g, '<br>')}
-                </div>
-        `;
-        
-        const attachments = [];
-        
-        if (req.files && req.files.length > 0) {
-            console.log(`📎 מצרף ${req.files.length} תמונות`);
-            htmlContent += '<br><h3 style="color: #2c3e50;">📷 תמונות מצורפות:</h3>';
-            
-            req.files.forEach((file, index) => {
-                const cid = `image${index + 1}`;
-                attachments.push({
-                    filename: file.originalname || `image_${index + 1}.jpg`,
-                    content: file.buffer,
-                    cid: cid
-                });
-                htmlContent += `<p><img src="cid:${cid}" style="max-width: 500px; height: auto; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);" alt="תמונה ${index + 1}"></p>`;
-            });
-        }
-        
-        htmlContent += `
-                <hr style="margin: 30px 0; border: none; border-top: 2px solid #ecf0f1;">
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; text-align: center;">
-                    <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
-                        הודעה זו נשלחה ממערכת שיידט את בכמן<br>
-                        📧 לפניות: Report@sbparking.co.il | 🚗 מערכת ניהול חניות מתקדמת
-                    </p>
-                </div>
-            </div>
-        `;
-        
-        const mailOptions = {
-            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-            to: to,
-            subject: subject,
-            html: htmlContent,
-            attachments: attachments
-        };
-        
-        const result = await transporter.sendMail(mailOptions);
-        console.log('✅ אימייל נשלח בהצלחה:', result.messageId);
-        
-        res.send(`
-            <div dir="rtl" style="font-family: Arial; margin: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 50px 0;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #27ae60; margin: 0;">✅ האימייל נשלח בהצלחה!</h1>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                        <p><strong>📧 נמען:</strong> ${to}</p>
-                        <p><strong>📝 נושא:</strong> ${subject}</p>
-                        <p><strong>📷 תמונות:</strong> ${req.files ? req.files.length : 0}</p>
-                        <p><strong>🆔 Message ID:</strong> <code>${result.messageId}</code></p>
-                    </div>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold;">🔙 חזור למערכת</a>
-                    </div>
-                </div>
-            </div>
-        `);
-        
-    } catch (error) {
-        console.error('❌ שגיאה בשליחת אימייל:', error);
-        res.status(500).send(`
-            <div dir="rtl" style="font-family: Arial; margin: 50px; background: #e74c3c; min-height: 100vh; padding: 50px 0;">
-                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px;">
-                    <h2 style="color: #e74c3c; text-align: center;">❌ שגיאה בשליחת האימייל</h2>
-                    <p><strong>פרטי השגיאה:</strong> ${error.message}</p>
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="/" style="background: #3498db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px;">🔙 חזור לנסות שוב</a>
-                    </div>
-                </div>
-            </div>
-        `);
-    }
 });
 
 // 📲 WhatsApp Webhook משופר עם זיכרון
@@ -849,7 +569,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
     try {
         console.log('📲 WhatsApp Webhook received:', JSON.stringify(req.body, null, 2));
         
-        // רק הודעות נכנסות - לא סטטוסים
         if (req.body.typeWebhook === 'incomingMessageReceived') {
             const messageData = req.body.messageData;
             const senderData = req.body.senderData;
@@ -860,16 +579,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
             let fileInfo = null;
             const customerName = senderData.senderName || 'לקוח';
 
-            // זיהוי סוג ההודעה - טקסט או קובץ
             if (messageData.textMessageData) {
-                // הודעת טקסט רגילה
                 messageText = messageData.textMessageData.textMessage || 'הודעה ללא טקסט';
             } else if (messageData.fileMessageData) {
-                // הודעה עם קובץ
                 hasFiles = true;
                 messageText = messageData.fileMessageData.caption || 'שלח קובץ';
                 
-                // פרטי הקובץ מ-WhatsApp
                 fileInfo = {
                     fileName: messageData.fileMessageData.fileName || 'קובץ ללא שם',
                     mimeType: messageData.fileMessageData.mimeType || 'application/octet-stream',
@@ -1021,7 +736,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
 // 🧠 פונקציית AI משופרת עם זיכרון וזיהוי בחירות
 async function generateAIResponseWithMemory(message, customerName, customerData, phoneNumber, conversationContext) {
     try {
-        // הוספת debug logs
         console.log('🔍 DEBUG: התחיל AI response');
         console.log('🔍 DEBUG: הודעה:', message);
         console.log('🔍 DEBUG: לקוח:', customerData?.name || 'לא מזוהה');
@@ -1058,84 +772,9 @@ async function generateAIResponseWithMemory(message, customerName, customerData,
         // אם לא זוהתה בחירה ספציפית - חזור ל-AI רגיל או fallback
         console.log('⚠️ לא זוהתה בחירה - עובר ל-AI');
 
-        // בניית prompt עם הקשר מלא
+        // הכן prompt ל-OpenAI
         let systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
-עכשיו יש לי זיכרון מתקדם של שיחות!
-
-🧠 מצב הזיכרון הנוכחי:`;
-
-        if (conversationContext && conversationContext.conversationLength > 1) {
-            systemPrompt += `
-✅ זוהי שיחה מתמשכת!
-- התחלנו לדבר ב: ${new Date(conversationContext.startTime).toLocaleString('he-IL')}
-- מספר הודעות בשיחה: ${conversationContext.conversationLength}
-- סטטוס השיחה: ${conversationContext.status}
-
-📜 היסטוריית השיחה האחרונה:
-${conversationContext.messageHistory.slice(-6).map(msg => 
-    `${msg.sender === 'customer' ? '👤 לקוח' : '👩‍💼 הדר'}: "${msg.message}"`
-).join('\n')}
-
-📋 סיכום השיחה עד כה:
-${conversationContext.summary}
-
-🎯 אני צריכה להמשיך את השיחה בהתאם להקשר הזה!`;
-        } else {
-            systemPrompt += `
-🆕 זוהי שיחה חדשה או הראשונה עם הלקוח הזה.`;
-        }
-
-        systemPrompt += `
-
-🔍 כללי זיהוי לקוח:
-${customerData ? `
-✅ לקוח מזוהה במערכת:
-- שם: ${customerData.name}
-- שם החניה: ${customerData.site}
-- מספר לקוח: #${customerData.id}
-- טלפון: ${customerData.phone}
-- אימייל: ${customerData.email}
-
-מכיוון שהלקוח מזוהה, אני אוכל לטפל בפנייתו לפי התסריט המלא.
-` : `
-⚠️ לקוח לא מזוהה במערכת!
-אני חייבת לזהות את הלקוח קודם כל. אבקש:
-- שם מלא
-- שם החניון/אתר החניה  
-- מספר לקוח (אם יודע)
-ללא זיהוי לא אוכל לטפל בפנייה.
-`}
-
-📋 תסריט השיחה החדש - עם זיהוי בחירות מתקדם:
-
-🟢 פתיחת שיחה:
-${conversationContext && conversationContext.conversationLength > 1 ? `
-🔄 לקוח מזוהה עם זיכרון:
-"שלום ${customerData?.name || customerName} מחניון ${customerData?.site || 'לא מזוהה'}! 👋
-אני זוכרת את הטיפול הקודם שלנו. איך אפשר לעזור היום?
-1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
-` : `
-🆕 לקוח חדש או שיחה ראשונה:
-"שלום! 👋 איך אפשר לעזור היום?
-1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
-`}
-
-⚡ זיהוי תגובות לקוח חשוב מאוד:
-- אם הלקוח כתב "1" או "תקלה" → עבור מיד לשאלה: "באיזו יחידה יש את התקלה?"
-- אם הלקוח כתב "2" או "נזק" → עבור מיד לשאלה: "אנא צלם את הנזק ושלח מספר היחידה"  
-- אם הלקוח כתב "3" או "מחיר" → עבור מיד לשאלה: "מה אתה צריך?"
-- אם הלקוח כתב "4" או "הדרכה" → עבור מיד לשאלה: "על איזה נושא?"
-- אם הלקוח כתב מספר יחידה → שאל מה התקלה בדיוק
-- אל תחזור על התפריט אלא עבור לשלב הבא!
-
-🎯 תמיד תגיב בהתאם לבחירה ותתקדם בשאלות!
-
-כללי תגובה:
-- אדיבה, מקצועית, עניינית
-- שאלות מדויקות לפי הנושא
-- שימוש בזיכרון להמשכיות
-- בסיום - תמיד שואלת על שליחת סיכום
-- מקפידה על זיהוי לקוח לפני כל טיפול`;
+עכשיו יש לי זיכרון מתקדם של שיחות!`;
 
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
@@ -1180,66 +819,6 @@ async function generateFileHandlingResponse(messageText, fileInfo, fileAnalysis,
             return `🧪 בדיקת קבצים הצליחה!\n\nהתקבל קובץ: ${fileInfo.fileName}\nסוג: ${fileAnalysis.category}\n${fileAnalysis.isUrgent ? '🚨 זוהה כדחוף' : '✅ רגיל'}\n\nהמערכת עובדת!`;
         }
 
-        let systemPrompt = `אני הדר, נציגת שירות לקוחות של שיידט את בכמן.
-הלקוח ${customerName} שלח קובץ.
-
-🔍 פרטי הקובץ:
-- שם: ${fileInfo.fileName}
-- סוג: ${fileAnalysis.category}
-- גודל: ${formatFileSize(fileInfo.size)}
-- דחיפות: ${fileAnalysis.isUrgent ? 'גבוהה' : 'רגילה'}
-
-${customerData ? `
-✅ לקוח מזוהה: ${customerData.name} מ${customerData.site}
-` : `
-⚠️ לקוח לא מזוהה - אבקש זיהוי לפני טיפול
-`}
-
-🎯 הנחיות לתגובה:
-
-אם זה תמונה של תקלה:
-- "רואה את התמונה, מנתח את התקלה..."
-- זיהוי מה נראה בתמונה (כללי)
-- המלצות ראשוניות
-- אם דחוף: "אפתח דיווח תקלה לטכנאי עם התמונה"
-
-אם זה מסמך:
-- "קיבלתי את המסמך, אעבור עליו ואחזור אליך"
-- אם מפרט: "אכין הצעת מחיר לפי המפרט"
-
-אם לקוח לא מזוהה:
-- "קיבלתי את הקובץ, אבל צריכה לזהות אותך קודם"
-- בקשת פרטי זיהוי
-
-תמיד אאשר קבלת הקובץ ואסביר את הצעד הבא.`;
-
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
-            messages: [
-                {
-                    role: 'system',
-                    content: systemPrompt
-                },
-                {
-                    role: 'user',
-                    content: `הלקוח שלח: "${messageText}" עם קובץ: ${fileInfo.fileName}`
-                }
-            ],
-            max_tokens: 200,
-            temperature: 0.3
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 20000
-        });
-
-        return response.data.choices[0].message.content.trim();
-        
-    } catch (error) {
-        console.error('❌ שגיאה ב-OpenAI לקבצים:', error.message);
-        
         // תגובת fallback לקבצים
         if (customerData) {
             return `שלום ${customerData.name} 👋
@@ -1262,6 +841,10 @@ ${fileAnalysis.isUrgent ? '🚨 זוהה כתקלה דחופה' : '📁 בבדי
 
 📞 039792365`;
         }
+        
+    } catch (error) {
+        console.error('❌ שגיאה בטיפול בקבצים:', error.message);
+        return `שלום! קיבלתי קובץ אבל יש בעיה טכנית. אנא צור קשר: 📞 039792365`;
     }
 }
 
@@ -1270,7 +853,6 @@ function checkIfConversationEnded(lastCustomerMessage, hadarResponse) {
     const customerMsg = lastCustomerMessage.toLowerCase();
     const hadarMsg = hadarResponse.toLowerCase();
     
-    // סימנים לסיום שיחה
     const endIndicators = [
         'תודה', 'טוב', 'בסדר', 'כן שלח', 'כן תשלח', 'שלח סיכום', 
         'תודה רבה', 'הכל ברור', 'אוקיי', 'מעולה'
@@ -1296,7 +878,6 @@ async function sendConversationSummary(customer, conversationContext) {
         const customerMessages = messages.filter(m => m.sender === 'customer');
         const hadarMessages = messages.filter(m => m.sender === 'hadar');
         
-        // ניתוח נושא השיחה
         const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
         let issueType = 'שאלות כלליות';
         let urgency = 'רגילה';
@@ -1337,44 +918,6 @@ async function sendConversationSummary(customer, conversationContext) {
                         <p><strong>כתובת:</strong> ${customer.address}</p>
                         <p><strong>תאריך ושעה:</strong> ${new Date().toLocaleString('he-IL')}</p>
                     </div>
-                    
-                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h3 style="color: #856404; margin-top: 0;">📊 סיכום השיחה:</h3>
-                        <p><strong>סוג פנייה:</strong> ${issueType}</p>
-                        <p><strong>מספר הודעות:</strong> ${messages.length} (לקוח: ${customerMessages.length}, הדר: ${hadarMessages.length})</p>
-                        <p><strong>משך השיחה:</strong> ${Math.round((new Date() - new Date(conversationContext.startTime)) / 60000)} דקות</p>
-                        <p><strong>דחיפות:</strong> ${urgency}</p>
-                    </div>
-                    
-                    <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db; margin-bottom: 20px;">
-                        <h3 style="color: #2c3e50; margin-top: 0;">💬 תמליל השיחה:</h3>
-                        ${messages.map(msg => `
-                            <div style="margin: 10px 0; padding: 10px; background: ${msg.sender === 'customer' ? '#e3f2fd' : '#e8f5e8'}; border-radius: 8px;">
-                                <strong>${msg.sender === 'customer' ? '👤 ' + customer.name : '👩‍💼 הדר'}:</strong>
-                                <small style="color: #666; float: left;">${new Date(msg.timestamp).toLocaleTimeString('he-IL')}</small>
-                                <p style="margin: 5px 0 0 0; clear: both;">"${msg.message}"</p>
-                            </div>
-                        `).join('')}
-                    </div>
-                    
-                    <div style="background: #d1ecf1; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h3 style="color: #0c5460; margin-top: 0;">📞 פעולות המשך:</h3>
-                        <p>🎯 <strong>פעולות נדרשות:</strong> ${nextSteps}</p>
-                        <p>⏰ <strong>זמן תגובה:</strong> תוך 24 שעות בימי עבודה</p>
-                        <p>📋 <strong>מספר עוקב:</strong> REF-${Date.now().toString().slice(-6)}</p>
-                        <p>🚨 <strong>דחיפות:</strong> ${urgency}</p>
-                    </div>
-                    
-                    <hr style="margin: 30px 0; border: none; border-top: 2px solid #ecf0f1;">
-                    
-                    <div style="background: #ecf0f1; padding: 15px; border-radius: 8px; text-align: center;">
-                        <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
-                            📧 סיכום זה נוצר אוטומטי ונשמר במערכת הזיכרון של הדר<br>
-                            📞 משרד: 039792365 | 📧 שירות: Service@sbcloud.co.il<br>
-                            ⏰ שעות פעילות: א'-ה' 8:15-17:00<br>
-                            🧠 מערכת AI עם זיכרון מתקדם
-                        </p>
-                    </div>
                 </div>
             `
         });
@@ -1407,51 +950,20 @@ function generateAlertEmail(phoneNumber, customerName, messageText, response, cu
                     <h4 style="color: #155724; margin-top: 0;">✅ לקוח מזוהה במערכת:</h4>
                     <p><strong>שם:</strong> ${customer.name}</p>
                     <p><strong>אתר חניה:</strong> ${customer.site}</p>
-                    <p><strong>אימייל:</strong> ${customer.email}</p>
-                    <p><strong>כתובת:</strong> ${customer.address}</p>
                     <p><strong>מספר לקוח:</strong> #${customer.id}</p>
                 </div>
                 ` : `
                 <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107; margin-top: 15px;">
                     <p style="color: #856404; margin: 0;"><strong>⚠️ לקוח לא מזוהה במערכת</strong></p>
-                    <small style="color: #856404;">ייתכן שצריך לבקש פרטי זיהוי נוספים</small>
                 </div>
                 `}
             </div>
             
-            ${conversationContext ? `
-            <div style="background: #e8f4f8; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <h3 style="color: #0c5460; margin-top: 0;">🧠 מצב הזיכרון:</h3>
-                <p><strong>מספר הודעות בשיחה:</strong> ${conversationContext.conversationLength}</p>
-                <p><strong>התחלת שיחה:</strong> ${new Date(conversationContext.startTime).toLocaleString('he-IL')}</p>
-                <p><strong>סטטוס שיחה:</strong> ${conversationContext.status}</p>
-                <div style="background: white; padding: 10px; border-radius: 5px; margin-top: 10px;">
-                    <strong>📋 סיכום:</strong><br>
-                    <small>${conversationContext.summary.replace(/\n/g, '<br>')}</small>
-                </div>
-            </div>
-            ` : `
-            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-                <p style="color: #856404; margin: 0;"><strong>🆕 שיחה חדשה - אין זיכרון קודם</strong></p>
-            </div>
-            `}
-            
-            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db; margin-bottom: 20px;">
+            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db;">
                 <h3 style="color: #2c3e50; margin-top: 0;">📥 ההודעה:</h3>
-                <p style="font-size: 16px; line-height: 1.5; background: #f8f9fa; padding: 15px; border-radius: 8px;">"${messageText}"</p>
-            </div>
-            
-            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #27ae60;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📤 התגובה שנשלחה:</h3>
-                <p style="font-size: 14px; line-height: 1.5; background: #e8f5e8; padding: 15px; border-radius: 8px;">"${response}"</p>
-            </div>
-            
-            <div style="margin-top: 20px; padding: 15px; background: #ecf0f1; border-radius: 8px; text-align: center;">
-                <p style="color: #7f8c8d; font-size: 12px; margin: 0;">
-                    📅 זמן: ${new Date().toLocaleString('he-IL')}<br>
-                    🤖 הודעה זו נשלחה אוטומטית ממערכת הדר עם זיכרון מתקדם<br>
-                    📊 סה"כ לקוחות במערכת: ${customers.length}
-                </p>
+                <p>"${messageText}"</p>
+                <h3 style="color: #2c3e50;">📤 התגובה:</h3>
+                <p>"${response}"</p>
             </div>
         </div>
     `;
@@ -1529,6 +1041,7 @@ app.listen(PORT, () => {
     console.log('🧠 מערכת זיכרון הדר: פעילה (4 שעות)');
     console.log('⚡ בקרת קצב API: מופעלת');
     console.log('✅ כל התיקונים יושמו: מיילים חכמים, זיהוי בחירות, fallback משופר');
+    console.log('🔧 קובץ מלא וגמור!');
 });
 
 module.exports = app;
