@@ -326,9 +326,35 @@ class ConversationFlow {
         if (context.currentStage === 'problem_description') {
             return {
                 type: 'issue_description',
-                nextStage: 'solution_provided',
+                nextStage: 'awaiting_solution_feedback',
                 response: this.generateTroubleshootingResponse(msg, context.unitNumber)
             };
+        }
+        
+        // בדיקה אם הפתרון עזר
+        if (context.currentStage === 'awaiting_solution_feedback') {
+            if (msg.includes('כן') || msg.includes('עזר') || msg.includes('נפתר') || msg.includes('טוב')) {
+                return {
+                    type: 'problem_solved',
+                    nextStage: 'conversation_ended',
+                    response: '🎉 מעולה! שמח לשמוע שהבעיה נפתרה!\n\n📧 אשלח סיכום שיחה למייל בקרוב\n\nאם יש עוד בעיות, אני כאן לעזור.\n\nיום טוב! 😊\n\n📞 039792365 | 📧 Service@sbcloud.co.il',
+                    sendSummaryEmail: true
+                };
+            } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא נפתר')) {
+                return {
+                    type: 'needs_technician',
+                    nextStage: 'technician_dispatched',
+                    response: '🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך עכשיו!**\n\n⏰ הטכנאי יגיע תוך 2-4 שעות\n📞 טלפון חירום: 039792365\n\n🆔 מספר קריאת שירות: HSC-' + (serviceCallCounter++) + '\n\n📧 תקבל אישור ומספר קריאה במייל בקרוב.',
+                    sendSummaryEmail: true,
+                    sendTechnicianAlert: true
+                };
+            } else {
+                return {
+                    type: 'clarification_needed',
+                    nextStage: 'awaiting_solution_feedback',
+                    response: 'האם הפתרון שנתתי עזר לפתור את הבעיה?\n\nאנא ענה:\n✅ "כן" - אם הבעיה נפתרה\n❌ "לא" - אם עדיין יש בעיה\n\n📞 039792365'
+                };
+            }
         }
         
         if (context.currentStage === 'equipment_type') {
@@ -360,29 +386,62 @@ class ConversationFlow {
         let solution = '';
         let urgencyLevel = 'רגילה';
         
-        if (problem.includes('לא דולק') || problem.includes('אין חשמל')) {
-            solution = '🔧 פתרון מיידי:\n1. בדוק שהמתג דולק\n2. בדוק נתיכים בלוח החשמל\n3. וודא שהכבל מחובר היטב\n\n';
+        // זיהוי בעיות ספציפיות במכונות כרטיסים
+        if (problem.includes('לא יוצא') && problem.includes('כרטיס')) {
+            solution = '🔧 **בעיית הוצאת כרטיסים - פתרון מיידי:**\n\n';
+            solution += '1️⃣ **בדוק נייר בגליל:**\n   • פתח את המכונה\n   • וודא שיש נייר בגליל\n   • החלף גליל אם נגמר\n\n';
+            solution += '2️⃣ **נקה את מכניזם ההוצאה:**\n   • נקה בעדינות עם מברשת\n   • בדוק שאין נייר תקוע\n\n';
+            solution += '3️⃣ **אתחל את המכונה:**\n   • כבה למשך 30 שניות\n   • הדלק שוב\n\n';
+            urgencyLevel = 'גבוהה';
+        } else if (problem.includes('לא דולק') || problem.includes('אין חשמל')) {
+            solution = '🔧 **בעיית חשמל - פתרון מיידי:**\n\n';
+            solution += '1️⃣ בדוק מתג הפעלה ראשי\n';
+            solution += '2️⃣ בדוק נתיכים בלוח החשמל\n';
+            solution += '3️⃣ וודא חיבור כבל החשמל\n\n';
             urgencyLevel = 'גבוהה';
         } else if (problem.includes('לא קורא') || problem.includes('כרטיס')) {
-            solution = '🔧 פתרון מיידי:\n1. נקה את קורא הכרטיסים בעדינות\n2. נסה כרטיס אחר\n3. בדוק שאין לכלוך בחריץ\n\n';
+            solution = '🔧 **בעיית קריאת כרטיסים - פתרון מיידי:**\n\n';
+            solution += '1️⃣ נקה את קורא הכרטיסים עם אלכוהול\n';
+            solution += '2️⃣ נסה כרטיס חדש\n';
+            solution += '3️⃣ בדוק שאין לכלוך בחריץ\n\n';
         } else if (problem.includes('זרוע') || problem.includes('לא עול')) {
-            solution = '🔧 פתרון מיידי:\n1. בדוק לחץ אוויר במדחס\n2. וודא שאין מכשולים\n3. בדוק רמת שמן הידראולי\n\n';
+            solution = '🔧 **בעיית זרוע הידראולית - פתרון מיידי:**\n\n';
+            solution += '1️⃣ בדוק לחץ אוויר במדחס (צריך להיות 6-8 בר)\n';
+            solution += '2️⃣ וודא שאין מכשולים בנתיב הזרוע\n';
+            solution += '3️⃣ בדוק רמת שמן הידראולי\n\n';
             urgencyLevel = 'גבוהה';
         } else if (problem.includes('תקוע') || problem.includes('לא זז')) {
-            solution = '🔧 פתרון מיידי:\n1. נסה לזוז ידנית (בזהירות!)\n2. בדוק שאין מכשולים\n3. אל תכריח בכוח\n\n';
+            solution = '🔧 **זרוע תקועה - פתרון מיידי:**\n\n';
+            solution += '1️⃣ **זהירות!** אל תכריח בכוח\n';
+            solution += '2️⃣ בדוק שאין מכשולים\n';
+            solution += '3️⃣ נסה הפעלה ידנית עדינה\n\n';
+            urgencyLevel = 'גבוהה';
+        } else if (problem.includes('דולק') && problem.includes('אין שגיאה')) {
+            // המכונה דולקת אבל לא עובדת כמו שצריך
+            solution = '🔧 **המכונה דולקת אבל לא עובדת - פתרון מיידי:**\n\n';
+            solution += '1️⃣ **אתחל את המערכת:**\n   • כבה למשך דקה\n   • הדלק שוב\n\n';
+            solution += '2️⃣ **בדוק חיבורי רשת:**\n   • וודא שהכבל מחובר\n   • נסה לשלוף ולחבר שוב\n\n';
+            solution += '3️⃣ **בדוק תקשורת:**\n   • האם יש אור ירוק בנתב?\n   • בדוק שהמכונה מחוברת לרשת\n\n';
             urgencyLevel = 'גבוהה';
         } else {
-            solution = '🔧 הבנתי את הבעיה.\n';
+            solution = '🔧 **קיבלתי את פרטי התקלה.**\n\n';
+            solution += 'בדוק את הפתרונות הבסיסיים:\n';
+            solution += '• אתחול המכונה (כיבוי והדלקה)\n';
+            solution += '• בדיקת חיבורי חשמל ורשת\n';
+            solution += '• ניקוי קל של החלקים הנגישים\n\n';
         }
         
         // הוספת מידע נוסף בהתאם לדחיפות
         if (urgencyLevel === 'גבוהה') {
-            solution += `📞 אם הפתרון לא עזר - אתקשר מיד: 039792365\n`;
-            solution += `🚨 טכנאי יגיע תוך 2-4 שעות\n`;
-            solution += `🆔 מספר קריאה: HSC-${serviceCallCounter++}`;
+            solution += `⚠️ **אם הפתרון לא עזר תוך 10 דקות:**\n`;
+            solution += `📞 התקשר מיד: 039792365\n`;
+            solution += `🚨 טכנאי יוזמן תוך 2-4 שעות\n`;
+            solution += `🆔 מספר קריאה: HSC-${serviceCallCounter++}\n\n`;
+            solution += `❓ **האם הפתרון עזר?** (כתוב כן/לא)`;
         } else {
-            solution += `📞 במקרה ופתרון לא עזר: 039792365\n`;
-            solution += `🔧 טכנאי יתואם לפי צורך`;
+            solution += `📞 אם הפתרון לא עזר: 039792365\n`;
+            solution += `🔧 טכנאי יתואם לפי צורך\n\n`;
+            solution += `❓ **האם הפתרון עזר?** (כתוב כן/לא)`;
         }
         
         return solution;
@@ -454,20 +513,27 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// 📋 פונקציה לבדיקה אם לשלוח מייל
+// 📋 פונקציה משופרת לבדיקה אם לשלוח מייל
 function shouldSendEmailAlert(conversationContext, messageText) {
     // שלח מייל רק אם:
-    // 1. זו הודעה ראשונה (אין היסטוריה או פחות מ-2 הודעות)
-    // 2. או שזו תקלה דחופה
+    // 1. זו בקשה לטכנאי (לקוח אמר שהפתרון לא עזר)
+    // 2. תקלה דחופה מהתחלה (זרוע תקועה, אין חשמל)
+    // 3. לקוח מבקש טכנאי במפורש
     
+    const requestsTechnician = messageText.toLowerCase().includes('לא עזר') || 
+                              messageText.toLowerCase().includes('לא נפתר') ||
+                              messageText.toLowerCase().includes('צריך טכנאי') ||
+                              messageText.toLowerCase().includes('בואו תבואו') ||
+                              messageText.toLowerCase().includes('תשלחו טכנאי');
+    
+    const criticalKeywords = ['אין חשמל', 'תקוע', 'לא זז', 'שבור לגמרי', 'נזק'];
+    const isCritical = criticalKeywords.some(keyword => messageText.toLowerCase().includes(keyword));
+    
+    // רק הודעה ראשונה שהיא קריטית, או בקשה לטכנאי
     const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
+    const shouldSend = (isFirstMessage && isCritical) || requestsTechnician;
     
-    const urgentKeywords = ['תקלה', 'דחוף', 'בעיה', 'לא עובד', 'שבור', 'תקוע', 'אין חשמל'];
-    const isUrgent = urgentKeywords.some(keyword => messageText.toLowerCase().includes(keyword));
-    
-    const shouldSend = isFirstMessage || isUrgent;
-    
-    console.log(`📧 החלטת מייל: ${shouldSend ? 'שלח' : 'דלג'} (ראשונה: ${isFirstMessage}, דחוף: ${isUrgent})`);
+    console.log(`📧 החלטת מייל: ${shouldSend ? 'שלח' : 'דלג'} (ראשונה קריטית: ${isFirstMessage && isCritical}, בקשת טכנאי: ${requestsTechnician})`);
     
     return shouldSend;
 }
@@ -711,13 +777,26 @@ app.post('/webhook/whatsapp', async (req, res) => {
             }
 
             // יצירת תגובה חכמה (ללא OpenAI)
-            const response = generateIntelligentResponse(
+            const analysisResult = generateIntelligentResponse(
                 messageText,
                 customerName,
                 customer,
                 phoneNumber,
                 conversationContext
             );
+            
+            let response;
+            let shouldSendSummary = false;
+            let shouldSendTechAlert = false;
+            
+            // אם זה אובייקט עם פרטים נוספים
+            if (typeof analysisResult === 'object' && analysisResult.response) {
+                response = analysisResult.response;
+                shouldSendSummary = analysisResult.sendSummaryEmail || false;
+                shouldSendTechAlert = analysisResult.sendTechnicianAlert || false;
+            } else {
+                response = analysisResult;
+            }
             
             // הוספת הודעות לזיכרון
             conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
@@ -726,10 +805,44 @@ app.post('/webhook/whatsapp', async (req, res) => {
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
 
-            // שליחת אימייל התראה - רק כשצריך!
+            // שליחת מייל סיכום שיחה (אם נדרש)
+            if (shouldSendSummary && customer && customer.email) {
+                console.log('📧 שולח מייל סיכום שיחה');
+                try {
+                    await sendConversationSummary(customer, conversationMemory.getConversationContext(phoneNumber, customer));
+                    conversationMemory.endConversation(phoneNumber, customer);
+                    console.log('✅ מייל סיכום נשלח והשיחה הסתיימה');
+                } catch (summaryError) {
+                    console.error('❌ שגיאה בשליחת מייל סיכום:', summaryError);
+                }
+            }
+
+            // שליחת אימייל התראה לטכנאי (אם נדרש)
+            if (shouldSendTechAlert) {
+                try {
+                    console.log('🚨 שולח התראה דחופה לטכנאי');
+                    
+                    const serviceNumber = generateServiceCallNumber();
+                    const emailSubject = customer ? 
+                        `🚨 קריאת טכנאי דחופה ${serviceNumber} - ${customer.name} (${customer.site})` : 
+                        `🚨 קריאת טכנאי דחופה ${serviceNumber} - ${phoneNumber}`;
+                    
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+                        to: 'Dror@sbparking.co.il',
+                        subject: emailSubject,
+                        html: generateTechnicianAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationMemory.getConversationContext(phoneNumber, customer))
+                    });
+                    console.log('🚨 התראת טכנאי נשלחה למנהל');
+                } catch (emailError) {
+                    console.error('❌ שגיאה בשליחת התראת טכנאי:', emailError);
+                }
+            }
+
+            // שליחת אימייל התראה רגילה - רק במקרים ספציפיים
             try {
-                if (shouldSendEmailAlert(conversationContext, messageText)) {
-                    console.log('📧 שולח התראה למנהל');
+                if (!shouldSendSummary && !shouldSendTechAlert && shouldSendEmailAlert(conversationContext, messageText)) {
+                    console.log('📧 שולח התראה רגילה למנהל');
                     
                     const serviceNumber = generateServiceCallNumber();
                     const emailSubject = customer ? 
@@ -742,12 +855,14 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         subject: emailSubject,
                         html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
                     });
-                    console.log('📧 התראה נשלחה למנהל');
+                    console.log('📧 התראה רגילה נשלחה למנהל');
+                } else if (shouldSendSummary || shouldSendTechAlert) {
+                    console.log('ℹ️ דילוג על מייל רגיל - נשלח מייל סיכום/טכנאי');
                 } else {
-                    console.log('ℹ️ דילוג על מייל - לא הודעה ראשונה ולא דחוף');
+                    console.log('ℹ️ דילוג על מייל - לא עומד בקריטריונים');
                 }
             } catch (emailError) {
-                console.error('❌ שגיאה בשליחת התראה:', emailError);
+                console.error('❌ שגיאה בשליחת התראה רגילה:', emailError);
             }
         } else {
             console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
