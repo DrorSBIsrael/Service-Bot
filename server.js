@@ -837,26 +837,32 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 conversationMemory.endConversation(phoneNumber, customer);
             }
             
-            // שליחת אימייל התראה למנהל
-            try {
-                const serviceNumber = generateServiceCallNumber();
-                const emailSubject = customer ? 
-                    `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
-                    `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
-                
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-                    to: 'Dror@sbparking.co.il',
-                    subject: emailSubject,
-                    html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
-                });
-                console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
-            } catch (emailError) {
-                console.error('❌ שגיאה בשליחת התראה:', emailError);
-            }
-        } else {
-            console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
-        }
+// שליחת אימייל התראה למנהל - רק בהודעה ראשונה או בתקלה דחופה
+try {
+    const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
+    const isUrgent = messageText.toLowerCase().includes('תקלה') || 
+                    messageText.toLowerCase().includes('דחוף') || 
+                    messageText.toLowerCase().includes('בעיה');
+    
+    if (isFirstMessage || isUrgent) {
+        const serviceNumber = generateServiceCallNumber();
+        const emailSubject = customer ? 
+            `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
+            `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
+        
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+            to: 'Dror@sbparking.co.il',
+            subject: emailSubject,
+            html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
+        });
+        console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+    } else {
+        console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
+    }
+} catch (emailError) {
+    console.error('❌ שגיאה בשליחת התראה:', emailError);
+}
         
         res.status(200).json({ status: 'OK' });
     } catch (error) {
@@ -1016,6 +1022,16 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
 - שימוש בזיכרון להמשכיות
 - בסיום - תמיד שואלת על שליחת סיכום
 - מקפידה על זיהוי לקוח לפני כל טיפול`;
+
+⚡ זיהוי תגובות לקוח חשוב מאוד:
+- אם הלקוח כתב "1" או "תקלה" → עבור מיד לשאלה: "באיזו יחידה יש את התקלה?"
+- אם הלקוח כתב "2" או "נזק" → עבור מיד לשאלה: "אנא צלם את הנזק ושלח מספר היחידה"  
+- אם הלקוח כתב "3" או "מחיר" → עבור מיד לשאלה: "מה אתה צריך?"
+- אם הלקוח כתב "4" או "הדרכה" → עבור מיד לשאלה: "על איזה נושא?"
+- אם הלקוח כתב מספר יחידה → שאל מה התקלה בדיוק
+- אל תחזור על התפריט אלא עבור לשלב הבא!
+
+🎯 תמיד תגיב בהתאם לבחירה ותתקדם בשאלות!`;
 
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
