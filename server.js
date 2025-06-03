@@ -823,21 +823,21 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 );
             }
             
-            // הוספת תגובת הדר לזיכרון
-            conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
-            
-            // שליחת תגובה
-            await sendWhatsAppMessage(phoneNumber, response);
-            
-            // בדיקה אם השיחה הסתיימה וצריך לשלוח סיכום
-            const shouldSendSummary = checkIfConversationEnded(messageText, response);
-            if (shouldSendSummary && customer && customer.email) {
-                console.log('📋 שליחת סיכום שיחה...');
-                await sendConversationSummary(customer, conversationContext);
-                conversationMemory.endConversation(phoneNumber, customer);
-            }
-            
-// שליחת אימייל התראה למנהל - רק בהודעה ראשונה או בתקלה דחופה
+// הוספת תגובת הדר לזיכרון
+conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+
+// שליחת תגובה
+await sendWhatsAppMessage(phoneNumber, response);
+
+// בדיקה אם השיחה הסתיימה וצריך לשלוח סיכום
+const shouldSendSummary = checkIfConversationEnded(messageText, response);
+if (shouldSendSummary && customer && customer.email) {
+    console.log('📋 שליחת סיכום שיחה...');
+    await sendConversationSummary(customer, conversationContext);
+    conversationMemory.endConversation(phoneNumber, customer);
+}
+
+// שליחת אימייל התראה למנהל - רק בהודעה ראשונה או תקלה דחופה
 try {
     const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
     const isUrgent = messageText.toLowerCase().includes('תקלה') || 
@@ -850,25 +850,28 @@ try {
             `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
             `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
         
-await transporter.sendMail({
-                from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-                to: 'Dror@sbparking.co.il',
-                subject: emailSubject,
-                html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
-            });
-            console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
-        } else {
-            console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
-        }
-    } catch (emailError) {
-        console.error('❌ שגיאה בשליחת התראה:', emailError);
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+            to: 'Dror@sbparking.co.il',
+            subject: emailSubject,
+            html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
+        });
+        console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+    } else {
+        console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
     }
-    
-    res.status(200).json({ status: 'OK' });
-} catch (error) {
-    console.error('❌ שגיאה בעיבוד webhook:', error);
-    res.status(500).json({ error: 'Server error' });
+} catch (emailError) {
+    console.error('❌ שגיאה בשליחת התראה:', emailError);
 }
+        } else {
+            console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
+        }
+        
+        res.status(200).json({ status: 'OK' });
+    } catch (error) {
+        console.error('❌ שגיאה בעיבוד webhook:', error);
+        res.status(500).json({ error: 'Server error' });
+    }
 });
 
 // 🧠 פונקציית AI משופרת עם זיכרון
