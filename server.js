@@ -850,25 +850,25 @@ try {
             `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
             `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
         
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-            to: 'Dror@sbparking.co.il',
-            subject: emailSubject,
-            html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
-        });
-        console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
-    } else {
-        console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
+await transporter.sendMail({
+                from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+                to: 'Dror@sbparking.co.il',
+                subject: emailSubject,
+                html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
+            });
+            console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+        } else {
+            console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
+        }
+    } catch (emailError) {
+        console.error('❌ שגיאה בשליחת התראה:', emailError);
     }
-
-} catch (emailError) {
-                console.error('❌ שגיאה בשליחת התראה:', emailError);
-            }  
-        res.status(200).json({ status: 'OK' });
-    } catch (error) {
-        console.error('❌ שגיאה בעיבוד webhook:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
+    
+    res.status(200).json({ status: 'OK' });
+} catch (error) {
+    console.error('❌ שגיאה בעיבוד webhook:', error);
+    res.status(500).json({ error: 'Server error' });
+}
 });
 
 // 🧠 פונקציית AI משופרת עם זיכרון
