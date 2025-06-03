@@ -1072,9 +1072,38 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
         if (error.response?.status === 429) {
             console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר עם זיכרון');
             
-            if (customerData) {
-                if (conversationContext && conversationContext.conversationLength > 1) {
-                    fallbackMessage = `שלום ${customerData.name} 👋
+if (customerData) {
+    if (conversationContext && conversationContext.conversationLength > 1) {
+        // אם זה המשך שיחה עם זיכרון
+        if (message === '1' || message.includes('תקלה')) {
+            fallbackMessage = `שלום ${customerData.name} 👋
+
+באיזו יחידה יש את התקלה?
+(מספר יחידה: 101, 204, 603)
+
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+        } else if (message === '2' || message.includes('נזק')) {
+            fallbackMessage = `שלום ${customerData.name} 👋
+
+אנא צלם את הנזק ושלח מספר היחידה הפגועה
+
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+        } else if (message === '3' || message.includes('מחיר')) {
+            fallbackMessage = `שלום ${customerData.name} 👋
+
+מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)
+כמות? מפרט? כתובת משלוח?
+
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+        } else if (message === '4' || message.includes('הדרכה')) {
+            fallbackMessage = `שלום ${customerData.name} 👋
+
+על איזה נושא אתה צריך הדרכה?
+(תפעול/תקלות/מערכת חדשה/אחר)
+
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+        } else {
+            fallbackMessage = `שלום ${customerData.name} 👋
 
 אני זוכרת את השיחה שלנו מקודם.
 
@@ -1082,31 +1111,6 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
 1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה
 
 📞 039792365 | 📧 Service@sbcloud.co.il`;
-                } else {
-                    fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
-
-איך אוכל לעזור לך היום?
-1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-                }
-            } else {
-                fallbackMessage = `שלום ${customerName} 👋
-
-כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
-• שם מלא • שם החניון • מספר לקוח
-
-📞 039792365`;
-            }
-        } else {
-            fallbackMessage = `שלום ${customerName} 👋
-
-יש לי בעיה טכנית זמנית.
-אנא פנה ישירות:
-
-📞 039792365 
-📧 Service@sbcloud.co.il
-⏰ א'-ה' 8:15-17:00`;
         }
         
         return fallbackMessage;
