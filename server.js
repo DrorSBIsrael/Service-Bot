@@ -337,15 +337,14 @@ class ConversationFlow {
                 return {
                     type: 'problem_solved',
                     nextStage: 'conversation_ended',
-                    response: '🎉 מעולה! שמח לשמוע שהבעיה נפתרה!\n\n📧 אשלח סיכום שיחה למייל בקרוב\n\nאם יש עוד בעיות, אני כאן לעזור.\n\nיום טוב! 😊\n\n📞 039792365 | 📧 Service@sbcloud.co.il',
+                    response: '🎉 מעולה! שמח לשמוע שהבעיה נפתרה!\n\nאם יש עוד בעיות, אני כאן לעזור.\n\nיום טוב! 😊\n\n📞 039792365 | 📧 Service@sbcloud.co.il',
                     sendSummaryEmail: true
                 };
             } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא נפתר')) {
                 return {
                     type: 'needs_technician',
                     nextStage: 'technician_dispatched',
-                    response: '🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך עכשיו!**\n\n⏰ הטכנאי יגיע תוך 2-4 שעות\n📞 טלפון חירום: 039792365\n\n🆔 מספר קריאת שירות: HSC-' + (serviceCallCounter++) + '\n\n📧 תקבל אישור ומספר קריאה במייל בקרוב.',
-                    sendSummaryEmail: true,
+                    response: '🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך עכשיו!**\n\n⏰ הטכנאי יגיע תוך 2-4 שעות\n📞 טלפון חירום: 039792365\n\n🆔 מספר קריאת שירות: HSC-' + (serviceCallCounter++) + '\n\nהמנהל יעודכן ויתקשר אליך בקרוב.',
                     sendTechnicianAlert: true
                 };
             } else {
@@ -805,13 +804,22 @@ app.post('/webhook/whatsapp', async (req, res) => {
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
 
-            // שליחת מייל סיכום שיחה (אם נדרש)
-            if (shouldSendSummary && customer && customer.email) {
-                console.log('📧 שולח מייל סיכום שיחה');
+            // שליחת מייל סיכום שיחה (רק למנהל - לא ללקוח)
+            if (shouldSendSummary && customer) {
+                console.log('📧 שולח מייל סיכום למנהל');
                 try {
-                    await sendConversationSummary(customer, conversationMemory.getConversationContext(phoneNumber, customer));
+                    const serviceNumber = generateServiceCallNumber();
+                    const emailSubject = `📋 סיכום שיחה - ${customer.name} (${customer.site})`;
+                    
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+                        to: 'Dror@sbparking.co.il',
+                        subject: emailSubject,
+                        html: generateConversationSummaryEmail(customer, conversationMemory.getConversationContext(phoneNumber, customer))
+                    });
+                    
                     conversationMemory.endConversation(phoneNumber, customer);
-                    console.log('✅ מייל סיכום נשלח והשיחה הסתיימה');
+                    console.log('✅ מייל סיכום נשלח למנהל והשיחה הסתיימה');
                 } catch (summaryError) {
                     console.error('❌ שגיאה בשליחת מייל סיכום:', summaryError);
                 }
