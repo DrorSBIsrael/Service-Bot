@@ -860,10 +860,10 @@ try {
     } else {
         console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
     }
+
 } catch (emailError) {
-    console.error('❌ שגיאה בשליחת התראה:', emailError);
-}
-        
+                console.error('❌ שגיאה בשליחת התראה:', emailError);
+            }  
         res.status(200).json({ status: 'OK' });
     } catch (error) {
         console.error('❌ שגיאה בעיבוד webhook:', error);
