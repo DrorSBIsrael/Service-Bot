@@ -1,4 +1,4 @@
-// קובץ: server-fixed.js
+// קובץ: server-fixed.js - עם כל התיקונים
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
@@ -329,12 +329,150 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
+// 🎯 פונקציה חדשה לזיהוי בחירות חכם
+function analyzeCustomerChoice(message, conversationContext) {
+    const msg = message.trim().toLowerCase();
+    
+    // זיהוי בחירות מספריות
+    if (msg === '1' || msg.includes('תקלה')) {
+        return {
+            type: 'troubleshooting',
+            nextQuestion: 'באיזו יחידה יש את התקלה? (מספר יחידה: 101, 204, 603)',
+            stage: 'unit_number'
+        };
+    }
+    
+    if (msg === '2' || msg.includes('נזק')) {
+        return {
+            type: 'damage_report',
+            nextQuestion: 'אנא צלם את הנזק ושלח מספר היחידה הפגועה',
+            stage: 'damage_photo'
+        };
+    }
+    
+    if (msg === '3' || msg.includes('מחיר') || msg.includes('הצעה')) {
+        return {
+            type: 'price_quote',
+            nextQuestion: 'מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)',
+            stage: 'equipment_type'
+        };
+    }
+    
+    if (msg === '4' || msg.includes('הדרכה')) {
+        return {
+            type: 'training',
+            nextQuestion: 'על איזה נושא? (תפעול/תקלות/מערכת חדשה/אחר)',
+            stage: 'training_topic'
+        };
+    }
+    
+    // זיהוי מספרי יחידות
+    const unitMatch = msg.match(/\b(10[0-9]|20[0-9]|30[0-9]|60[0-9])\b/);
+    if (unitMatch) {
+        return {
+            type: 'unit_identified',
+            unitNumber: unitMatch[0],
+            nextQuestion: `יחידה ${unitMatch[0]} - מה בדיוק התקלה? האם היחידה דולקת?`,
+            stage: 'problem_description'
+        };
+    }
+    
+    // אם יש הקשר קודם - בדוק את השלב הנוכחי
+    if (conversationContext && conversationContext.messageHistory.length > 0) {
+        const lastHadarMessage = conversationContext.messageHistory
+            .filter(m => m.sender === 'hadar')
+            .slice(-1)[0];
+        
+        if (lastHadarMessage) {
+            if (lastHadarMessage.message.includes('באיזו יחידה')) {
+                return {
+                    type: 'unit_response',
+                    nextQuestion: `מה בדיוק התקלה ביחידה ${msg}? האם היחידה דולקת?`,
+                    stage: 'problem_description'
+                };
+            }
+            
+            if (lastHadarMessage.message.includes('מה אתה צריך')) {
+                return {
+                    type: 'equipment_response',
+                    equipment: msg,
+                    nextQuestion: `כמה ${msg} אתה צריך? מה המפרט? איפה לשלוח?`,
+                    stage: 'quantity_specs'
+                };
+            }
+        }
+    }
+    
+    return null; // לא זוהתה בחירה ספציפית
+}
+
+// 🧠 פונקציה לFallback חכם
+function generateIntelligentFallback(message, customerData, conversationContext, customerName) {
+    const serviceNumber = generateServiceCallNumber();
+    
+    console.log('🧠 Fallback חכם פעיל');
+    
+    // זיהוי בחירות גם ב-fallback
+    const choice = analyzeCustomerChoice(message, conversationContext);
+    
+    if (choice) {
+        console.log('✅ Fallback זיהה בחירה:', choice.type);
+        
+        if (customerData) {
+            let response = `שלום ${customerData.name} 👋\n\n`;
+            
+            switch(choice.type) {
+                case 'troubleshooting':
+                    response += `באיזו יחידה יש את התקלה?\n(מספר יחידה: 101, 204, 603)\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                    break;
+                    
+                case 'damage_report':
+                    response += `אנא צלם את הנזק ושלח מספר היחידה הפגועה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                    break;
+                    
+                case 'price_quote':
+                    response += `מה אתה צריך?\n(כרטיסים/גלילים/זרועות/אחר)\nכמות? מפרט? כתובת משלוח?\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                    break;
+                    
+                case 'training':
+                    response += `על איזה נושא אתה צריך הדרכה?\n(תפעול/תקלות/מערכת חדשה/אחר)\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                    break;
+                    
+                case 'unit_identified':
+                    response += `יחידה ${choice.unitNumber} - מה בדיוק התקלה?\nהאם היחידה דולקת? אפשר לצרף תמונה?\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                    break;
+                    
+                default:
+                    response += choice.nextQuestion + `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+            }
+            
+            return response;
+        } else {
+            return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא\n- שם החניון\n- מספר לקוח\n\n📞 039792365`;
+        }
+    }
+    
+    // אם לא זוהתה בחירה ספציפית
+    if (customerData) {
+        if (conversationContext && conversationContext.conversationLength > 1) {
+            // אם זה המשך שיחה עם זיכרון
+            return `שלום ${customerData.name} 👋\n\nאני זוכרת את השיחה שלנו מקודם.\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+        } else {
+            // שיחה חדשה עם לקוח מזוהה
+            return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+        }
+    } else {
+        // לקוח לא מזוהה
+        return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא • שם החניון • מספר לקוח\n\n📞 039792365`;
+    }
+}
+
 // הגדרות בסיסיות
 app.use(express.json());
 app.use(express.static('public'));
 
 // הגדרת nodemailer עם השרת שלך
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
     host: process.env.EMAIL_HOST || 'smtp.012.net.il',
     port: parseInt(process.env.EMAIL_PORT) || 465,
     secure: process.env.EMAIL_SECURE === 'true',
@@ -361,7 +499,7 @@ const upload = multer({
             'text/plain', 'text/csv'
         ];
         
-if (allowedMimeTypes.includes(file.mimetype)) {
+        if (allowedMimeTypes.includes(file.mimetype)) {
             cb(null, true);
         } else {
             console.log(`❌ סוג קובץ לא מותר: ${file.mimetype}`);
@@ -591,11 +729,11 @@ app.get('/', (req, res) => {
                     if (matches.length > 0) {
                         results.innerHTML = '<h4>תוצאות חיפוש:</h4>' + 
                         matches.slice(0, 5).map(c => 
-                            \`<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
-                                <strong>\${c.name}</strong> - \${c.site}<br>
-                                <small>📞 \${c.phone} | 📧 \${c.email} | #\${c.id}</small>
-                                <button onclick="selectCustomer('\${c.email}', '\${c.name}', '\${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
-                            </div>\`
+                            `<div style="background: white; padding: 10px; margin: 5px 0; border-radius: 5px; border-right: 4px solid #3498db;">
+                                <strong>${c.name}</strong> - ${c.site}<br>
+                                <small>📞 ${c.phone} | 📧 ${c.email} | #${c.id}</small>
+                                <button onclick="selectCustomer('${c.email}', '${c.name}', '${c.site}')" style="margin: 5px 0; width: auto; padding: 5px 10px;">בחר לקוח</button>
+                            </div>`
                         ).join('');
                     } else {
                         results.innerHTML = '<p style="color: #e74c3c;">לא נמצאו תוצאות</p>';
@@ -823,46 +961,52 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 );
             }
             
-// הוספת תגובת הדר לזיכרון
-conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+            // הוספת הודעת הלקוח והדר לזיכרון
+            conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
+            conversationMemory.addMessage(phoneNumber, response, 'hadar', customer);
 
-// שליחת תגובה
-await sendWhatsAppMessage(phoneNumber, response);
+            // שליחת תגובה
+            await sendWhatsAppMessage(phoneNumber, response);
 
-// בדיקה אם השיחה הסתיימה וצריך לשלוח סיכום
-const shouldSendSummary = checkIfConversationEnded(messageText, response);
-if (shouldSendSummary && customer && customer.email) {
-    console.log('📋 שליחת סיכום שיחה...');
-    await sendConversationSummary(customer, conversationContext);
-    conversationMemory.endConversation(phoneNumber, customer);
-}
+            // בדיקה אם השיחה הסתיימה וצריך לשלוח סיכום
+            const shouldSendSummary = checkIfConversationEnded(messageText, response);
+            if (shouldSendSummary && customer && customer.email) {
+                console.log('📋 שליחת סיכום שיחה...');
+                await sendConversationSummary(customer, conversationContext);
+                conversationMemory.endConversation(phoneNumber, customer);
+            }
 
-// שליחת אימייל התראה למנהל - רק בהודעה ראשונה או תקלה דחופה
-try {
-    const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
-    const isUrgent = messageText.toLowerCase().includes('תקלה') || 
-                    messageText.toLowerCase().includes('דחוף') || 
-                    messageText.toLowerCase().includes('בעיה');
-    
-    if (isFirstMessage || isUrgent) {
-        const serviceNumber = generateServiceCallNumber();
-        const emailSubject = customer ? 
-            `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
-            `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
-        
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-            to: 'Dror@sbparking.co.il',
-            subject: emailSubject,
-            html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
-        });
-        console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
-    } else {
-        console.log('ℹ️ התעלמות משליחת מייל - לא הודעה ראשונה');
-    }
-} catch (emailError) {
-    console.error('❌ שגיאה בשליחת התראה:', emailError);
-}
+            // שליחת אימייל התראה למנהל - רק בהודעה ראשונה או תקלה דחופה
+            try {
+                const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
+                const isUrgent = messageText.toLowerCase().includes('תקלה') || 
+                                messageText.toLowerCase().includes('דחוף') || 
+                                messageText.toLowerCase().includes('בעיה') ||
+                                messageText.toLowerCase().includes('לא עובד') ||
+                                messageText.toLowerCase().includes('שבור');
+                
+                // שלח מייל רק אם זה הודעה ראשונה או תקלה דחופה
+                if (isFirstMessage || isUrgent) {
+                    console.log('📧 שולח התראה למנהל - הודעה ראשונה או תקלה דחופה');
+                    
+                    const serviceNumber = generateServiceCallNumber();
+                    const emailSubject = customer ? 
+                        `קריאת שירות ${serviceNumber} - ${customer.name} (${customer.site})` : 
+                        `קריאת שירות ${serviceNumber} - ${phoneNumber}`;
+                    
+                    await transporter.sendMail({
+                        from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
+                        to: 'Dror@sbparking.co.il',
+                        subject: emailSubject,
+                        html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
+                    });
+                    console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+                } else {
+                    console.log('ℹ️ דילוג על מייל - לא הודעה ראשונה ולא דחוף');
+                }
+            } catch (emailError) {
+                console.error('❌ שגיאה בשליחת התראה:', emailError);
+            }
         } else {
             console.log('ℹ️ התעלמות מסטטוס:', req.body.typeWebhook);
         }
@@ -874,7 +1018,7 @@ try {
     }
 });
 
-// 🧠 פונקציית AI משופרת עם זיכרון
+// 🧠 פונקציית AI משופרת עם זיכרון וזיהוי בחירות
 async function generateAIResponseWithMemory(message, customerName, customerData, phoneNumber, conversationContext) {
     try {
         // הוספת debug logs
@@ -893,13 +1037,35 @@ async function generateAIResponseWithMemory(message, customerName, customerData,
             }
         }
 
+        // 🎯 זיהוי בחירות חכם
+        const choice = analyzeCustomerChoice(message, conversationContext);
+        
+        if (choice) {
+            console.log('✅ זוהתה בחירה:', choice.type);
+            
+            // אם זה לקוח מזוהה - תן תגובה מיידית
+            if (customerData) {
+                let response = `שלום ${customerData.name} 👋\n\n`;
+                response += choice.nextQuestion;
+                response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+                return response;
+            } else {
+                // לקוח לא מזוהה - דרוש זיהוי
+                return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא\n- שם החניון\n- מספר לקוח\n\n📞 039792365`;
+            }
+        }
+
+        // אם לא זוהתה בחירה ספציפית - חזור ל-AI רגיל או fallback
+        console.log('⚠️ לא זוהתה בחירה - עובר ל-AI');
+
         // בניית prompt עם הקשר מלא
         let systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
 עכשיו יש לי זיכרון מתקדם של שיחות!
 
 🧠 מצב הזיכרון הנוכחי:`;
-if (conversationContext && conversationContext.conversationLength > 1) {
-    systemPrompt += `
+
+        if (conversationContext && conversationContext.conversationLength > 1) {
+            systemPrompt += `
 ✅ זוהי שיחה מתמשכת!
 - התחלנו לדבר ב: ${new Date(conversationContext.startTime).toLocaleString('he-IL')}
 - מספר הודעות בשיחה: ${conversationContext.conversationLength}
@@ -914,12 +1080,12 @@ ${conversationContext.messageHistory.slice(-6).map(msg =>
 ${conversationContext.summary}
 
 🎯 אני צריכה להמשיך את השיחה בהתאם להקשר הזה!`;
-} else {
-    systemPrompt += `
+        } else {
+            systemPrompt += `
 🆕 זוהי שיחה חדשה או הראשונה עם הלקוח הזה.`;
-}
+        }
 
-systemPrompt += `
+        systemPrompt += `
 
 🔍 כללי זיהוי לקוח:
 ${customerData ? `
@@ -940,7 +1106,7 @@ ${customerData ? `
 ללא זיהוי לא אוכל לטפל בפנייה.
 `}
 
-📋 תסריט השיחה החדש:
+📋 תסריט השיחה החדש - עם זיהוי בחירות מתקדם:
 
 🟢 פתיחת שיחה:
 ${conversationContext && conversationContext.conversationLength > 1 ? `
@@ -954,77 +1120,6 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
 1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
 `}
 
-🟠 טיפול בתקלות (מבוסס Service failure scenarios.json):
-1. "באיזו יחידה יש את התקלה? (מספר יחידה: 101, 204, 603)"
-2. "מה בדיוק התקלה? האם היחידה דולקת? אפשר לצרף תמונה?"
-3. 🔍 חיפוש במאגר התקלות לפי סוג הציוד והבעיה
-4. מתן פתרון מותאם: שלבי אתחול, אזהרות, הנחיות ספציפיות
-5. אם לא עזר: "אפתח דיווח תקלה לטכנאי עם כל הפרטים"
-
-🟠 טיפול בנזקים:
-1. "אנא צלם את הנזק ושלח מספר היחידה הפגועה"
-2. דחיפות לפי חומרת הנזק (דחוף אם חוסם פעילות)
-3. "דיווח נשלח לצוות הטכני"
-
-🟠 הצעות מחיר:
-1. "מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)"
-2. "כמות, מפרט, כתובת משלוח?"
-3. "הצעת מחיר תישלח תוך 24 שעות"
-
-🟠 הדרכות (מבוסס Parking operation 1.docx):
-1. "על איזה נושא? (תפעול/תקלות/מערכת חדשה/אחר)"
-2. מתן הדרכה מהמסמכים שלנו או הפניה לנציג טכני
-3. "האם להעביר המדריך המלא למייל?"
-
-🔵 סיום שיחה:
-1. "כדי לשלוח סיכום: אנא אמת מייל"
-2. "סיכום נשלח - מספר עוקב: REF-XXXX"
-3. "יש עוד דבר?"
-
-📸 טיפול בקבצים ותמונות:
-- תמונות תקלה: ניתוח חזותי + פתרון מהמאגר
-- מסמכים: הכנת הצעות מחיר
-- אישור קבלה: "קיבלתי את הקובץ [שם], מנתח..."
-
-⚠️ כללי תגובה חשובים:
-- רק ללקוחות מזוהים
-- שלבים ברורים ומסודרים
-- שימוש במאגר הידע (Service failure scenarios.json)
-- מעבר לטכנאי כשנדרש
-- תיעוד מלא בסיום
-- בקרת זמן (10 דקות חוסר פעילות)
-
-🆕 קריאה חדשה: כשכותבים "קריאה חדשה" - מנקה זיכרון ומתחיל מחדש
-
-🛠️ ציוד שאני מטפלת בו:
-כניסה, יציאה, קורא אשראי, מחסומים, גלאי כביש, מצלמות LPR, מקודדים, אינטרקום, מחשב ראשי, מחשב אשראי, תחנת עבודה, מרכזיית אינטרקום.
-
-🔢 טווחי יחידות:
-- 100+: כניסות
-- 200+: יציאות  
-- 300+: מעברים
-- 600+: אוטומטיות
-- ראשי,אשראי.תחנת עבודה: מחשבים
-
-📞 פרטי קשר:
-- משרד: 039792365
-- שירות: Service@sbcloud.co.il  
-- שעות: א'-ה' 8:15-17:00
-
-🧠 זיהוי שלב השיחה עם זיכרון:
-- אם זו השיחה הראשונה → "איך אוכל לעזור?"
-- אם ממשיכים נושא קיים → המשכת טיפול לפי ההיסטוריה
-- אם סיימנו נושא ועוברים לחדש → "יש עוד דבר?"
-- אם הלקוח מתבלבל → הזכרת ההקשר בעדינות
-- סיום טיפול → "האם לשלוח סיכום שיחה לאימייל?"
-
-כללי תגובה:
-- אדיבה, מקצועית, עניינית
-- שאלות מדויקות לפי הנושא
-- שימוש בזיכרון להמשכיות
-- בסיום - תמיד שואלת על שליחת סיכום
-- מקפידה על זיהוי לקוח לפני כל טיפול
-
 ⚡ זיהוי תגובות לקוח חשוב מאוד:
 - אם הלקוח כתב "1" או "תקלה" → עבור מיד לשאלה: "באיזו יחידה יש את התקלה?"
 - אם הלקוח כתב "2" או "נזק" → עבור מיד לשאלה: "אנא צלם את הנזק ושלח מספר היחידה"  
@@ -1033,7 +1128,15 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
 - אם הלקוח כתב מספר יחידה → שאל מה התקלה בדיוק
 - אל תחזור על התפריט אלא עבור לשלב הבא!
 
-🎯 תמיד תגיב בהתאם לבחירה ותתקדם בשאלות!`;
+🎯 תמיד תגיב בהתאם לבחירה ותתקדם בשאלות!
+
+כללי תגובה:
+- אדיבה, מקצועית, עניינית
+- שאלות מדויקות לפי הנושא
+- שימוש בזיכרון להמשכיות
+- בסיום - תמיד שואלת על שליחת סיכום
+- מקפידה על זיהוי לקוח לפני כל טיפול`;
+
         const response = await axios.post('https://api.openai.com/v1/chat/completions', {
             model: 'gpt-3.5-turbo',
             messages: [
@@ -1047,7 +1150,7 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
                 }
             ],
             max_tokens: 300,
-            temperature: 0.2 // נמוך למקצועיות ועקביות
+            temperature: 0.2
         }, {
             headers: {
                 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -1063,75 +1166,8 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
         console.error('❌ שגיאה ב-OpenAI:', error.message);
         console.log('🔄 DEBUG: נכנס ל-fallback mode');
         
-        // תגובות fallback מתוקנות להדר עם זיכרון
-        let fallbackMessage;
-        
-        const serviceNumber = generateServiceCallNumber();
-        const currentTime = new Date().toLocaleString('he-IL');
-
-        if (error.response?.status === 429) {
-            console.log('⏱️ מכסת OpenAI מלאה - תגובת הדר עם זיכרון');
-            
-if (customerData) {
-    if (conversationContext && conversationContext.conversationLength > 1) {
-        // אם זה המשך שיחה עם זיכרון
-        if (message === '1' || message.includes('תקלה')) {
-            fallbackMessage = `שלום ${customerData.name} 👋
-
-באיזו יחידה יש את התקלה?
-(מספר יחידה: 101, 204, 603)
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-        } else if (message === '2' || message.includes('נזק')) {
-            fallbackMessage = `שלום ${customerData.name} 👋
-
-אנא צלם את הנזק ושלח מספר היחידה הפגועה
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-        } else if (message === '3' || message.includes('מחיר')) {
-            fallbackMessage = `שלום ${customerData.name} 👋
-
-מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)
-כמות? מפרט? כתובת משלוח?
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-        } else if (message === '4' || message.includes('הדרכה')) {
-            fallbackMessage = `שלום ${customerData.name} 👋
-
-על איזה נושא אתה צריך הדרכה?
-(תפעול/תקלות/מערכת חדשה/אחר)
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-        } else {
-            fallbackMessage = `שלום ${customerData.name} 👋
-
-אני זוכרת את השיחה שלנו מקודם.
-
-איך אוכל לעזור לך היום?
-1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-        }
-    } else {
-        // שיחה חדשה עם לקוח מזוהה
-        fallbackMessage = `שלום ${customerData.name} מ${customerData.site} 👋
-
-איך אוכל לעזור לך היום?
-1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה
-
-📞 039792365 | 📧 Service@sbcloud.co.il`;
-    }
-} else {
-    // לקוח לא מזוהה
-    fallbackMessage = `שלום ${customerName} 👋
-
-כדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:
-- שם מלא • שם החניון • מספר לקוח
-
-📞 039792365`;
-}
-
-return fallbackMessage;
+        // תגובות fallback מתוקנות עם זיהוי בחירות
+        return generateIntelligentFallback(message, customerData, conversationContext, customerName);
     }
 }
 
@@ -1481,9 +1517,6 @@ async function sendWhatsAppMessage(phoneNumber, message) {
     }
 }
 
-// שאר הפונקציות והמסלולים ממשיכים כמו בקובץ המקורי...
-// [כל יתר הקוד נשאר זהה]
-
 // הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -1495,6 +1528,7 @@ app.listen(PORT, () => {
     console.log(`👥 לקוחות במערכת: ${customers.length}`);
     console.log('🧠 מערכת זיכרון הדר: פעילה (4 שעות)');
     console.log('⚡ בקרת קצב API: מופעלת');
+    console.log('✅ כל התיקונים יושמו: מיילים חכמים, זיהוי בחירות, fallback משופר');
 });
 
 module.exports = app;
