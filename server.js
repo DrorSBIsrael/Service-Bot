@@ -321,7 +321,7 @@ class ConversationFlow {
                     type: 'damage_unit_identified',
                     unitNumber: unitNumber,
                     nextStage: 'damage_assessment',
-                    response: `יחידה ${unitNumber} - קיבלתי את התמונה והמספר.\n\n🔍 אני בודקת את הנזק ומעבירה לטכנאי.\n\n⏰ טכנאי יגיע תוך 2-4 שעות לטיפול\n📞 לשאלות: 039792365\n\n🆔 מספר קריאה: HSC-` + (serviceCallCounter++),
+                    response: `יחידה ${unitNumber} - קיבלתי את התמונה והמספר.\n\n🔍 אני בודקת את הנזק ומעבירה לטכנאי.\n\n⏰ טכנאי יגיע תוך 2-4 שעות לטיפול\n📞 לשאלות: 039792365\n\n🆔 מספר קריאה: HSC-${serviceCallCounter}`,
                     sendTechnicianAlert: true
                 };
             }
@@ -359,7 +359,7 @@ class ConversationFlow {
                 return {
                     type: 'needs_technician',
                     nextStage: 'technician_dispatched',
-                    response: '🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך עכשיו!**\n\n⏰ הטכנאי יגיע תוך 2-4 שעות\n📞 טלפון חירום: 039792365\n\n🆔 מספר קריאת שירות: HSC-' + (serviceCallCounter++) + '\n\nהמנהל יעודכן ויתקשר אליך בקרוב.',
+                    response: '🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך עכשיו!**\n\n⏰ הטכנאי יגיע תוך 2-4 שעות\n📞 טלפון חירום: 039792365\n\n🆔 מספר קריאת שירות: HSC-' + serviceCallCounter + '\n\nהמנהל יעודכן ויתקשר אליך בקרוב.',
                     sendTechnicianAlert: true
                 };
             } else {
@@ -450,7 +450,7 @@ class ConversationFlow {
             solution += `⚠️ **אם הפתרון לא עזר תוך 10 דקות:**\n`;
             solution += `📞 התקשר מיד: 039792365\n`;
             solution += `🚨 טכנאי יוזמן תוך 2-4 שעות\n`;
-            solution += `🆔 מספר קריאה: HSC-${serviceCallCounter++}\n\n`;
+            solution += `🆔 מספר קריאה: HSC-${serviceCallCounter}\n\n`;
             solution += `❓ **האם הפתרון עזר?** (כתוב כן/לא)`;
         } else {
             solution += `📞 אם הפתרון לא עזר: 039792365\n`;
@@ -841,18 +841,21 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 try {
                     console.log('🚨 שולח התראה דחופה לטכנאי');
                     
-                    const serviceNumber = generateServiceCallNumber();
+                    // מעלים את המונה רק כשבאמת שולחים מייל
+                    serviceCallCounter++;
+                    const serviceNumber = `HSC-${serviceCallCounter}`;
+                    
                     const emailSubject = customer ? 
                         `🚨 קריאת טכנאי דחופה ${serviceNumber} - ${customer.name} (${customer.site})` : 
                         `🚨 קריאת טכנאי דחופה ${serviceNumber} - ${phoneNumber}`;
                     
-                    await transporter.sendMail({
+                    const emailResult = await transporter.sendMail({
                         from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
                         to: 'Dror@sbparking.co.il',
                         subject: emailSubject,
-                        html: generateTechnicianAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationMemory.getConversationContext(phoneNumber, customer))
+                        html: generateTechnicianAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationMemory.getConversationContext(phoneNumber, customer), serviceNumber)
                     });
-                    console.log('🚨 התראת טכנאי נשלחה למנהל');
+                    console.log('🚨 התראת טכנאי נשלחה למנהל:', emailResult.messageId);
                 } catch (emailError) {
                     console.error('❌ שגיאה בשליחת התראת טכנאי:', emailError);
                 }
