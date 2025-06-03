@@ -1,4 +1,4 @@
-// קובץ: server.js - קובץ מלא וגמור עם כל התיקונים
+// קובץ: server.js -  קובץ מלא וגמור עם כל התיקונים
 require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
