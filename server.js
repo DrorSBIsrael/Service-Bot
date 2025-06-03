@@ -288,7 +288,7 @@ class ConversationFlow {
                 type: 'service_selection',
                 service: 'damage_report',
                 nextStage: 'damage_details',
-                response: 'אנא צלם את הנזק ושלח תמונה + מספר היחידה הפגועה'
+                response: 'אנא צלם את הנזק ושלח תמונה + מספר היחידה הפגועה\n\n(לדוגמה: תמונה + "יחידה 101")'
             };
         }
         
@@ -310,16 +310,31 @@ class ConversationFlow {
             };
         }
         
-        // זיהוי מספר יחידה
+        // זיהוי מספר יחידה - גם כהודעה עצמאית
         const unitMatch = msg.match(/(\d{3})|יחידה\s*(\d{1,3})/);
-        if (unitMatch && context.currentStage === 'unit_number') {
+        if (unitMatch) {
             const unitNumber = unitMatch[1] || unitMatch[2];
-            return {
-                type: 'unit_identified',
-                unitNumber: unitNumber,
-                nextStage: 'problem_description',
-                response: `יחידה ${unitNumber} - מה בדיוק התקלה?\n• האם היחידה דולקת?\n• מה קורה כשמנסים להשתמש?\n• יש הודעות שגיאה?`
-            };
+            
+            // אם אנחנו במצב damage_details (אחרי בחירה 2), זה מספר יחידה לנזק
+            if (context.currentStage === 'damage_details') {
+                return {
+                    type: 'damage_unit_identified',
+                    unitNumber: unitNumber,
+                    nextStage: 'damage_assessment',
+                    response: `יחידה ${unitNumber} - קיבלתי את התמונה והמספר.\n\n🔍 אני בודקת את הנזק ומעבירה לטכנאי.\n\n⏰ טכנאי יגיע תוך 2-4 שעות לטיפול\n📞 לשאלות: 039792365\n\n🆔 מספר קריאה: HSC-` + (serviceCallCounter++),
+                    sendTechnicianAlert: true
+                };
+            }
+            
+            // אם אנחנו במצב unit_number (אחרי בחירה 1), זה מספר יחידה לתקלה
+            if (context.currentStage === 'unit_number') {
+                return {
+                    type: 'unit_identified',
+                    unitNumber: unitNumber,
+                    nextStage: 'problem_description',
+                    response: `יחידה ${unitNumber} - מה בדיוק התקלה?\n• האם היחידה דולקת?\n• מה קורה כשמנסים להשתמש?\n• יש הודעות שגיאה?`
+                };
+            }
         }
         
         // התקדמות בהתאם לשלב הנוכחי
@@ -487,11 +502,7 @@ function generateIntelligentResponse(message, customerName, customerData, phoneN
     
     // תגובת ברירת מחדל
     if (customerData) {
-        if (conversationContext && conversationContext.conversationLength > 1) {
-            return `שלום ${customerData.name} 👋\n\nאני זוכרת את השיחה שלנו.\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365`;
-        } else {
-            return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-        }
+        return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
     } else {
         return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`;
     }
