@@ -462,45 +462,180 @@ class ConversationFlow {
     }
 }
 
-// 🧠 פונקציה ראשית לטיפול בהודעות - ללא OpenAI
-function generateIntelligentResponse(message, customerName, customerData, phoneNumber, conversationContext) {
-    console.log('🧠 מתחיל עיבוד תגובה חכמה');
+// 🧠 פונקציית AI מחוברת ל-OpenAI עם fallback חכם
+async function generateAIResponseWithMemory(message, customerName, customerData, phoneNumber, conversationContext) {
+    try {
+        console.log('🔍 DEBUG: התחיל AI response');
+        console.log('🔍 DEBUG: הודעה:', message);
+        console.log('🔍 DEBUG: לקוח:', customerData?.name || 'לא מזוהה');
+        console.log('🔍 DEBUG: זיכרון:', conversationContext?.conversationLength || 'אין');
+        
+        // בדיקה אם זה מספר הבדיקה
+        const testPhone = process.env.TEST_PHONE_NUMBER;
+        if (testPhone && phoneNumber && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
+            if (message.startsWith('בדיקה:')) {
+                const testMessage = message.replace('בדיקה:', '').trim();
+                console.log(`🧪 מצב בדיקה פעיל: ${testMessage}`);
+                return `🧪 מצב בדיקה - הדר עם OpenAI + זיכרון פעילה!\n\nהודעה: "${testMessage}"\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n${conversationContext ? `שיחות קודמות: ${conversationContext.conversationLength}` : 'שיחה ראשונה'}\n\nהמערכת עובדת! ✅`;
+            }
+        }
+
+        // 🎯 בדיקה מהירה אם זה בחירה פשוטה (ללא OpenAI)
+        const quickChoice = ConversationFlow.analyzeMessage(message, conversationContext);
+        
+        if (quickChoice && customerData) {
+            console.log('✅ זוהתה בחירה מהירה:', quickChoice.type);
+            // עדכון שלב השיחה
+            const updateData = {
+                selectedService: quickChoice.service,
+                unitNumber: quickChoice.unitNumber
+            };
+            conversationMemory.updateConversationStage(phoneNumber, quickChoice.nextStage, updateData, customerData);
+            
+            // בניית תגובה
+            let response = `שלום ${customerData.name} 👋\n\n`;
+            response += quickChoice.response;
+            response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+            
+            return {
+                response: response,
+                sendSummaryEmail: quickChoice.sendSummaryEmail,
+                sendTechnicianAlert: quickChoice.sendTechnicianAlert
+            };
+        }
+
+        // הכן prompt מתקדם ל-OpenAI
+        let systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
+        
+אני מתמחה בבקרת חניה ומערכות אוטומטיות.
+עכשיו יש לי זיכרון מתקדם של שיחות!
+
+חברה: שיידט את בכמן ישראל
+שירותים: מערכות בקרת חניה, זרועות אוטומטיות, מכונות כרטיסים
+טלפון: 039792365
+אימייל: Service@sbcloud.co.il
+
+אני צריכה לתת מענה מקצועי, חם ומועיל.
+
+אם זו תקלה - אתן פתרון מיידי ואשאל האם עזר.
+אם זו הצעת מחיר - אבקש פרטים מדויקים.
+אם זה נזק - אבקש תמונה ומספר יחידה.
+
+אני תמיד מסיימת עם:
+📞 039792365 | 📧 Service@sbcloud.co.il`;
+
+        // הוספת הקשר זיכרון
+        if (conversationContext && conversationContext.conversationLength > 0) {
+            systemPrompt += `\n\nהקשר השיחה:
+- מספר הודעות קודמות: ${conversationContext.conversationLength}
+- שלב נוכחי: ${conversationContext.currentStage || 'התחלה'}`;
+            
+            if (conversationContext.selectedService) {
+                systemPrompt += `\n- שירות נבחר: ${conversationContext.selectedService}`;
+            }
+            
+            if (conversationContext.unitNumber) {
+                systemPrompt += `\n- מספר יחידה: ${conversationContext.unitNumber}`;
+            }
+            
+            // הוספת ההיסטוריה האחרונה
+            const recentMessages = conversationContext.messageHistory.slice(-4);
+            if (recentMessages.length > 0) {
+                systemPrompt += `\n\nהיסטוריית הודעות אחרונות:`;
+                recentMessages.forEach(msg => {
+                    const sender = msg.sender === 'customer' ? customerData?.name || 'לקוח' : 'הדר';
+                    systemPrompt += `\n${sender}: ${msg.message.substring(0, 100)}`;
+                });
+            }
+        }
+
+        let userPrompt = `הלקוח ${customerName}${customerData ? ` (${customerData.name} מ${customerData.site})` : ''} שלח: "${message}"`;
+
+        console.log('🤖 שולח ל-OpenAI עם זיכרון מתקדם');
+
+        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-3.5-turbo',
+            messages: [
+                {
+                    role: 'system',
+                    content: systemPrompt
+                },
+                {
+                    role: 'user',
+                    content: userPrompt
+                }
+            ],
+            max_tokens: 400,
+            temperature: 0.3
+        }, {
+            headers: {
+                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 25000
+        });
+
+        console.log('✅ DEBUG: OpenAI Response הצליח');
+        return response.data.choices[0].message.content.trim();
+        
+    } catch (error) {
+        console.error('❌ שגיאה ב-OpenAI:', error.message);
+        
+        if (error.response?.status === 429) {
+            console.log('🚫 שגיאת 429 - עבר למצב fallback חכם');
+        }
+        
+        console.log('🔄 DEBUG: נכנס ל-fallback mode');
+        
+        // תגובות fallback מתוקנות עם זיהוי בחירות
+        return generateIntelligentFallback(message, customerData, conversationContext, customerName);
+    }
+}
+
+// 🧠 פונקציה לFallback חכם (כאשר OpenAI לא זמין)
+function generateIntelligentFallback(message, customerData, conversationContext, customerName) {
+    console.log('🧠 Fallback חכם פעיל');
     
-    // בדיקת מספר בדיקה
-    const testPhone = process.env.TEST_PHONE_NUMBER;
-    if (testPhone && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
-        if (message.startsWith('בדיקה:')) {
-            const testMessage = message.replace('בדיקה:', '').trim();
-            console.log(`🧪 מצב בדיקה: ${testMessage}`);
-            return `🧪 בדיקה הצליחה!\n\nהדר פעילה! ✅\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n${conversationContext ? `שיחות: ${conversationContext.conversationLength}` : 'ראשונה'}`;
+    const choice = ConversationFlow.analyzeMessage(message, conversationContext);
+    
+    if (choice) {
+        console.log('✅ Fallback זיהה בחירה:', choice.type);
+        
+        if (customerData) {
+            let response = `שלום ${customerData.name} 👋\n\n`;
+            
+            switch(choice.type) {
+                case 'service_selection':
+                    response += choice.response;
+                    break;
+                    
+                case 'unit_identified':
+                    response += choice.response;
+                    break;
+                    
+                case 'needs_technician':
+                    response += choice.response;
+                    break;
+                    
+                case 'problem_solved':
+                    response += choice.response;
+                    break;
+                    
+                default:
+                    response += choice.response;
+            }
+            
+            response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+            return {
+                response: response,
+                sendSummaryEmail: choice.sendSummaryEmail,
+                sendTechnicianAlert: choice.sendTechnicianAlert
+            };
+        } else {
+            return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא\n- שם החניון\n- מספר לקוח\n\n📞 039792365`;
         }
     }
     
-    // בדיקת פקודות ניקוי זיכרון
-    if (message.includes('קריאה חדשה') || message.includes('מחק זיכרון') || message.includes('איפוס שיחה')) {
-        return `🔄 זיכרון נוקה לקריאה חדשה.\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365`;
-    }
-    
-    // ניתוח ההודעה עם המערכת החכמה
-    const analysis = ConversationFlow.analyzeMessage(message, conversationContext);
-    
-    if (analysis && customerData) {
-        // עדכון שלב השיחה
-        const updateData = {
-            selectedService: analysis.service,
-            unitNumber: analysis.unitNumber
-        };
-        conversationMemory.updateConversationStage(phoneNumber, analysis.nextStage, updateData, customerData);
-        
-        // בניית תגובה
-        let response = `שלום ${customerData.name} 👋\n\n`;
-        response += analysis.response;
-        response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-        
-        return response;
-    }
-    
-    // תגובת ברירת מחדל
     if (customerData) {
         return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
     } else {
@@ -786,24 +921,54 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 messageForMemory += `\n\n📎 קובץ מצורף: ${fileInfo.fileName} (${(fileInfo.fileSize / 1024).toFixed(1)}KB)`;
             }
 
-            // יצירת תגובה חכמה (ללא OpenAI)
-            const analysisResult = generateIntelligentResponse(
-                messageText,
-                customerName,
-                customer,
-                phoneNumber,
-                conversationContext
-            );
-            
-            let response;
+            // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
+            let analysisResult;
             let shouldSendSummary = false;
             let shouldSendTechAlert = false;
+            
+            if (hasFiles && fileInfo) {
+                // תגובה מותאמת לקבצים
+                analysisResult = await generateFileHandlingResponse(
+                    messageText,
+                    fileInfo,
+                    analyzeFileForTroubleshooting(fileInfo, messageText),
+                    customerName,
+                    customer,
+                    phoneNumber,
+                    conversationContext
+                );
+                
+                // בדיקה אם זה דיווח נזק עם תמונה ומספר יחידה
+                if (conversationContext && conversationContext.currentStage === 'damage_details') {
+                    const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
+                    if (unitMatch) {
+                        const unitNumber = unitMatch[1] || unitMatch[2];
+                        console.log('🔧 זוהה נזק עם תמונה ומספר יחידה:', unitNumber);
+                        shouldSendTechAlert = true;
+                        analysisResult = `שלום ${customer ? customer.name : customerName} 👋\n\nיחידה ${unitNumber} - קיבלתי את התמונה והפרטים.\n\n🔍 אני בודקת את הנזק ומעבירה לטכנאי.\n\n⏰ טכנאי יגיע תוך 2-4 שעות לטיפול\n📞 לשאלות: 039792365\n\n🆔 מספר קריאה: HSC-${serviceCallCounter + 1}`;
+                        
+                        // עדכון שלב השיחה
+                        conversationMemory.updateConversationStage(phoneNumber, 'damage_assessment', { unitNumber: unitNumber }, customer);
+                    }
+                }
+            } else {
+                // תגובה רגילה לטקסט עם OpenAI
+                analysisResult = await generateAIResponseWithMemory(
+                    messageText,
+                    customerName,
+                    customer,
+                    phoneNumber,
+                    conversationContext
+                );
+            }
+            
+            let response;
             
             // אם זה אובייקט עם פרטים נוספים
             if (typeof analysisResult === 'object' && analysisResult.response) {
                 response = analysisResult.response;
                 shouldSendSummary = analysisResult.sendSummaryEmail || false;
-                shouldSendTechAlert = analysisResult.sendTechnicianAlert || false;
+                shouldSendTechAlert = shouldSendTechAlert || analysisResult.sendTechnicianAlert || false;
             } else {
                 response = analysisResult;
             }
