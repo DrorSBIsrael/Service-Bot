@@ -1211,7 +1211,7 @@ app.listen(PORT, () => {
     console.log('🏢 חברה: שיידט את בכמן');
     console.log(`👥 לקוחות במערכת: ${customers.length}`);
     console.log('🧠 מערכת זיכרון הדר: פעילה (4 שעות)');
-    console.log('⚡ בלי תלות ב-OpenAI: פועל באופן עצמאי');
+    console.log('⚡ עם OpenAI + Fallback חכם: מערכת משולבת');
     console.log('✅ כל התיקונים הושלמו בהצלחה!');
     console.log('📊 דשבורד זיכרון: /memory-dashboard');
     console.log('🔧 מערכת מוכנה לעבודה!');
