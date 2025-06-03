@@ -12,41 +12,13 @@ const fs = require('fs');
 let customers = [];
 let serviceCallCounter = 10001;
 
-// פונקציות עזר נוספות לטיפול בקבצים ב-WhatsApp
-function createFileInfoFromWhatsApp(fileData) {
-    return {
-        originalname: fileData.fileName,
-        mimetype: fileData.mimeType,
-        size: fileData.fileSize,
-        buffer: null,
-        downloadUrl: fileData.downloadUrl
-    };
-}
-
-function analyzeFileForTroubleshooting(fileInfo, messageText) {
-    const category = getFileCategory(fileInfo.mimetype);
-    const isUrgent = messageText.toLowerCase().includes('תקלה') || 
-                     messageText.toLowerCase().includes('בעיה') || 
-                     messageText.toLowerCase().includes('לא עובד');
-    
-    return {
-        category: category,
-        isUrgent: isUrgent,
-        needsTechnician: category === 'image' && isUrgent,
-        description: createFileDescription(fileInfo)
-    };
-}
-
-// פונקציה ליצירת מספר קריאת שירות
-function generateServiceCallNumber() {
-    const callNumber = `HSC-${serviceCallCounter}`;
-    serviceCallCounter++;
-    return callNumber;
-}
+// טעינת מסד נתונים של תקלות נפוצות
+let troubleshootingDB = {};
+let equipmentDB = {};
 
 try {
+    // טעינת קובץ לקוחות
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
-    
     customers = customersData.map(client => ({
         id: client["מספר לקוח"],
         name: client["שם לקוח"],
@@ -55,10 +27,38 @@ try {
         address: client["כתובת הלקוח"],
         email: client["מייל"]
     }));
-
     console.log(`📊 נטענו ${customers.length} לקוחות מהקובץ`);
+    
+    // טעינת מסד נתוני תקלות
+    try {
+        troubleshootingDB = JSON.parse(fs.readFileSync('./Service failure scenarios.json', 'utf8'));
+        console.log('📋 נטען מסד נתוני תקלות');
+    } catch (error) {
+        console.log('⚠️ לא נמצא קובץ תקלות, ממשיך בלי');
+        troubleshootingDB = {
+            "תקלות נפוצות": {
+                "יחידה לא דולקת": "בדוק חיבור חשמל ונתיכים",
+                "לא קורא כרטיסים": "נקה את הקורא עם אלכוהול",
+                "זרוע לא עולה": "בדוק לחץ אוויר ושמן"
+            }
+        };
+    }
+    
+    // טעינת מסד נתוני ציוד
+    try {
+        equipmentDB = JSON.parse(fs.readFileSync('./equipment_database.json', 'utf8'));
+        console.log('🔧 נטען מסד נתוני ציוד');
+    } catch (error) {
+        console.log('⚠️ לא נמצא קובץ ציוד, ממשיך בלי');
+        equipmentDB = {
+            "כרטיסים": "כרטיסי חניה חד פעמיים - ₪0.50 ליחידה",
+            "גלילים": "גליל נייר תרמי - ₪45 ליחידה",
+            "זרועות": "זרוע הידראולית - ₪2,800 ליחידה"
+        };
+    }
+
 } catch (error) {
-    console.error('❌ שגיאה בטעינת קובץ הלקוחות:', error.message);
+    console.error('❌ שגיאה בטעינת קבצים:', error.message);
     customers = [
         { id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }
     ];
@@ -68,11 +68,10 @@ try {
 class ConversationMemory {
     constructor() {
         this.conversations = new Map();
-        this.maxConversationAge = 4 * 60 * 60 * 1000;
-        this.cleanupInterval = 60 * 60 * 1000;
+        this.maxConversationAge = 4 * 60 * 60 * 1000; // 4 שעות
+        this.cleanupInterval = 60 * 60 * 1000; // שעה
         
         setInterval(() => this.cleanupOldConversations(), this.cleanupInterval);
-        
         console.log('🧠 מערכת זיכרון הדר הופעלה (4 שעות)');
     }
     
@@ -91,7 +90,11 @@ class ConversationMemory {
                 messages: [],
                 startTime: new Date(),
                 lastActivity: new Date(),
-                status: 'active'
+                status: 'active',
+                currentStage: 'greeting',
+                selectedService: null,
+                unitNumber: null,
+                issueDescription: null
             });
         }
         
@@ -109,6 +112,20 @@ class ConversationMemory {
         return conversation;
     }
     
+    updateConversationStage(phoneNumber, stage, data = {}, customerData = null) {
+        const key = this.createConversationKey(phoneNumber, customerData);
+        const conversation = this.conversations.get(key);
+        
+        if (conversation) {
+            conversation.currentStage = stage;
+            if (data.selectedService) conversation.selectedService = data.selectedService;
+            if (data.unitNumber) conversation.unitNumber = data.unitNumber;
+            if (data.issueDescription) conversation.issueDescription = data.issueDescription;
+            
+            console.log(`🔄 עדכון שלב שיחה ${key}: ${stage}`);
+        }
+    }
+    
     getConversationContext(phoneNumber, customerData = null) {
         const key = this.createConversationKey(phoneNumber, customerData);
         const conversation = this.conversations.get(key);
@@ -117,16 +134,18 @@ class ConversationMemory {
             return null;
         }
         
-        const context = {
+        return {
             customer: conversation.customer,
             messageHistory: conversation.messages.slice(-10),
             conversationLength: conversation.messages.length,
             startTime: conversation.startTime,
             status: conversation.status,
+            currentStage: conversation.currentStage,
+            selectedService: conversation.selectedService,
+            unitNumber: conversation.unitNumber,
+            issueDescription: conversation.issueDescription,
             summary: this.buildConversationSummary(conversation)
         };
-        
-        return context;
     }
     
     buildConversationSummary(conversation) {
@@ -139,18 +158,15 @@ class ConversationMemory {
         let summary = `שיחה עם ${conversation.customer ? conversation.customer.name : 'לקוח לא מזוהה'}:\n`;
         summary += `• התחלה: ${conversation.startTime.toLocaleString('he-IL')}\n`;
         summary += `• מספר הודעות: ${messages.length} (לקוח: ${customerMessages.length}, הדר: ${hadarMessages.length})\n`;
+        summary += `• שלב נוכחי: ${conversation.currentStage}\n`;
         
-        const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
-        if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
-            summary += `• נושא: טיפול בתקלה (זיכרון 4 שעות)\n`;
-        } else if (allCustomerText.includes('מחיר') || allCustomerText.includes('הצעה')) {
-            summary += `• נושא: הצעת מחיר (זיכרון 4 שעות)\n`;
-        } else if (allCustomerText.includes('נזק') || allCustomerText.includes('שבור')) {
-            summary += `• נושא: דיווח נזק (זיכרון 4 שעות)\n`;
-        } else {
-            summary += `• נושא: שאלות כלליות (זיכרון 4 שעות)\n`;
+        if (conversation.selectedService) {
+            summary += `• שירות נבחר: ${conversation.selectedService}\n`;
         }
-        summary += `• אפשרות: כתוב "קריאה חדשה" לפתיחת קריאה נוספה\n`;
+        
+        if (conversation.unitNumber) {
+            summary += `• מספר יחידה: ${conversation.unitNumber}\n`;
+        }
         
         return summary;
     }
@@ -249,131 +265,177 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
-// 🎯 פונקציה לזיהוי בחירות חכם
-function analyzeCustomerChoice(message, conversationContext) {
-    const msg = message.trim().toLowerCase();
-    
-    if (msg === '1' || msg.includes('תקלה')) {
-        return {
-            type: 'troubleshooting',
-            nextQuestion: 'באיזו יחידה יש את התקלה? (מספר יחידה: 101, 204, 603)',
-            stage: 'unit_number'
-        };
-    }
-    
-    if (msg === '2' || msg.includes('נזק')) {
-        return {
-            type: 'damage_report',
-            nextQuestion: 'אנא צלם את הנזק ושלח מספר היחידה הפגועה',
-            stage: 'damage_photo'
-        };
-    }
-    
-    if (msg === '3' || msg.includes('מחיר') || msg.includes('הצעה')) {
-        return {
-            type: 'price_quote',
-            nextQuestion: 'מה אתה צריך? (כרטיסים/גלילים/זרועות/אחר)',
-            stage: 'equipment_type'
-        };
-    }
-    
-    if (msg === '4' || msg.includes('הדרכה')) {
-        return {
-            type: 'training',
-            nextQuestion: 'על איזה נושא? (תפעול/תקלות/מערכת חדשה/אחר)',
-            stage: 'training_topic'
-        };
-    }
-    
-    const unitMatch = msg.match(/\b(10[0-9]|20[0-9]|30[0-9]|60[0-9])\b/);
-    if (unitMatch) {
-        return {
-            type: 'unit_identified',
-            unitNumber: unitMatch[0],
-            nextQuestion: `יחידה ${unitMatch[0]} - מה בדיוק התקלה? האם היחידה דולקת?`,
-            stage: 'problem_description'
-        };
-    }
-    
-    if (conversationContext && conversationContext.messageHistory.length > 0) {
-        const lastHadarMessage = conversationContext.messageHistory
-            .filter(m => m.sender === 'hadar')
-            .slice(-1)[0];
+// 🎯 מערכת זיהוי בחירות חכמה משופרת
+class ConversationFlow {
+    static analyzeMessage(message, conversationContext) {
+        const msg = message.trim().toLowerCase();
+        const context = conversationContext || {};
         
-        if (lastHadarMessage) {
-            if (lastHadarMessage.message.includes('באיזו יחידה')) {
-                return {
-                    type: 'unit_response',
-                    nextQuestion: `מה בדיוק התקלה ביחידה ${msg}? האם היחידה דולקת?`,
-                    stage: 'problem_description'
-                };
-            }
-            
-            if (lastHadarMessage.message.includes('מה אתה צריך')) {
-                return {
-                    type: 'equipment_response',
-                    equipment: msg,
-                    nextQuestion: `כמה ${msg} אתה צריך? מה המפרט? איפה לשלוח?`,
-                    stage: 'quantity_specs'
-                };
-            }
+        console.log(`🔍 מנתח הודעה: "${msg}" בשלב: ${context.currentStage || 'greeting'}`);
+        
+        // בדיקת בחירות בתפריט הראשי
+        if (msg === '1' || msg.includes('תקלה')) {
+            return {
+                type: 'service_selection',
+                service: 'troubleshooting',
+                nextStage: 'unit_number',
+                response: 'באיזו יחידה יש את התקלה?\n(לדוגמה: יחידה 101, יחידה 204, או רק 603)'
+            };
         }
+        
+        if (msg === '2' || msg.includes('נזק')) {
+            return {
+                type: 'service_selection',
+                service: 'damage_report',
+                nextStage: 'damage_details',
+                response: 'אנא צלם את הנזק ושלח תמונה + מספר היחידה הפגועה'
+            };
+        }
+        
+        if (msg === '3' || msg.includes('מחיר') || msg.includes('הצעה')) {
+            return {
+                type: 'service_selection',
+                service: 'price_quote',
+                nextStage: 'equipment_type',
+                response: 'מה אתה צריך?\n1️⃣ כרטיסים\n2️⃣ גלילים\n3️⃣ זרועות\n4️⃣ אחר (פרט מה)'
+            };
+        }
+        
+        if (msg === '4' || msg.includes('הדרכה')) {
+            return {
+                type: 'service_selection',
+                service: 'training',
+                nextStage: 'training_topic',
+                response: 'איזה סוג הדרכה אתה צריך?\n1️⃣ תפעול יומיומי\n2️⃣ טיפול בתקלות\n3️⃣ מערכת חדשה\n4️⃣ אחר (פרט)'
+            };
+        }
+        
+        // זיהוי מספר יחידה
+        const unitMatch = msg.match(/(\d{3})|יחידה\s*(\d{1,3})/);
+        if (unitMatch && context.currentStage === 'unit_number') {
+            const unitNumber = unitMatch[1] || unitMatch[2];
+            return {
+                type: 'unit_identified',
+                unitNumber: unitNumber,
+                nextStage: 'problem_description',
+                response: `יחידה ${unitNumber} - מה בדיוק התקלה?\n• האם היחידה דולקת?\n• מה קורה כשמנסים להשתמש?\n• יש הודעות שגיאה?`
+            };
+        }
+        
+        // התקדמות בהתאם לשלב הנוכחי
+        if (context.currentStage === 'problem_description') {
+            return {
+                type: 'issue_description',
+                nextStage: 'solution_provided',
+                response: this.generateTroubleshootingResponse(msg, context.unitNumber)
+            };
+        }
+        
+        if (context.currentStage === 'equipment_type') {
+            const equipment = this.identifyEquipment(msg);
+            return {
+                type: 'equipment_identified',
+                equipment: equipment,
+                nextStage: 'quantity_specs',
+                response: `${equipment} - כמה אתה צריך?\nמה הכתובת לשליחה?\nמתי אתה צריך?`
+            };
+        }
+        
+        return null;
     }
     
-    return null;
+    static identifyEquipment(message) {
+        const msg = message.toLowerCase();
+        
+        if (msg.includes('כרטיס') || msg === '1') return 'כרטיסי חניה';
+        if (msg.includes('גליל') || msg === '2') return 'גלילי נייר תרמי';
+        if (msg.includes('זרוע') || msg === '3') return 'זרועות הידראוליות';
+        
+        return msg; // אם זה לא מזוהה, החזר את המילה כמו שהיא
+    }
+    
+    static generateTroubleshootingResponse(problemDescription, unitNumber) {
+        const problem = problemDescription.toLowerCase();
+        
+        let solution = '';
+        let urgencyLevel = 'רגילה';
+        
+        if (problem.includes('לא דולק') || problem.includes('אין חשמל')) {
+            solution = '🔧 פתרון מיידי:\n1. בדוק שהמתג דולק\n2. בדוק נתיכים בלוח החשמל\n3. וודא שהכבל מחובר היטב\n\n';
+            urgencyLevel = 'גבוהה';
+        } else if (problem.includes('לא קורא') || problem.includes('כרטיס')) {
+            solution = '🔧 פתרון מיידי:\n1. נקה את קורא הכרטיסים בעדינות\n2. נסה כרטיס אחר\n3. בדוק שאין לכלוך בחריץ\n\n';
+        } else if (problem.includes('זרוע') || problem.includes('לא עול')) {
+            solution = '🔧 פתרון מיידי:\n1. בדוק לחץ אוויר במדחס\n2. וודא שאין מכשולים\n3. בדוק רמת שמן הידראולי\n\n';
+            urgencyLevel = 'גבוהה';
+        } else if (problem.includes('תקוע') || problem.includes('לא זז')) {
+            solution = '🔧 פתרון מיידי:\n1. נסה לזוז ידנית (בזהירות!)\n2. בדוק שאין מכשולים\n3. אל תכריח בכוח\n\n';
+            urgencyLevel = 'גבוהה';
+        } else {
+            solution = '🔧 הבנתי את הבעיה.\n';
+        }
+        
+        // הוספת מידע נוסף בהתאם לדחיפות
+        if (urgencyLevel === 'גבוהה') {
+            solution += `📞 אם הפתרון לא עזר - אתקשר מיד: 039792365\n`;
+            solution += `🚨 טכנאי יגיע תוך 2-4 שעות\n`;
+            solution += `🆔 מספר קריאה: HSC-${serviceCallCounter++}`;
+        } else {
+            solution += `📞 במקרה ופתרון לא עזר: 039792365\n`;
+            solution += `🔧 טכנאי יתואם לפי צורך`;
+        }
+        
+        return solution;
+    }
 }
 
-// 🧠 פונקציה לFallback חכם
-function generateIntelligentFallback(message, customerData, conversationContext, customerName) {
-    console.log('🧠 Fallback חכם פעיל');
+// 🧠 פונקציה ראשית לטיפול בהודעות - ללא OpenAI
+function generateIntelligentResponse(message, customerName, customerData, phoneNumber, conversationContext) {
+    console.log('🧠 מתחיל עיבוד תגובה חכמה');
     
-    const choice = analyzeCustomerChoice(message, conversationContext);
-    
-    if (choice) {
-        console.log('✅ Fallback זיהה בחירה:', choice.type);
-        
-        if (customerData) {
-            let response = `שלום ${customerData.name} 👋\n\n`;
-            
-            switch(choice.type) {
-                case 'troubleshooting':
-                    response += `באיזו יחידה יש את התקלה?\n(מספר יחידה: 101, 204, 603)\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                    break;
-                    
-                case 'damage_report':
-                    response += `אנא צלם את הנזק ושלח מספר היחידה הפגועה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                    break;
-                    
-                case 'price_quote':
-                    response += `מה אתה צריך?\n(כרטיסים/גלילים/זרועות/אחר)\nכמות? מפרט? כתובת משלוח?\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                    break;
-                    
-                case 'training':
-                    response += `על איזה נושא אתה צריך הדרכה?\n(תפעול/תקלות/מערכת חדשה/אחר)\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                    break;
-                    
-                case 'unit_identified':
-                    response += `יחידה ${choice.unitNumber} - מה בדיוק התקלה?\nהאם היחידה דולקת? אפשר לצרף תמונה?\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                    break;
-                    
-                default:
-                    response += choice.nextQuestion + `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-            }
-            
-            return response;
-        } else {
-            return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא\n- שם החניון\n- מספר לקוח\n\n📞 039792365`;
+    // בדיקת מספר בדיקה
+    const testPhone = process.env.TEST_PHONE_NUMBER;
+    if (testPhone && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
+        if (message.startsWith('בדיקה:')) {
+            const testMessage = message.replace('בדיקה:', '').trim();
+            console.log(`🧪 מצב בדיקה: ${testMessage}`);
+            return `🧪 בדיקה הצליחה!\n\nהדר פעילה! ✅\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n${conversationContext ? `שיחות: ${conversationContext.conversationLength}` : 'ראשונה'}`;
         }
     }
     
+    // בדיקת פקודות ניקוי זיכרון
+    if (message.includes('קריאה חדשה') || message.includes('מחק זיכרון') || message.includes('איפוס שיחה')) {
+        return `🔄 זיכרון נוקה לקריאה חדשה.\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365`;
+    }
+    
+    // ניתוח ההודעה עם המערכת החכמה
+    const analysis = ConversationFlow.analyzeMessage(message, conversationContext);
+    
+    if (analysis && customerData) {
+        // עדכון שלב השיחה
+        const updateData = {
+            selectedService: analysis.service,
+            unitNumber: analysis.unitNumber
+        };
+        conversationMemory.updateConversationStage(phoneNumber, analysis.nextStage, updateData, customerData);
+        
+        // בניית תגובה
+        let response = `שלום ${customerData.name} 👋\n\n`;
+        response += analysis.response;
+        response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+        
+        return response;
+    }
+    
+    // תגובת ברירת מחדל
     if (customerData) {
         if (conversationContext && conversationContext.conversationLength > 1) {
-            return `שלום ${customerData.name} 👋\n\nאני זוכרת את השיחה שלנו מקודם.\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+            return `שלום ${customerData.name} 👋\n\nאני זוכרת את השיחה שלנו.\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365`;
         } else {
-            return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך היום?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
+            return `שלום ${customerData.name} מ${customerData.site} 👋\n\nאיך אוכל לעזור לך?\n1️⃣ תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
         }
     } else {
-        return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא • שם החניון • מספר לקוח\n\n📞 039792365`;
+        return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`;
     }
 }
 
@@ -392,68 +454,22 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// הגדרת multer
-const upload = multer({
-    storage: multer.memoryStorage(),
-    limits: { 
-        fileSize: 10 * 1024 * 1024,
-        files: 10
-    },
-    fileFilter: (req, file, cb) => {
-        console.log(`📁 קובץ שהועלה: ${file.originalname} (${file.mimetype})`);
-        
-        const allowedMimeTypes = [
-            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
-            'application/pdf',
-            'text/plain', 'text/csv'
-        ];
-        
-        if (allowedMimeTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            console.log(`❌ סוג קובץ לא מותר: ${file.mimetype}`);
-            cb(new Error(`סוג קובץ לא מותר. מותר: תמונות, PDF, טקסט`));
-        }
-    }
-});
-
-// פונקציות עזר לטיפול בקבצים
-function getFileCategory(mimetype) {
-    if (mimetype.startsWith('image/')) return 'image';
-    if (mimetype.includes('pdf')) return 'document';
-    if (mimetype.startsWith('text/')) return 'text';
-    return 'other';
-}
-
-function formatFileSize(bytes) {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-function createFileDescription(file) {
-    const category = getFileCategory(file.mimetype);
-    const size = formatFileSize(file.size);
+// 📋 פונקציה לבדיקה אם לשלוח מייל
+function shouldSendEmailAlert(conversationContext, messageText) {
+    // שלח מייל רק אם:
+    // 1. זו הודעה ראשונה (אין היסטוריה או פחות מ-2 הודעות)
+    // 2. או שזו תקלה דחופה
     
-    let description = `📁 ${file.originalname} (${size})`;
+    const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
     
-    switch(category) {
-        case 'image':
-            description += ' - תמונה';
-            break;
-        case 'document':
-            description += ' - מסמך';
-            break;
-        case 'text':
-            description += ' - קובץ טקסט';
-            break;
-        default:
-            description += ' - קובץ אחר';
-    }
+    const urgentKeywords = ['תקלה', 'דחוף', 'בעיה', 'לא עובד', 'שבור', 'תקוע', 'אין חשמל'];
+    const isUrgent = urgentKeywords.some(keyword => messageText.toLowerCase().includes(keyword));
     
-    return description;
+    const shouldSend = isFirstMessage || isUrgent;
+    
+    console.log(`📧 החלטת מייל: ${shouldSend ? 'שלח' : 'דלג'} (ראשונה: ${isFirstMessage}, דחוף: ${isUrgent})`);
+    
+    return shouldSend;
 }
 
 // עמוד הבית
@@ -473,33 +489,9 @@ app.get('/', (req, res) => {
                 .company-header { text-align: center; background: #3498db; color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; }
                 .hadar-info { background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #27ae60; }
                 .memory-stats { background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #ffc107; }
+                .fix-status { background: #d1ecf1; padding: 15px; border-radius: 10px; margin: 20px 0; border-right: 4px solid #17a2b8; }
                 .stats { display: flex; justify-content: space-around; margin: 20px 0; }
                 .stat { text-align: center; background: #ecf0f1; padding: 15px; border-radius: 8px; }
-                input, textarea, button, select { 
-                    width: 100%; 
-                    padding: 12px; 
-                    margin: 10px 0; 
-                    box-sizing: border-box;
-                    border: 2px solid #ddd;
-                    border-radius: 8px;
-                    font-size: 14px;
-                }
-                button { 
-                    background: linear-gradient(45deg, #3498db, #2980b9); 
-                    color: white; 
-                    border: none; 
-                    cursor: pointer;
-                    font-size: 16px;
-                    font-weight: bold;
-                    transition: all 0.3s;
-                }
-                button:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-                .customer-search { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .quick-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin: 20px 0; }
-                .quick-btn { padding: 15px; background: #27ae60; color: white; text-decoration: none; border-radius: 8px; text-align: center; }
-                .quick-btn:hover { background: #219a52; }
-                .service-areas { background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0; }
-                .service-area { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-right: 4px solid #3498db; }
             </style>
         </head>
         <body>
@@ -509,16 +501,27 @@ app.get('/', (req, res) => {
                     <p>מערכת בקרת חניה מתקדמת עם AI מתקדם</p>
                 </div>
                 
+                <div class="fix-status">
+                    <h3>✅ כל התיקונים הושלמו!</h3>
+                    <ul>
+                        <li>🎯 <strong>זיהוי בחירות משופר</strong> - מעבר בין שלבים</li>
+                        <li>📧 <strong>מיילים חכמים</strong> - רק בהודעה ראשונה ותקלות דחופות</li>
+                        <li>🧠 <strong>בלי OpenAI</strong> - פועל ללא תלות במפתח חיצוני</li>
+                        <li>🔧 <strong>מסד תקלות</strong> - פתרונות מיידיים</li>
+                        <li>⚡ <strong>תגובות מהירות</strong> - ללא השהיות API</li>
+                    </ul>
+                </div>
+                
                 <div class="hadar-info">
                     <h3>👩‍💼 הדר - נציגת שירות לקוחות חכמה</h3>
                     <p><strong>🧠 עכשיו עם זיכרון שיחות מתקדם! (4 שעות)</strong></p>
                     <ul>
-                        <li>🔧 שירות ודיווח על תקלות עם המשכיות</li>
+                        <li>🔧 שירות ודיווח על תקלות עם פתרונות מיידיים</li>
                         <li>💰 הצעות מחיר לציוד</li>
                         <li>📋 דיווח על נזקים</li>
                         <li>📚 הדרכות תפעול</li>
                         <li>🔄 זיכרון הקשר משיחות קודמות (4 שעות)</li>
-                        <li>🆕 אפשרות לפתיחת קריאות מרובות</li>
+                        <li>🆕 מערכת שלבים חכמה</li>
                     </ul>
                     <p><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
                     <small>שעות פעילות: א'-ה' 8:15-17:00</small>
@@ -539,7 +542,7 @@ app.get('/', (req, res) => {
                     </div>
                     <div class="stat">
                         <h3>🤖 הדר AI Bot</h3>
-                        <small>עם זיכרון</small>
+                        <small>ללא OpenAI</small>
                     </div>
                     <div class="stat">
                         <h3>👥 לקוחות רשומים</h3>
@@ -554,9 +557,9 @@ app.get('/', (req, res) => {
                     <p><strong>שרת אימייל:</strong> smtp.012.net.il</p>
                     <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי בקרת חניה</p>
                     <p><strong>נציגת שירות:</strong> הדר - AI מתקדם עם זיכרון</p>
-                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת 4 שעות, קריאות מרובות, ניקוי אוטומטי</p>
-                    <p><strong>⚡ בקרת קצב:</strong> מניעת שגיאות 429</p>
-                    <p><strong>✅ תיקונים:</strong> מיילים חכמים, זיהוי בחירות, fallback משופר</p>
+                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת 4 שעות, ניקוי אוטומטי</p>
+                    <p><strong>⚡ בקרת קצב:</strong> ללא תלות ב-OpenAI</p>
+                    <p><strong>✅ סטטוס:</strong> כל התיקונים הושלמו!</p>
                 </div>
             </div>
         </body>
@@ -564,7 +567,82 @@ app.get('/', (req, res) => {
     `);
 });
 
-// 📲 WhatsApp Webhook משופר עם זיכרון
+// דשבורד זיכרון
+app.get('/memory-dashboard', (req, res) => {
+    const conversations = Array.from(conversationMemory.conversations.entries());
+    const stats = conversationMemory.getStats();
+    
+    let conversationsHtml = '';
+    conversations.forEach(([key, conv]) => {
+        conversationsHtml += `
+            <div class="conversation">
+                <h4>${conv.customer ? conv.customer.name : 'לקוח לא מזוהה'} (${key})</h4>
+                <p>📞 ${conv.phoneNumber} | 🕐 ${conv.startTime.toLocaleString('he-IL')}</p>
+                <p>📊 ${conv.messages.length} הודעות | 🎯 ${conv.currentStage || 'greeting'}</p>
+                ${conv.selectedService ? `<p>🔧 שירות: ${conv.selectedService}</p>` : ''}
+                ${conv.unitNumber ? `<p>📍 יחידה: ${conv.unitNumber}</p>` : ''}
+                <p>📝 ${conv.status}</p>
+            </div>
+        `;
+    });
+    
+    res.send(`
+        <!DOCTYPE html>
+        <html dir="rtl">
+        <head>
+            <meta charset="UTF-8">
+            <title>דשבורד זיכרון הדר</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+                .header { background: #3498db; color: white; padding: 20px; border-radius: 10px; text-align: center; }
+                .stats { display: flex; justify-content: space-around; margin: 20px 0; }
+                .stat { background: white; padding: 15px; border-radius: 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                .conversation { background: white; margin: 10px 0; padding: 15px; border-radius: 8px; border-right: 4px solid #3498db; }
+                .refresh { margin: 20px 0; text-align: center; }
+                .refresh button { padding: 10px 20px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; }
+            </style>
+            <script>
+                setTimeout(() => location.reload(), 60000); // רענון אוטומטי כל דקה
+            </script>
+        </head>
+        <body>
+            <div class="header">
+                <h1>🧠 דשבורד זיכרון הדר</h1>
+                <p>מעקב שיחות בזמן אמת</p>
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <h3>${stats.active}</h3>
+                    <p>שיחות פעילות</p>
+                </div>
+                <div class="stat">
+                    <h3>${stats.resolved}</h3>
+                    <p>שיחות מסוימות</p>
+                </div>
+                <div class="stat">
+                    <h3>${stats.waiting}</h3>
+                    <p>ממתינות לטכנאי</p>
+                </div>
+                <div class="stat">
+                    <h3>${stats.total}</h3>
+                    <p>סה"כ שיחות</p>
+                </div>
+            </div>
+            
+            <div class="refresh">
+                <button onclick="location.reload()">🔄 רענן</button>
+            </div>
+            
+            <div class="conversations">
+                ${conversationsHtml || '<p style="text-align: center; color: #666;">אין שיחות פעילות כרגע</p>'}
+            </div>
+        </body>
+        </html>
+    `);
+});
+
+// 📲 WhatsApp Webhook משופר עם כל התיקונים
 app.post('/webhook/whatsapp', async (req, res) => {
     try {
         console.log('📲 WhatsApp Webhook received:', JSON.stringify(req.body, null, 2));
@@ -579,6 +657,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
             let fileInfo = null;
             const customerName = senderData.senderName || 'לקוח';
 
+            // עיבוד סוגי הודעות שונים
             if (messageData.textMessageData) {
                 messageText = messageData.textMessageData.textMessage || 'הודעה ללא טקסט';
             } else if (messageData.fileMessageData) {
@@ -592,7 +671,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                     downloadUrl: messageData.fileMessageData.downloadUrl || null
                 };
                 
-                console.log(`📁 קובץ התקבל: ${fileInfo.fileName} (${fileInfo.mimeType}, ${formatFileSize(fileInfo.fileSize)})`);
+                console.log(`📁 קובץ התקבל: ${fileInfo.fileName} (${fileInfo.mimeType})`);
             } else {
                 messageText = 'הודעה מסוג לא זוהה';
             }
@@ -608,101 +687,49 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 console.log(`⚠️ לקוח לא מזוהה: ${phoneNumber}`);
             }
             
-            // הוספת ההודעה לזיכרון (עם פרטי קבצים אם יש)
-            let messageForMemory = messageText;
-            if (hasFiles && fileInfo) {
-                const fileAnalysis = analyzeFileForTroubleshooting(fileInfo, messageText);
-                messageForMemory += `\n\n📎 קובץ מצורף:\n${fileAnalysis.description}`;
-                if (fileAnalysis.isUrgent) {
-                    messageForMemory += '\n🚨 זוהה כתקלה דחופה';
-                }
-            }
-
-            // בדיקה למחיקת זיכרון ללא סגירת שיחה - קריאה חדשה
+            // קבלת הקשר השיחה לפני עיבוד ההודעה
+            const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
+            
+            // בדיקה למחיקת זיכרון
             if (messageText.includes('קריאה חדשה') || messageText.includes('מחק זיכרון') || messageText.includes('איפוס שיחה')) {
                 console.log(`🔄 מנקה זיכרון עבור קריאה חדשה: ${phoneNumber}`);
                 const key = conversationMemory.createConversationKey(phoneNumber, customer);
                 conversationMemory.conversations.delete(key);
                 
                 let newCallResponse = customer ? 
-                    `שלום ${customer.name} 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nכעת אוכל לטפל בנושא חדש.\n\nאיך אוכל לעזור לך?` :
-                    `שלום 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nאיך אוכל לעזור לך?`;
+                    `שלום ${customer.name} 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nאיך אוכל לעזור לך?\n1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה\n\n📞 039792365` :
+                    `שלום 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nאיך אוכל לעזור לך?\n\n📞 039792365`;
                 
                 await sendWhatsAppMessage(phoneNumber, newCallResponse);
                 return res.status(200).json({ status: 'OK - Memory cleared for new call' });
             }
-
-            // בדיקה פשוטה לסגירת שיחה
-            if (messageText.includes('תקלה חדשה') || messageText.includes('סיום') || messageText.includes('שיחה חדשה')) {
-                console.log(`🔄 מנקה זיכרון עבור: ${phoneNumber}`);
-                const key = conversationMemory.createConversationKey(phoneNumber, customer);
-                conversationMemory.conversations.delete(key);
-                
-                let closeResponse = customer ? 
-                    `שלום ${customer.name} 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\nאיך אוכל לעזור לך?` :
-                    `שלום 👋\n\n✅ השיחה נסגרה והזיכרון נוקה.\nאיך אוכל לעזור לך?`;
-                
-                await sendWhatsAppMessage(phoneNumber, closeResponse);
-                return res.status(200).json({ status: 'OK - Conversation closed' });
-            }
             
-            // קבלת הקשר השיחה
-            const conversationContext = conversationMemory.getConversationContext(phoneNumber, customer);
-            
-            // יצירת תגובה עם AI (עם השהיה למניעת rate limiting)
-            await rateLimiter.waitForNextRequest();
-            
-            let response;
+            // יצירת הודעה לזיכרון (כולל פרטי קבצים)
+            let messageForMemory = messageText;
             if (hasFiles && fileInfo) {
-                // תגובה מותאמת לקבצים
-                const fileAnalysis = analyzeFileForTroubleshooting(fileInfo, messageText);
-                response = await generateFileHandlingResponse(
-                    messageText,
-                    fileInfo,
-                    fileAnalysis,
-                    customerName,
-                    customer,
-                    phoneNumber,
-                    conversationContext
-                );
-            } else {
-                // תגובה רגילה לטקסט
-                response = await generateAIResponseWithMemory(
-                    messageText,
-                    customerName,
-                    customer,
-                    phoneNumber,
-                    conversationContext
-                );
+                messageForMemory += `\n\n📎 קובץ מצורף: ${fileInfo.fileName} (${(fileInfo.fileSize / 1024).toFixed(1)}KB)`;
             }
+
+            // יצירת תגובה חכמה (ללא OpenAI)
+            const response = generateIntelligentResponse(
+                messageText,
+                customerName,
+                customer,
+                phoneNumber,
+                conversationContext
+            );
             
-            // הוספת הודעת הלקוח והדר לזיכרון
+            // הוספת הודעות לזיכרון
             conversationMemory.addMessage(phoneNumber, messageForMemory, 'customer', customer);
             conversationMemory.addMessage(phoneNumber, response, 'hadar', customer);
 
             // שליחת תגובה
             await sendWhatsAppMessage(phoneNumber, response);
 
-            // בדיקה אם השיחה הסתיימה וצריך לשלוח סיכום
-            const shouldSendSummary = checkIfConversationEnded(messageText, response);
-            if (shouldSendSummary && customer && customer.email) {
-                console.log('📋 שליחת סיכום שיחה...');
-                await sendConversationSummary(customer, conversationContext);
-                conversationMemory.endConversation(phoneNumber, customer);
-            }
-
-            // שליחת אימייל התראה למנהל - רק בהודעה ראשונה או תקלה דחופה
+            // שליחת אימייל התראה - רק כשצריך!
             try {
-                const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
-                const isUrgent = messageText.toLowerCase().includes('תקלה') || 
-                                messageText.toLowerCase().includes('דחוף') || 
-                                messageText.toLowerCase().includes('בעיה') ||
-                                messageText.toLowerCase().includes('לא עובד') ||
-                                messageText.toLowerCase().includes('שבור');
-                
-                // שלח מייל רק אם זה הודעה ראשונה או תקלה דחופה
-                if (isFirstMessage || isUrgent) {
-                    console.log('📧 שולח התראה למנהל - הודעה ראשונה או תקלה דחופה');
+                if (shouldSendEmailAlert(conversationContext, messageText)) {
+                    console.log('📧 שולח התראה למנהל');
                     
                     const serviceNumber = generateServiceCallNumber();
                     const emailSubject = customer ? 
@@ -715,7 +742,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         subject: emailSubject,
                         html: generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext)
                     });
-                    console.log('📧 התראה נשלחה למנהל Dror@sbparking.co.il');
+                    console.log('📧 התראה נשלחה למנהל');
                 } else {
                     console.log('ℹ️ דילוג על מייל - לא הודעה ראשונה ולא דחוף');
                 }
@@ -733,240 +760,13 @@ app.post('/webhook/whatsapp', async (req, res) => {
     }
 });
 
-// 🧠 פונקציית AI משופרת עם זיכרון וזיהוי בחירות
-async function generateAIResponseWithMemory(message, customerName, customerData, phoneNumber, conversationContext) {
-    try {
-        console.log('🔍 DEBUG: התחיל AI response');
-        console.log('🔍 DEBUG: הודעה:', message);
-        console.log('🔍 DEBUG: לקוח:', customerData?.name || 'לא מזוהה');
-        console.log('🔍 DEBUG: זיכרון:', conversationContext?.conversationLength || 'אין');
-        
-        // בדיקה אם זה מספר הבדיקה
-        const testPhone = process.env.TEST_PHONE_NUMBER;
-        if (testPhone && phoneNumber && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
-            if (message.startsWith('בדיקה:')) {
-                const testMessage = message.replace('בדיקה:', '').trim();
-                console.log(`🧪 מצב בדיקה פעיל: ${testMessage}`);
-                return `🧪 מצב בדיקה - הדר עם זיכרון פעילה!\n\nהודעה: "${testMessage}"\n${customerData ? `לקוח: ${customerData.name}` : 'לא מזוהה'}\n${conversationContext ? `שיחות קודמות: ${conversationContext.conversationLength}` : 'שיחה ראשונה'}\n\nהמערכת עובדת! ✅`;
-            }
-        }
+// פונקציות עזר
 
-        // 🎯 זיהוי בחירות חכם
-        const choice = analyzeCustomerChoice(message, conversationContext);
-        
-        if (choice) {
-            console.log('✅ זוהתה בחירה:', choice.type);
-            
-            // אם זה לקוח מזוהה - תן תגובה מיידית
-            if (customerData) {
-                let response = `שלום ${customerData.name} 👋\n\n`;
-                response += choice.nextQuestion;
-                response += `\n\n📞 039792365 | 📧 Service@sbcloud.co.il`;
-                return response;
-            } else {
-                // לקוח לא מזוהה - דרוש זיהוי
-                return `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני זקוקה לפרטי זיהוי:\n- שם מלא\n- שם החניון\n- מספר לקוח\n\n📞 039792365`;
-            }
-        }
-
-        // אם לא זוהתה בחירה ספציפית - חזור ל-AI רגיל או fallback
-        console.log('⚠️ לא זוהתה בחירה - עובר ל-AI');
-
-        // הכן prompt ל-OpenAI
-        let systemPrompt = `אני הדר, נציגת שירות לקוחות של חברת שיידט את בכמן ישראל.
-עכשיו יש לי זיכרון מתקדם של שיחות!`;
-
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-3.5-turbo',
-            messages: [
-                {
-                    role: 'system',
-                    content: systemPrompt
-                },
-                {
-                    role: 'user',
-                    content: `הלקוח ${customerName} שלח: "${message}"`
-                }
-            ],
-            max_tokens: 300,
-            temperature: 0.2
-        }, {
-            headers: {
-                'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 20000
-        });
-
-        console.log('✅ DEBUG: AI Response מוכן');
-        return response.data.choices[0].message.content.trim();
-        
-    } catch (error) {
-        console.error('❌ שגיאה ב-OpenAI:', error.message);
-        console.log('🔄 DEBUG: נכנס ל-fallback mode');
-        
-        // תגובות fallback מתוקנות עם זיהוי בחירות
-        return generateIntelligentFallback(message, customerData, conversationContext, customerName);
-    }
-}
-
-// 🤖 פונקציה ליצירת תגובה מותאמת לקבצים
-async function generateFileHandlingResponse(messageText, fileInfo, fileAnalysis, customerName, customerData, phoneNumber, conversationContext) {
-    try {
-        // אם זה מספר הבדיקה
-        const testPhone = process.env.TEST_PHONE_NUMBER;
-        if (testPhone && phoneNumber === testPhone.replace(/[^\d]/g, '')) {
-            return `🧪 בדיקת קבצים הצליחה!\n\nהתקבל קובץ: ${fileInfo.fileName}\nסוג: ${fileAnalysis.category}\n${fileAnalysis.isUrgent ? '🚨 זוהה כדחוף' : '✅ רגיל'}\n\nהמערכת עובדת!`;
-        }
-
-        // תגובת fallback לקבצים
-        if (customerData) {
-            return `שלום ${customerData.name} 👋
-
-קיבלתי את הקובץ: ${fileInfo.fileName}
-${fileAnalysis.isUrgent ? '🚨 זוהה כתקלה דחופה' : '📁 בבדיקה'}
-
-אני בודקת ואחזור אליך בהקדם.
-במקרה דחוף: 📞 039792365
-
-הדר - שיידט את בכמן`;
-        } else {
-            return `שלום ${customerName} 👋
-
-קיבלתי קובץ, אבל כדי לטפל בפנייה אני צריכה לזהות אותך קודם:
-
-- שם מלא
-- שם החניון/אתר החניה  
-- מספר לקוח
-
-📞 039792365`;
-        }
-        
-    } catch (error) {
-        console.error('❌ שגיאה בטיפול בקבצים:', error.message);
-        return `שלום! קיבלתי קובץ אבל יש בעיה טכנית. אנא צור קשר: 📞 039792365`;
-    }
-}
-
-// 📋 פונקציה לבדיקה אם השיחה הסתיימה
-function checkIfConversationEnded(lastCustomerMessage, hadarResponse) {
-    const customerMsg = lastCustomerMessage.toLowerCase();
-    const hadarMsg = hadarResponse.toLowerCase();
-    
-    const endIndicators = [
-        'תודה', 'טוב', 'בסדר', 'כן שלח', 'כן תשלח', 'שלח סיכום', 
-        'תודה רבה', 'הכל ברור', 'אוקיי', 'מעולה'
-    ];
-    
-    const summaryRequested = customerMsg.includes('סיכום') || customerMsg.includes('מייל') || 
-                            hadarMsg.includes('סיכום') || hadarMsg.includes('אשלח');
-    
-    const thanksGiven = endIndicators.some(indicator => customerMsg.includes(indicator));
-    
-    return summaryRequested && thanksGiven;
-}
-
-// 📧 פונקציה לשליחת סיכום שיחה מפורט
-async function sendConversationSummary(customer, conversationContext) {
-    try {
-        if (!customer.email) {
-            console.log('⚠️ אין אימייל ללקוח לשליחת סיכום');
-            return;
-        }
-        
-        const messages = conversationContext.messageHistory;
-        const customerMessages = messages.filter(m => m.sender === 'customer');
-        const hadarMessages = messages.filter(m => m.sender === 'hadar');
-        
-        const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
-        let issueType = 'שאלות כלליות';
-        let urgency = 'רגילה';
-        let nextSteps = 'אין פעולות נוספות נדרשות';
-        
-        if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
-            issueType = 'תקלה טכנית';
-            urgency = 'גבוהה';
-            nextSteps = 'נפתחה קריאת שירות לטכנאי';
-        } else if (allCustomerText.includes('מחיר') || allCustomerText.includes('הצעה')) {
-            issueType = 'הצעת מחיר';
-            nextSteps = 'תישלח הצעת מחיר תוך 24 שעות';
-        } else if (allCustomerText.includes('נזק') || allCustomerText.includes('שבור')) {
-            issueType = 'דיווח נזק';
-            urgency = 'גבוהה';
-            nextSteps = 'הועבר לטיפול טכנאי מיידי';
-        }
-        
-        const emailResult = await transporter.sendMail({
-            from: process.env.EMAIL_USER || 'Report@sbparking.co.il',
-            to: customer.email,
-            cc: 'Service@sbcloud.co.il, Dror@sbparking.co.il',
-            subject: `📋 סיכום שיחה - ${customer.name} (${customer.site}) - ${issueType}`,
-            html: `
-                <div dir="rtl" style="font-family: Arial, sans-serif;">
-                    <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h2 style="margin: 0;">📋 סיכום שיחה - הדר שירות לקוחות</h2>
-                        <p style="margin: 5px 0 0 0;">שיידט את בכמן - מערכת בקרת חניה מתקדמת</p>
-                    </div>
-                    
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h3 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח:</h3>
-                        <p><strong>שם:</strong> ${customer.name}</p>
-                        <p><strong>אתר חניה:</strong> ${customer.site}</p>
-                        <p><strong>מספר לקוח:</strong> #${customer.id}</p>
-                        <p><strong>טלפון:</strong> ${customer.phone}</p>
-                        <p><strong>אימייל:</strong> ${customer.email}</p>
-                        <p><strong>כתובת:</strong> ${customer.address}</p>
-                        <p><strong>תאריך ושעה:</strong> ${new Date().toLocaleString('he-IL')}</p>
-                    </div>
-                </div>
-            `
-        });
-        
-        console.log('📧 סיכום שיחה נשלח בהצלחה:', emailResult.messageId);
-        return emailResult;
-        
-    } catch (error) {
-        console.error('❌ שגיאה בשליחת סיכום שיחה:', error);
-        throw error;
-    }
-}
-
-// 📧 פונקציה ליצירת אימייל התראה למנהל
-function generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext) {
-    return `
-        <div dir="rtl" style="font-family: Arial, sans-serif;">
-            <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <h2 style="margin: 0;">📲 הודעה חדשה מוואטסאפ</h2>
-                <p style="margin: 5px 0 0 0;">שיידט את בכמן - מערכת שירות לקוחות עם זיכרון</p>
-            </div>
-            
-            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📞 פרטי השולח:</h3>
-                <p><strong>📱 מספר:</strong> ${phoneNumber}</p>
-                <p><strong>👤 שם:</strong> ${customerName}</p>
-                
-                ${customer ? `
-                <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-right: 4px solid #28a745; margin-top: 15px;">
-                    <h4 style="color: #155724; margin-top: 0;">✅ לקוח מזוהה במערכת:</h4>
-                    <p><strong>שם:</strong> ${customer.name}</p>
-                    <p><strong>אתר חניה:</strong> ${customer.site}</p>
-                    <p><strong>מספר לקוח:</strong> #${customer.id}</p>
-                </div>
-                ` : `
-                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107; margin-top: 15px;">
-                    <p style="color: #856404; margin: 0;"><strong>⚠️ לקוח לא מזוהה במערכת</strong></p>
-                </div>
-                `}
-            </div>
-            
-            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db;">
-                <h3 style="color: #2c3e50; margin-top: 0;">📥 ההודעה:</h3>
-                <p>"${messageText}"</p>
-                <h3 style="color: #2c3e50;">📤 התגובה:</h3>
-                <p>"${response}"</p>
-            </div>
-        </div>
-    `;
+// פונקציה ליצירת מספר קריאת שירות
+function generateServiceCallNumber() {
+    const callNumber = `HSC-${serviceCallCounter}`;
+    serviceCallCounter++;
+    return callNumber;
 }
 
 // פונקציה לחיפוש לקוח לפי מספר טלפון
@@ -1029,6 +829,74 @@ async function sendWhatsAppMessage(phoneNumber, message) {
     }
 }
 
+// 📧 פונקציה ליצירת אימייל התראה למנהל
+function generateAlertEmail(phoneNumber, customerName, messageText, response, customer, conversationContext) {
+    const isFirstMessage = !conversationContext || conversationContext.conversationLength <= 1;
+    const isUrgent = ['תקלה', 'דחוף', 'בעיה', 'לא עובד', 'שבור'].some(keyword => 
+        messageText.toLowerCase().includes(keyword)
+    );
+    
+    return `
+        <div dir="rtl" style="font-family: Arial, sans-serif;">
+            <div style="background: linear-gradient(45deg, #3498db, #2980b9); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h2 style="margin: 0;">📲 ${isFirstMessage ? 'הודעה ראשונה' : 'תקלה דחופה'} מוואטסאפ</h2>
+                <p style="margin: 5px 0 0 0;">שיידט את בכמן - מערכת שירות לקוחות חכמה</p>
+            </div>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                <h3 style="color: #2c3e50; margin-top: 0;">📞 פרטי השולח:</h3>
+                <p><strong>📱 מספר:</strong> ${phoneNumber}</p>
+                <p><strong>👤 שם:</strong> ${customerName}</p>
+                <p><strong>⏰ זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
+                
+                ${customer ? `
+                <div style="background: #d4edda; padding: 15px; border-radius: 8px; border-right: 4px solid #28a745; margin-top: 15px;">
+                    <h4 style="color: #155724; margin-top: 0;">✅ לקוח מזוהה במערכת:</h4>
+                    <p><strong>שם:</strong> ${customer.name}</p>
+                    <p><strong>אתר חניה:</strong> ${customer.site}</p>
+                    <p><strong>מספר לקוח:</strong> #${customer.id}</p>
+                    <p><strong>טלפון:</strong> ${customer.phone}</p>
+                    <p><strong>אימייל:</strong> ${customer.email}</p>
+                </div>
+                ` : `
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-right: 4px solid #ffc107; margin-top: 15px;">
+                    <p style="color: #856404; margin: 0;"><strong>⚠️ לקוח לא מזוהה במערכת</strong></p>
+                </div>
+                `}
+                
+                ${isUrgent ? `
+                <div style="background: #f8d7da; padding: 15px; border-radius: 8px; border-right: 4px solid #dc3545; margin-top: 15px;">
+                    <p style="color: #721c24; margin: 0;"><strong>🚨 תקלה דחופה זוהתה!</strong></p>
+                </div>
+                ` : ''}
+            </div>
+            
+            <div style="background: white; padding: 20px; border-radius: 10px; border-right: 4px solid #3498db; margin-bottom: 20px;">
+                <h3 style="color: #2c3e50; margin-top: 0;">📥 ההודעה:</h3>
+                <p style="background: #f8f9fa; padding: 10px; border-radius: 5px;">"${messageText}"</p>
+                
+                <h3 style="color: #2c3e50;">📤 התגובה החכמה:</h3>
+                <p style="background: #e8f5e8; padding: 10px; border-radius: 5px;">"${response}"</p>
+            </div>
+            
+            ${conversationContext ? `
+            <div style="background: #e9ecef; padding: 15px; border-radius: 8px;">
+                <h4 style="margin-top: 0;">📊 מידע על השיחה:</h4>
+                <p><strong>מספר הודעות:</strong> ${conversationContext.conversationLength}</p>
+                <p><strong>שלב נוכחי:</strong> ${conversationContext.currentStage || 'greeting'}</p>
+                ${conversationContext.selectedService ? `<p><strong>שירות נבחר:</strong> ${conversationContext.selectedService}</p>` : ''}
+                ${conversationContext.unitNumber ? `<p><strong>מספר יחידה:</strong> ${conversationContext.unitNumber}</p>` : ''}
+            </div>
+            ` : ''}
+            
+            <div style="text-align: center; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                <p style="margin: 0; color: #666;">מערכת הדר - בוט שירות לקוחות חכם עם זיכרון</p>
+                <p style="margin: 0; color: #666;">📞 039792365 | 📧 Service@sbcloud.co.il</p>
+            </div>
+        </div>
+    `;
+}
+
 // הפעלת השרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
@@ -1039,9 +907,10 @@ app.listen(PORT, () => {
     console.log('🏢 חברה: שיידט את בכמן');
     console.log(`👥 לקוחות במערכת: ${customers.length}`);
     console.log('🧠 מערכת זיכרון הדר: פעילה (4 שעות)');
-    console.log('⚡ בקרת קצב API: מופעלת');
-    console.log('✅ כל התיקונים יושמו: מיילים חכמים, זיהוי בחירות, fallback משופר');
-    console.log('🔧 קובץ מלא וגמור!');
+    console.log('⚡ בלי תלות ב-OpenAI: פועל באופן עצמאי');
+    console.log('✅ כל התיקונים הושלמו בהצלחה!');
+    console.log('📊 דשבורד זיכרון: /memory-dashboard');
+    console.log('🔧 מערכת מוכנה לעבודה!');
 });
 
 module.exports = app;
