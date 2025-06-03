@@ -899,8 +899,8 @@ async function generateAIResponseWithMemory(message, customerName, customerData,
 
 🧠 מצב הזיכרון הנוכחי:`;
 
-        if (conversationContext && conversationContext.conversationLength > 1) {
-            systemPrompt += `
+if (conversationContext && conversationContext.conversationLength > 1) {
+    systemPrompt += `
 ✅ זוהי שיחה מתמשכת!
 - התחלנו לדבר ב: ${new Date(conversationContext.startTime).toLocaleString('he-IL')}
 - מספר הודעות בשיחה: ${conversationContext.conversationLength}
@@ -915,12 +915,10 @@ ${conversationContext.messageHistory.slice(-6).map(msg =>
 ${conversationContext.summary}
 
 🎯 אני צריכה להמשיך את השיחה בהתאם להקשר הזה!`;
-        } else {
-            systemPrompt += `
+} else {
+    systemPrompt += `
 🆕 זוהי שיחה חדשה או הראשונה עם הלקוח הזה.`;
-        }
-
-        systemPrompt += `
+}
 
 🔍 כללי זיהוי לקוח:
 ${customerData ? `
