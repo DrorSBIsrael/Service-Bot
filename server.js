@@ -919,7 +919,7 @@ ${conversationContext.summary}
     systemPrompt += `
 🆕 זוהי שיחה חדשה או הראשונה עם הלקוח הזה.`;
 }
-
+systemPrompt += `
 🔍 כללי זיהוי לקוח:
 ${customerData ? `
 ✅ לקוח מזוהה במערכת:
@@ -951,7 +951,7 @@ ${conversationContext && conversationContext.conversationLength > 1 ? `
 🆕 לקוח חדש או שיחה ראשונה:
 "שלום! 👋 איך אפשר לעזור היום?
 1️⃣ תקלה | 2️⃣ נזק | 3️⃣ הצעת מחיר | 4️⃣ הדרכה"
-`}
+`}`
 
 🟠 טיפול בתקלות (מבוסס Service failure scenarios.json):
 1. "באיזו יחידה יש את התקלה? (מספר יחידה: 101, 204, 603)"
