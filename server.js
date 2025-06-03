@@ -84,7 +84,7 @@ try {
 class ConversationMemory {
     constructor() {
         this.conversations = new Map();
-        this.maxConversationAge = 24 * 60 * 60 * 1000; // 24 שעות
+        this.maxConversationAge = 2 * 60 * 60 * 1000; // שומר לשעתיים
         this.cleanupInterval = 60 * 60 * 1000; // ניקוי כל שעה
         
         // הפעלת ניקוי אוטומטי
@@ -165,14 +165,15 @@ class ConversationMemory {
         // זיהוי נושא השיחה
         const allCustomerText = customerMessages.map(m => m.message).join(' ').toLowerCase();
         if (allCustomerText.includes('תקלה') || allCustomerText.includes('בעיה') || allCustomerText.includes('לא עובד')) {
-            summary += `• נושא: טיפול בתקלה\n`;
+            summary += `• נושא: טיפול בתקלה (זיכרון 4 שעות)\n`;
         } else if (allCustomerText.includes('מחיר') || allCustomerText.includes('הצעה')) {
-            summary += `• נושא: הצעת מחיר\n`;
+            summary += `• נושא: הצעת מחיר (זיכרון 4 שעות)\n`;
         } else if (allCustomerText.includes('נזק') || allCustomerText.includes('שבור')) {
-            summary += `• נושא: דיווח נזק\n`;
+            summary += `• נושא: דיווח נזק (זיכרון 4 שעות)\n`;
         } else {
-            summary += `• נושא: שאלות כלליות\n`;
+            summary += `• נושא: שאלות כלליות (זיכרון 4 שעות)\n`;
         }
+        summary += `• אפשרות: כתוב "קריאה חדשה" לפתיחת קריאה נוספה\n`;
         
         return summary;
     }
@@ -503,7 +504,7 @@ app.get('/', (req, res) => {
                     <p><strong>שרת אימייל:</strong> smtp.012.net.il</p>
                     <p><strong>לקוחות במערכת:</strong> ${customers.length} אתרי בקרת חניה</p>
                     <p><strong>נציגת שירות:</strong> הדר - AI מתקדם עם זיכרון</p>
-                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת 24 שעות, ניקוי אוטומטי</p>
+                    <p><strong>🧠 מערכת זיכרון:</strong> שמירת לשעתיים, ניקוי אוטומטי</p>
                     <p><strong>⚡ בקרת קצב:</strong> מניעת שגיאות 429</p>
                 </div>
             </div>
@@ -713,6 +714,19 @@ console.log(`📞 הודעה מ-${phoneNumber} (${customerName}): ${messageText}
 	        messageForMemory += '\n🚨 זוהה כתקלה דחופה';
 	    }
 	}
+// בדיקה למחיקת זיכרון ללא סגירת שיחה - קריאה חדשה
+if (messageText.includes('קריאה חדשה') || messageText.includes('מחק זיכרון') || messageText.includes('איפוס שיחה')) {
+    console.log(`🔄 מנקה זיכרון עבור קריאה חדשה: ${phoneNumber}`);
+    const key = conversationMemory.createConversationKey(phoneNumber, customer);
+    conversationMemory.conversations.delete(key);
+    
+    let newCallResponse = customer ? 
+        `שלום ${customer.name} 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nכעת אוכל לטפל בנושא חדש.\n\nאיך אוכל לעזור לך?` :
+        `שלום 👋\n\n🆕 זיכרון נוקה לקריאה חדשה.\nאיך אוכל לעזור לך?`;
+    
+    await sendWhatsAppMessage(phoneNumber, newCallResponse);
+    return res.status(200).json({ status: 'OK - Memory cleared for new call' });
+}
 
 // בדיקה פשוטה לסגירת שיחה
 if (messageText.includes('תקלה חדשה') || messageText.includes('סיום') || messageText.includes('שיחה חדשה')) {
