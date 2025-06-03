@@ -928,15 +928,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             if (hasFiles && fileInfo) {
                 // תגובה מותאמת לקבצים
-                analysisResult = await generateFileHandlingResponse(
-                    messageText,
-                    fileInfo,
-                    analyzeFileForTroubleshooting(fileInfo, messageText),
-                    customerName,
-                    customer,
-                    phoneNumber,
-                    conversationContext
-                );
+                const fileAnalysis = analyzeFileForTroubleshooting(fileInfo, messageText);
                 
                 // בדיקה אם זה דיווח נזק עם תמונה ומספר יחידה
                 if (conversationContext && conversationContext.currentStage === 'damage_details') {
@@ -949,6 +941,16 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         
                         // עדכון שלב השיחה
                         conversationMemory.updateConversationStage(phoneNumber, 'damage_assessment', { unitNumber: unitNumber }, customer);
+                    } else {
+                        // תמונה בלי מספר יחידה - מבקש מספר
+                        analysisResult = `שלום ${customer ? customer.name : customerName} 👋\n\nקיבלתי את תמונת הנזק.\n\nעכשיו אני צריכה את מספר היחידה הפגועה\n(לדוגמה: "יחידה 201" או "203")\n\n📞 039792365`;
+                    }
+                } else {
+                    // תמונה רגילה (לא בהקשר של דיווח נזק)
+                    if (customer) {
+                        analysisResult = `שלום ${customer.name} 👋\n\nקיבלתי את הקובץ: ${fileInfo.fileName}\n${fileAnalysis.isUrgent ? '🚨 זוהה כתקלה דחופה' : '📁 בבדיקה'}\n\nאני בודקת ואחזור אליך בהקדם.\nבמקרה דחוף: 📞 039792365\n\nהדר - שיידט את בכמן`;
+                    } else {
+                        analysisResult = `שלום ${customerName} 👋\n\nקיבלתי קובץ, אבל כדי לטפל בפנייה אני צריכה לזהות אותך קודם:\n\n- שם מלא\n- שם החניון/אתר החניה  \n- מספר לקוח\n\n📞 039792365`;
                     }
                 }
             } else {
