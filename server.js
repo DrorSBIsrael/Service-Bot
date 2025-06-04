@@ -84,21 +84,196 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// חיפוש לקוח
-function findCustomer(phone) {
+// חיפוש לקוח מתקדם - תמיכה בטלפונים מרובים
+function findCustomer(phone, message = '') {
     const cleanPhone = phone.replace(/[^\d]/g, '');
-    return customers.find(c => {
-        if (!c.phone) return false;
-        const customerPhone = c.phone.replace(/[^\d]/g, '');
-        return customerPhone === cleanPhone || 
-               customerPhone === cleanPhone.substring(3) || 
-               ('972' + customerPhone) === cleanPhone;
+    
+    // פונקציה עזר לבדיקת התאמת טלפון
+    function isPhoneMatch(customerPhone, incomingPhone) {
+        if (!customerPhone) return false;
+        const cleanCustomerPhone = customerPhone.replace(/[^\d]/g, '');
+        return cleanCustomerPhone === incomingPhone || 
+               cleanCustomerPhone === incomingPhone.substring(3) || 
+               ('972' + cleanCustomerPhone) === incomingPhone ||
+               cleanCustomerPhone === ('0' + incomingPhone.substring(3)) ||
+               ('0' + cleanCustomerPhone.substring(3)) === incomingPhone;
+    }
+    
+    // חיפוש לפי כל הטלפונים האפשריים (טלפון, טלפון1, טלפון2, טלפון3, טלפון4)
+    let customer = customers.find(c => {
+        return isPhoneMatch(c.phone, cleanPhone) ||
+               isPhoneMatch(c.phone1, cleanPhone) ||
+               isPhoneMatch(c.phone2, cleanPhone) ||
+               isPhoneMatch(c.phone3, cleanPhone) ||
+               isPhoneMatch(c.phone4, cleanPhone);
     });
+    
+    if (customer) {
+        // זיהוי איזה טלפון נמצא
+        let phoneSource = 'טלפון ראשי';
+        if (isPhoneMatch(customer.phone1, cleanPhone)) phoneSource = 'טלפון 1';
+        else if (isPhoneMatch(customer.phone2, cleanPhone)) phoneSource = 'טלפון 2';
+        else if (isPhoneMatch(customer.phone3, cleanPhone)) phoneSource = 'טלפון 3';
+        else if (isPhoneMatch(customer.phone4, cleanPhone)) phoneSource = 'טלפון 4';
+        
+        console.log(`✅ זוהה לפי ${phoneSource}: ${customer.name} מ${customer.site}`);
+        return customer;
+    }
+    
+    // אם לא נמצא לפי טלפון, חפש לפי שם החניון בהודעה
+    if (message && message.length > 2) {
+        const messageWords = message.toLowerCase().split(/\s+/);
+        
+        customer = customers.find(c => {
+            const siteName = c.site.toLowerCase();
+            const siteWords = siteName.split(/\s+/);
+            
+            // בדיקה אם יש התאמה של מילות מפתח
+            return siteWords.some(siteWord => {
+                if (siteWord.length < 3) return false; // מילים קצרות מדי
+                return messageWords.some(msgWord => {
+                    // התאמה מלאה או חלקית
+                    return msgWord.includes(siteWord) || siteWord.includes(msgWord);
+                });
+            });
+        });
+        
+        if (customer) {
+            console.log(`✅ זוהה לפי שם חניון (טלפון לא רשום): ${customer.name} מ${customer.site}`);
+            return customer;
+        }
+        
+        // חיפוש נוסף לפי מילים ספציפיות בשם החניון
+        const siteMappings = {
+            'אינפיניטי': 'אינפיניטי',
+            'אלון': 'אלון אחזקה',
+            'אחזקה': 'אלון אחזקה',
+            'רימון': 'חניון רימון',
+            'גן': 'גן',
+            'מול': 'מול',
+            'אפעל': 'אפעל',
+            'רמת': 'רמת',
+            'תל אביב': 'תל אביב',
+            'ירושלים': 'ירושלים',
+            'חיפה': 'חיפה',
+            'רעננה': 'רעננה'
+        };
+        
+        for (const [keyword, siteHint] of Object.entries(siteMappings)) {
+            if (message.toLowerCase().includes(keyword)) {
+                customer = customers.find(c => 
+                    c.site.toLowerCase().includes(siteHint.toLowerCase())
+                );
+                if (customer) {
+                    console.log(`✅ זוהה לפי מילת מפתח "${keyword}" (טלפון חדש): ${customer.name} מ${customer.site}`);
+                    return customer;
+                }
+            }
+        }
+    }
+    
+    console.log(`⚠️ לקוח לא מזוהה: ${phone} ${message ? `(הודעה: "${message.substring(0, 30)}...")` : ''}`);
+    return null;
 }
 
-// תגובה חכמה
-function generateResponse(message, customer, context) {
+// פונקציה לזיהוי לקוח אינטראקטיבי
+function identifyCustomerInteractively(message) {
     const msg = message.toLowerCase();
+    
+    // חיפוש לפי שם לקוח
+    const nameMatch = customers.find(c => 
+        c.name && msg.includes(c.name.toLowerCase())
+    );
+    if (nameMatch) {
+        return { 
+            customer: nameMatch, 
+            confidence: 'high',
+            method: `זוהה לפי שם הלקוח: ${nameMatch.name}`
+        };
+    }
+    
+    // חיפוש לפי שם חניון
+    const siteMatch = customers.find(c => {
+        const siteName = c.site.toLowerCase();
+        const siteWords = siteName.split(/\s+/);
+        return siteWords.some(word => 
+            word.length > 2 && msg.includes(word)
+        );
+    });
+    if (siteMatch) {
+        return { 
+            customer: siteMatch, 
+            confidence: 'medium',
+            method: `זוהה לפי שם החניון: ${siteMatch.site}`
+        };
+    }
+    
+    // חיפוש לפי מספר לקוח
+    const idMatch = msg.match(/\d{2,4}/);
+    if (idMatch) {
+        const customerId = parseInt(idMatch[0]);
+        const customerById = customers.find(c => c.id === customerId);
+        if (customerById) {
+            return { 
+                customer: customerById, 
+                confidence: 'high',
+                method: `זוהה לפי מספר לקוח: ${customerId}`
+            };
+        }
+    }
+    
+    return null;
+}
+
+// תגובה חכמה עם זיהוי לקוח משופר
+function generateResponse(message, customer, context, phone) {
+    const msg = message.toLowerCase();
+    
+    // אם אין לקוח מזוהה, נסה זיהוי אינטראקטיבי
+    if (!customer) {
+        const identification = identifyCustomerInteractively(message);
+        if (identification) {
+            console.log(`🔍 ${identification.method} (רמת ביטחון: ${identification.confidence})`);
+            
+            if (identification.confidence === 'high') {
+                // זיהוי חד משמעי - המשך עם הלקוח
+                return { 
+                    response: `שלום ${identification.customer.name} מ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                    stage: 'greeting',
+                    customer: identification.customer
+                };
+            } else {
+                // זיהוי לא בטוח - בקש אישור
+                return { 
+                    response: `שלום! 👋\n\nהאם אתה ${identification.customer.name} מ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או שתף את פרטיך:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`,
+                    stage: 'confirming_identity',
+                    tentativeCustomer: identification.customer
+                };
+            }
+        }
+        
+        // לא נמצא זיהוי - בקש פרטים
+        return { 
+            response: `שלום! 👋\n\nכדי לטפל בפנייתך, אני צריכה פרטי זיהוי:\n\n• שם מלא\n• שם החניון (לדוגמה: "אינפיניטי", "אלון אחזקה")\n• מספר לקוח\n\nאו פשוט כתוב את שם החניון שלך\n\n📞 039792365`, 
+            stage: 'identifying' 
+        };
+    }
+    
+    // אישור זהות
+    if (context?.stage === 'confirming_identity') {
+        if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
+            return { 
+                response: `מעולה! שלום ${context.tentativeCustomer.name} מ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                stage: 'greeting',
+                customer: context.tentativeCustomer
+            };
+        } else {
+            return { 
+                response: `בסדר, בואו ננסה שוב.\n\nאנא שתף את הפרטים המדויקים:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`, 
+                stage: 'identifying' 
+            };
+        }
+    }
     
     // תפריט ראשי
     if (msg === '1' || msg.includes('תקלה')) {
@@ -166,11 +341,20 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
-// שליחת מייל
+// שליחת מייל עם תמיכה בטלפונים מרובים
 async function sendEmail(customer, type, details) {
     try {
         serviceCallCounter++;
         const serviceNumber = `HSC-${serviceCallCounter}`;
+        
+        // רשימת טלפונים של הלקוח
+        const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
+            .filter(phone => phone && phone.trim() !== '')
+            .map((phone, index) => {
+                const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
+                return `<p><strong>${label}:</strong> ${phone}</p>`;
+            })
+            .join('');
         
         const subject = type === 'technician' ? 
             `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name}` :
@@ -179,13 +363,32 @@ async function sendEmail(customer, type, details) {
         const html = `
             <div dir="rtl" style="font-family: Arial, sans-serif;">
                 <h2>${type === 'technician' ? '🚨 דרוש טכנאי מיידי!' : '📋 סיכום שיחה'}</h2>
-                <p><strong>לקוח:</strong> ${customer.name}</p>
-                <p><strong>אתר:</strong> ${customer.site}</p>
-                <p><strong>טלפון:</strong> ${customer.phone}</p>
-                <p><strong>כתובת:</strong> ${customer.address}</p>
-                <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
-                <p><strong>זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
-                <p><strong>פרטים:</strong> ${details}</p>
+                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
+                    <h3>👤 פרטי לקוח:</h3>
+                    <p><strong>שם לקוח:</strong> ${customer.name}</p>
+                    <p><strong>אתר/חניון:</strong> ${customer.site}</p>
+                    <p><strong>מספר לקוח:</strong> #${customer.id}</p>
+                    <p><strong>כתובת:</strong> ${customer.address}</p>
+                    <p><strong>אימייל:</strong> ${customer.email || 'לא רשום'}</p>
+                </div>
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin: 20px 0;">
+                    <h3>📞 טלפונים:</h3>
+                    ${phoneList}
+                </div>
+                <div style="background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;">
+                    <h3>📋 פרטי הקריאה:</h3>
+                    <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
+                    <p><strong>זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
+                    <p><strong>פרטי הבעיה:</strong> ${details}</p>
+                </div>
+                ${type === 'technician' ? `
+                <div style="background: #f8d7da; padding: 15px; border-radius: 10px; border-right: 4px solid #dc3545;">
+                    <h3>🚨 פעולות נדרשות:</h3>
+                    <p><strong>1. צור קשר עם הלקוח תוך 15 דקות</strong></p>
+                    <p><strong>2. תאם הגעת טכנאי תוך 2-4 שעות</strong></p>
+                    <p><strong>3. עדכן את הלקוח על זמן הגעה</strong></p>
+                </div>
+                ` : ''}
             </div>
         `;
         
@@ -196,7 +399,7 @@ async function sendEmail(customer, type, details) {
             html: html
         });
         
-        console.log(`📧 מייל נשלח: ${type}`);
+        console.log(`📧 מייל נשלח: ${type} - ${customer.name}`);
     } catch (error) {
         console.error('❌ שגיאת מייל:', error);
     }
@@ -252,21 +455,24 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             console.log(`📞 הודעה מ-${phone}: ${messageText}`);
             
-            // מציאת לקוח
-            const customer = findCustomer(phone);
-            if (!customer) {
-                await sendWhatsApp(phone, `שלום ${customerName} 👋\n\nכדי לטפל בפנייתך, אני צריכה פרטי זיהוי:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`);
-                return res.status(200).json({ status: 'OK' });
+            // מציאת לקוח - מתקדם
+            let customer = findCustomer(phone, messageText);
+            const context = customer ? memory.get(phone, customer) : memory.get(phone);
+            
+            // עיבוד תגובה עם זיהוי לקוח משופר
+            let result = generateResponse(messageText, customer, context, phone);
+            
+            // אם זוהה לקוח חדש, עדכן את המערכת
+            if (result.customer && !customer) {
+                customer = result.customer;
+                console.log(`🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
             }
             
-            console.log(`✅ לקוח מזוהה: ${customer.name}`);
-            
             // זיכרון
-            const context = memory.get(phone, customer);
             memory.add(phone, messageText, 'customer', customer);
             
-            // בדיקה מיוחדת לקבצים עם יחידה
-            if (hasFile && context?.stage === 'damage_photo') {
+            // בדיקה מיוחדת לקבצים עם יחידה (רק לאחר זיהוי לקוח)
+            if (hasFile && customer && context?.stage === 'damage_photo') {
                 const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
                 if (unitMatch) {
                     const unit = unitMatch[1] || unitMatch[2];
@@ -280,18 +486,28 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 }
             }
             
-            // תגובה רגילה
-            const result = generateResponse(messageText, customer, context);
+            // אם אין לקוח, נסה לזהות או בקש פרטים
+            if (!customer && !result.customer) {
+                await sendWhatsApp(phone, result.response);
+                memory.add(phone, result.response, 'hadar');
+                if (result.stage) {
+                    memory.updateStage(phone, result.stage);
+                }
+                return res.status(200).json({ status: 'OK' });
+            }
+            
+            // תגובה רגילה עם לקוח מזוהה
+            const finalResult = customer ? generateResponse(messageText, customer, context, phone) : result;
             
             // שליחת תגובה
-            await sendWhatsApp(phone, result.response);
-            memory.add(phone, result.response, 'hadar', customer);
-            memory.updateStage(phone, result.stage, customer);
+            await sendWhatsApp(phone, finalResult.response);
+            memory.add(phone, finalResult.response, 'hadar', customer);
+            memory.updateStage(phone, finalResult.stage, customer);
             
             // שליחת מיילים
-            if (result.sendTechnician) {
+            if (finalResult.sendTechnician) {
                 await sendEmail(customer, 'technician', messageText);
-            } else if (result.sendSummary) {
+            } else if (finalResult.sendSummary) {
                 await sendEmail(customer, 'summary', 'בעיה נפתרה בהצלחה');
             }
         }
