@@ -1,93 +1,4 @@
-// שליחת מייל עם סיכום שיחה מלא
-async function sendEmail(customer, type, details, extraData = {}) {
-    try {
-        const serviceNumber = extraData.serviceNumber || `HSC-${++serviceCallCounter}`;
-        
-        // רשימת טלפונים של הלקוח
-        const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
-            .filter(phone => phone && phone.trim() !== '')
-            .map((phone, index) => {
-                const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
-                return `<p><strong>${label}:</strong> ${phone}</p>`;
-            })
-            .join('');
-        
-        const subject = type === 'technician' ? 
-            `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})` :
-            `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
-        
-        // בניית סיכום השיחה
-        let conversationSummary = '';
-        if (extraData.problemDescription) {
-            conversationSummary += `<p><strong>תיאור הבעיה:</strong> ${extraData.problemDescription}</p>`;
-        }
-        if (extraData.solution) {
-            conversationSummary += `<p><strong>הפתרון שניתן:</strong></p><div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">${extraData.solution.replace(/\n/g, '<br>')}</div>`;
-        }
-        if (extraData.resolved !== undefined) {
-            const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
-            conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
-        }
-        
-        const html = `
-            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
-                    
-                    <div style="background: linear-gradient(45deg, ${type === 'technician' ? '#dc3545, #c82333' : '#28a745, #20c997'}); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
-                        <h1 style="margin: 0; font-size: 24px;">
-                            ${type === 'technician' ? '🚨 קריאת טכנאי דחופה' : '📋 סיכום קריאת שירות'}
-                        </h1>
-                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
-                    </div>
-                    
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
-                        <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                            <p><strong>שם לקוח:</strong> ${customer.name}</p>
-                            <p><strong>מספר לקוח:</strong> #${customer.id}</p>
-                            <p><strong>אתר/חניון:</strong> ${customer.site}</p>
-                            <p><strong>אימייל:</strong> ${customer.email || 'לא רשום'}</p>
-                        </div>
-                        <p><strong>כתובת:</strong> ${customer.address}</p>
-                    </div>
-                    
-                    <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #2196f3;">
-                        <h3 style="margin-top: 0; color: #1976d2;">📞 פרטי קשר</h3>
-                        ${phoneList}
-                    </div>
-                    
-                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #ffc107;">
-                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הקריאה</h2>
-                        <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
-                        <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
-                        <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : 'פתרון טלפוני'}</p>
-                    </div>
-                    
-                    ${conversationSummary ? `
-                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
-                        <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
-                        ${conversationSummary}
-                    </div>
-                    ` : ''}
-                    
-                    ${type === 'technician' ? `
-                    <div style="background: #f8d7da; padding: 20px; border-radius: 10px; border-right: 4px solid #dc3545; margin-bottom: 20px;">
-                        <h2 style="color: #721c24; margin-top: 0;">🚨 פעולות נדרשות לטכנאי</h2>
-                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <p style="margin: 0;"><strong>⏰ 1. צור קשר עם הלקוח תוך 15 דקות</strong></p>
-                        </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <p style="margin: 0;"><strong>🚗 2. תאם הגעה לאתר תוך 2-4 שעות</strong></p>
-                        </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <p style="margin: 0;"><strong>📱 3. עדכן לקוח על זמן הגעה משוער</strong></p>
-                        </div>
-                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                            <p style="margin: 0;"><strong>🛠️ 4. קח כלים מתאימים לסוג התקלה</strong></p>
-                        </div>
-                    </div>
-                    ` : `
-                    <div style="background: #d4edda; padding: 20px;require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
@@ -186,22 +97,33 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-// חיפוש לקוח מתקדם - תמיכה בטלפונים מרובים
+const troubleshootingDB = {
+    "חשמל": "בדוק נתיכים ומתג הפעלה",
+    "כרטיס": "נקה קורא כרטיסים עם אלכוהול",
+    "מחסום": "בדוק לחץ אוויר 6-8 בר",
+    "מצלמה": "בדוק חיבור רשת ואתחל"
+};
+
+// שיפור זיהוי לקוח - תמיכה מלאה בטלפונים מרובים
 function findCustomer(phone, message = '') {
     const cleanPhone = phone.replace(/[^\d]/g, '');
     
-    // פונקציה עזר לבדיקת התאמת טלפון
+    // פונקציה לבדיקת התאמת טלפון מתקדמת
     function isPhoneMatch(customerPhone, incomingPhone) {
         if (!customerPhone) return false;
         const cleanCustomerPhone = customerPhone.replace(/[^\d]/g, '');
+        
+        // בדיקות מרובות לתאמת טלפונים
         return cleanCustomerPhone === incomingPhone || 
                cleanCustomerPhone === incomingPhone.substring(3) || 
                ('972' + cleanCustomerPhone) === incomingPhone ||
                cleanCustomerPhone === ('0' + incomingPhone.substring(3)) ||
-               ('0' + cleanCustomerPhone.substring(3)) === incomingPhone;
+               ('0' + cleanCustomerPhone.substring(3)) === incomingPhone ||
+               cleanCustomerPhone.substring(1) === incomingPhone.substring(3) ||
+               ('972' + cleanCustomerPhone.substring(1)) === incomingPhone;
     }
     
-    // חיפוש לפי כל הטלפונים האפשריים (טלפון, טלפון1, טלפון2, טלפון3, טלפון4)
+    // חיפוש לפי כל שדות הטלפון
     let customer = customers.find(c => {
         return isPhoneMatch(c.phone, cleanPhone) ||
                isPhoneMatch(c.phone1, cleanPhone) ||
@@ -211,125 +133,62 @@ function findCustomer(phone, message = '') {
     });
     
     if (customer) {
-        // זיהוי איזה טלפון נמצא
-        let phoneSource = 'טלפון ראשי';
-        if (isPhoneMatch(customer.phone1, cleanPhone)) phoneSource = 'טלפון 1';
-        else if (isPhoneMatch(customer.phone2, cleanPhone)) phoneSource = 'טלפון 2';
-        else if (isPhoneMatch(customer.phone3, cleanPhone)) phoneSource = 'טלפון 3';
-        else if (isPhoneMatch(customer.phone4, cleanPhone)) phoneSource = 'טלפון 4';
-        
-        console.log(`✅ זוהה לפי ${phoneSource}: ${customer.name} מ${customer.site}`);
+        console.log(`✅ לקוח מזוהה: ${customer.name} מ${customer.site}`);
         return customer;
     }
     
-    // אם לא נמצא לפי טלפון, חפש לפי שם החניון בהודעה
-    if (message && message.length > 2) {
-        const messageWords = message.toLowerCase().split(/\s+/);
+    // חיפוש לפי מילת "חניון" בהודעה
+    if (message && message.includes('חניון')) {
+        const words = message.split(/\s+/);
+        const chanionIndex = words.findIndex(word => word.includes('חניון'));
         
-        customer = customers.find(c => {
-            const siteName = c.site.toLowerCase();
-            const siteWords = siteName.split(/\s+/);
+        if (chanionIndex !== -1 && chanionIndex < words.length - 1) {
+            const chanionName = words[chanionIndex + 1];
+            customer = customers.find(c => 
+                c.site.toLowerCase().includes(chanionName.toLowerCase())
+            );
             
-            // בדיקה אם יש התאמה של מילות מפתח
-            return siteWords.some(siteWord => {
-                if (siteWord.length < 3) return false; // מילים קצרות מדי
-                return messageWords.some(msgWord => {
-                    // התאמה מלאה או חלקית
-                    return msgWord.includes(siteWord) || siteWord.includes(msgWord);
-                });
-            });
-        });
-        
-        if (customer) {
-            console.log(`✅ זוהה לפי שם חניון (טלפון לא רשום): ${customer.name} מ${customer.site}`);
-            return customer;
-        }
-        
-        // חיפוש נוסף לפי מילים ספציפיות בשם החניון
-        const siteMappings = {
-            'אינפיניטי': 'אינפיניטי',
-            'אלון': 'אלון אחזקה',
-            'אחזקה': 'אלון אחזקה',
-            'רימון': 'חניון רימון',
-            'גן': 'גן',
-            'מול': 'מול',
-            'אפעל': 'אפעל',
-            'רמת': 'רמת',
-            'תל אביב': 'תל אביב',
-            'ירושלים': 'ירושלים',
-            'חיפה': 'חיפה',
-            'רעננה': 'רעננה'
-        };
-        
-        for (const [keyword, siteHint] of Object.entries(siteMappings)) {
-            if (message.toLowerCase().includes(keyword)) {
-                customer = customers.find(c => 
-                    c.site.toLowerCase().includes(siteHint.toLowerCase())
-                );
-                if (customer) {
-                    console.log(`✅ זוהה לפי מילת מפתח "${keyword}" (טלפון חדש): ${customer.name} מ${customer.site}`);
-                    return customer;
-                }
+            if (customer) {
+                console.log(`✅ זוהה לפי "חניון ${chanionName}": ${customer.name}`);
+                return customer;
             }
         }
     }
     
-    console.log(`⚠️ לקוח לא מזוהה: ${phone} ${message ? `(הודעה: "${message.substring(0, 30)}...")` : ''}`);
-    return null;
-}
-
-// פונקציה לזיהוי לקוח אינטראקטיבי
-function identifyCustomerInteractively(message) {
-    const msg = message.toLowerCase();
-    
-    // חיפוש לפי שם לקוח
-    const nameMatch = customers.find(c => 
-        c.name && msg.includes(c.name.toLowerCase())
-    );
-    if (nameMatch) {
-        return { 
-            customer: nameMatch, 
-            confidence: 'high',
-            method: `זוהה לפי שם הלקוח: ${nameMatch.name}`
-        };
-    }
-    
-    // חיפוש לפי שם חניון
-    const siteMatch = customers.find(c => {
-        const siteName = c.site.toLowerCase();
-        const siteWords = siteName.split(/\s+/);
-        return siteWords.some(word => 
-            word.length > 2 && msg.includes(word)
-        );
-    });
-    if (siteMatch) {
-        return { 
-            customer: siteMatch, 
-            confidence: 'medium',
-            method: `זוהה לפי שם החניון: ${siteMatch.site}`
-        };
-    }
-    
-    // חיפוש לפי מספר לקוח
-    const idMatch = msg.match(/\d{2,4}/);
-    if (idMatch) {
-        const customerId = parseInt(idMatch[0]);
-        const customerById = customers.find(c => c.id === customerId);
-        if (customerById) {
-            return { 
-                customer: customerById, 
-                confidence: 'high',
-                method: `זוהה לפי מספר לקוח: ${customerId}`
-            };
+    // אם לא נמצא לפי טלפון - חיפוש לפי תוכן ההודעה
+    if (message && message.length > 3) {
+        const msg = message.toLowerCase();
+        
+        // חיפוש לפי שם לקוח
+        customer = customers.find(c => {
+            const customerName = c.name.toLowerCase();
+            return msg.includes(customerName) || customerName.includes(msg.split(' ')[0]);
+        });
+        
+        if (customer) {
+            console.log(`✅ זוהה לפי שם לקוח: ${customer.name}`);
+            return customer;
         }
     }
     
+    console.log(`⚠️ לקוח לא מזוהה: ${phone}`);
     return null;
 }
 
 // תגובה חכמה עם זיהוי לקוח משופר
 function generateResponse(message, customer, context, phone) {
     const msg = message.toLowerCase();
+    
+    // אם יש לקוח מזוהה - תן תגובה ישירה
+    if (customer) {
+        // תפריט ראשי ללקוח מזוהה
+        if (!context || context.stage === 'greeting') {
+            return { 
+                response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                stage: 'menu' 
+            };
+        }
+    }
     
     // אם אין לקוח מזוהה, נסה זיהוי אינטראקטיבי
     if (!customer) {
@@ -340,23 +199,23 @@ function generateResponse(message, customer, context, phone) {
             if (identification.confidence === 'high') {
                 // זיהוי חד משמעי - המשך עם הלקוח
                 return { 
-                    response: `שלום ${identification.customer.name} מ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                    stage: 'greeting',
+                    response: `שלום ${identification.customer.name} מחניון ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                    stage: 'menu',
                     customer: identification.customer
                 };
             } else {
                 // זיהוי לא בטוח - בקש אישור
                 return { 
-                    response: `שלום! 👋\n\nהאם אתה ${identification.customer.name} מ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או שתף את פרטיך:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`,
+                    response: `שלום! 👋\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
                     stage: 'confirming_identity',
                     tentativeCustomer: identification.customer
                 };
             }
         }
         
-        // לא נמצא זיהוי - בקש פרטים
+        // לא נמצא זיהוי - בקש רק שם חניון
         return { 
-            response: `שלום! 👋\n\nכדי לטפל בפנייתך, אני צריכה פרטי זיהוי:\n\n• שם מלא\n• שם החניון (לדוגמה: "אינפיניטי", "אלון אחזקה")\n• מספר לקוח\n\nאו פשוט כתוב את שם החניון שלך\n\n📞 039792365`, 
+            response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "חניון אינפיניטי" או "חניון מרכז עזריאלי"\n\n📞 039792365`, 
             stage: 'identifying' 
         };
     }
@@ -365,13 +224,13 @@ function generateResponse(message, customer, context, phone) {
     if (context?.stage === 'confirming_identity') {
         if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
             return { 
-                response: `מעולה! שלום ${context.tentativeCustomer.name} מ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                stage: 'greeting',
+                response: `מעולה! שלום ${context.tentativeCustomer.name} מחניון ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                stage: 'menu',
                 customer: context.tentativeCustomer
             };
         } else {
             return { 
-                response: `בסדר, בואו ננסה שוב.\n\nאנא שתף את הפרטים המדויקים:\n• שם מלא\n• שם החניון\n• מספר לקוח\n\n📞 039792365`, 
+                response: `בסדר, אנא כתוב את שם החניון הנכון:\n\n📞 039792365`, 
                 stage: 'identifying' 
             };
         }
@@ -392,8 +251,6 @@ function generateResponse(message, customer, context, phone) {
     if (msg === '3' || msg.includes('מחיר')) {
         return { response: `שלום ${customer.name} 👋\n\nמה אתה צריך?\n1️⃣ כרטיסים\n2️⃣ גלילים\n3️⃣ זרועות\n4️⃣ אחר\n\n📞 039792365`, stage: 'equipment' };
     }
-    
-    // זיהוי יחידה - הוסר, עכשיו ישר לתיאור הבעיה
     
     // עיבוד תיאור הבעיה עם OpenAI
     if (context?.stage === 'problem_description') {
@@ -448,7 +305,56 @@ function generateResponse(message, customer, context, phone) {
     }
     
     // ברירת מחדל
-    return { response: `שלום ${customer.name} מ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, stage: 'greeting' };
+    return { response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, stage: 'menu' };
+}
+
+// פונקציה לזיהוי לקוח אינטראקטיבי
+function identifyCustomerInteractively(message) {
+    const msg = message.toLowerCase();
+    
+    // חיפוש לפי שם לקוח
+    const nameMatch = customers.find(c => 
+        c.name && msg.includes(c.name.toLowerCase())
+    );
+    if (nameMatch) {
+        return { 
+            customer: nameMatch, 
+            confidence: 'high',
+            method: `זוהה לפי שם הלקוח: ${nameMatch.name}`
+        };
+    }
+    
+    // חיפוש לפי שם חניון
+    const siteMatch = customers.find(c => {
+        const siteName = c.site.toLowerCase();
+        const siteWords = siteName.split(/\s+/);
+        return siteWords.some(word => 
+            word.length > 2 && msg.includes(word)
+        );
+    });
+    if (siteMatch) {
+        return { 
+            customer: siteMatch, 
+            confidence: 'medium',
+            method: `זוהה לפי שם החניון: ${siteMatch.site}`
+        };
+    }
+    
+    // חיפוש לפי מספר לקוח
+    const idMatch = msg.match(/\d{2,4}/);
+    if (idMatch) {
+        const customerId = parseInt(idMatch[0]);
+        const customerById = customers.find(c => c.id === customerId);
+        if (customerById) {
+            return { 
+                customer: customerById, 
+                confidence: 'high',
+                method: `זוהה לפי מספר לקוח: ${customerId}`
+            };
+        }
+    }
+    
+    return null;
 }
 
 // OpenAI לפתרון תקלות מתקדם
@@ -518,6 +424,7 @@ async function getAISolution(problemDescription, customer, troubleshootingDB) {
         return solution;
     }
 }
+
 async function sendWhatsApp(phone, message) {
     const instanceId = '7105253183';
     const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
@@ -536,11 +443,10 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
-// שליחת מייל עם תמיכה בטלפונים מרובים
-async function sendEmail(customer, type, details) {
+// שליחת מייל עם סיכום שיחה מלא
+async function sendEmail(customer, type, details, extraData = {}) {
     try {
-        serviceCallCounter++;
-        const serviceNumber = `HSC-${serviceCallCounter}`;
+        const serviceNumber = extraData.serviceNumber || `HSC-${++serviceCallCounter}`;
         
         // רשימת טלפונים של הלקוח
         const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
@@ -552,38 +458,90 @@ async function sendEmail(customer, type, details) {
             .join('');
         
         const subject = type === 'technician' ? 
-            `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name}` :
-            `📋 סיכום שיחה - ${customer.name}`;
+            `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})` :
+            `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+        
+        // בניית סיכום השיחה
+        let conversationSummary = '';
+        if (extraData.problemDescription) {
+            conversationSummary += `<p><strong>תיאור הבעיה:</strong> ${extraData.problemDescription}</p>`;
+        }
+        if (extraData.solution) {
+            conversationSummary += `<p><strong>הפתרון שניתן:</strong></p><div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">${extraData.solution.replace(/\n/g, '<br>')}</div>`;
+        }
+        if (extraData.resolved !== undefined) {
+            const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
+            conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
+        }
         
         const html = `
-            <div dir="rtl" style="font-family: Arial, sans-serif;">
-                <h2>${type === 'technician' ? '🚨 דרוש טכנאי מיידי!' : '📋 סיכום שיחה'}</h2>
-                <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>👤 פרטי לקוח:</h3>
-                    <p><strong>שם לקוח:</strong> ${customer.name}</p>
-                    <p><strong>אתר/חניון:</strong> ${customer.site}</p>
-                    <p><strong>מספר לקוח:</strong> #${customer.id}</p>
-                    <p><strong>כתובת:</strong> ${customer.address}</p>
-                    <p><strong>אימייל:</strong> ${customer.email || 'לא רשום'}</p>
+            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    
+                    <div style="background: linear-gradient(45deg, ${type === 'technician' ? '#dc3545, #c82333' : '#28a745, #20c997'}); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">
+                            ${type === 'technician' ? '🚨 קריאת טכנאי דחופה' : '📋 סיכום קריאת שירות'}
+                        </h1>
+                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <p><strong>שם לקוח:</strong> ${customer.name}</p>
+                            <p><strong>מספר לקוח:</strong> #${customer.id}</p>
+                            <p><strong>אתר/חניון:</strong> ${customer.site}</p>
+                            <p><strong>אימייל:</strong> ${customer.email || 'לא רשום'}</p>
+                        </div>
+                        <p><strong>כתובת:</strong> ${customer.address}</p>
+                    </div>
+                    
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #2196f3;">
+                        <h3 style="margin-top: 0; color: #1976d2;">📞 פרטי קשר</h3>
+                        ${phoneList}
+                    </div>
+                    
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #ffc107;">
+                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הקריאה</h2>
+                        <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
+                        <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
+                        <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : 'פתרון טלפוני'}</p>
+                    </div>
+                    
+                    ${conversationSummary ? `
+                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
+                        ${conversationSummary}
+                    </div>
+                    ` : ''}
+                    
+                    ${type === 'technician' ? `
+                    <div style="background: #f8d7da; padding: 20px; border-radius: 10px; border-right: 4px solid #dc3545; margin-bottom: 20px;">
+                        <h2 style="color: #721c24; margin-top: 0;">🚨 פעולות נדרשות לטכנאי</h2>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>⏰ 1. צור קשר עם הלקוח תוך 15 דקות</strong></p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>🚗 2. תאם הגעה לאתר תוך 2-4 שעות</strong></p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>📱 3. עדכן לקוח על זמן הגעה משוער</strong></p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>🛠️ 4. קח כלים מתאימים לסוג התקלה</strong></p>
+                        </div>
+                    </div>
+                    ` : `
+                    <div style="background: #d4edda; padding: 20px; border-radius: 10px; border-right: 4px solid #28a745;">
+                        <h2 style="color: #155724; margin-top: 0;">✅ הבעיה נפתרה בהצלחה</h2>
+                        <p>הלקוח אישר שהפתרון עזר והבעיה נפתרה.</p>
+                    </div>
+                    `}
+                    
+                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    </div>
                 </div>
-                <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin: 20px 0;">
-                    <h3>📞 טלפונים:</h3>
-                    ${phoneList}
-                </div>
-                <div style="background: #fff3cd; padding: 15px; border-radius: 10px; margin: 20px 0;">
-                    <h3>📋 פרטי הקריאה:</h3>
-                    <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
-                    <p><strong>זמן:</strong> ${new Date().toLocaleString('he-IL')}</p>
-                    <p><strong>פרטי הבעיה:</strong> ${details}</p>
-                </div>
-                ${type === 'technician' ? `
-                <div style="background: #f8d7da; padding: 15px; border-radius: 10px; border-right: 4px solid #dc3545;">
-                    <h3>🚨 פעולות נדרשות:</h3>
-                    <p><strong>1. צור קשר עם הלקוח תוך 15 דקות</strong></p>
-                    <p><strong>2. תאם הגעת טכנאי תוך 2-4 שעות</strong></p>
-                    <p><strong>3. עדכן את הלקוח על זמן הגעה</strong></p>
-                </div>
-                ` : ''}
             </div>
         `;
         
