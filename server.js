@@ -239,7 +239,7 @@ function generateResponse(message, customer, context, phone) {
     // תפריט ראשי
     if (msg === '1' || msg.includes('תקלה')) {
         return { 
-            response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה כולל:\n\n📍 **סוג היחידה ומספר:**\n• (יציאה) 101, 102, 103...\n• (מחסום) 201, 202, 203...\n• (אשראי) 301, 302, 303...\n• (מצלמה) 401, 402, 403...\n\n✍️ **לדוגמה:**\n"יציאה 101 לא דולקת"\n"מחסום 203 לא עולה"\n"אשראי 302 לא קורא כרטיסים"\n\n📞 039792365`, 
+            response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה כולל סוג היחידה ומספר\n\n📞 039792365`, 
             stage: 'problem_description' 
         };
     }
@@ -274,7 +274,7 @@ function generateResponse(message, customer, context, phone) {
         };
     }
     
-    // משוב על פתרון
+    // משוב על פתרון - תיקון הלוגיקה
     if (context?.stage === 'waiting_feedback') {
         if (msg.includes('כן') || msg.includes('עזר') || msg.includes('נפתר') || msg.includes('תודה')) {
             return { 
@@ -288,7 +288,7 @@ function generateResponse(message, customer, context, phone) {
             };
         } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
             return { 
-                response: `🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך מיידי!**\n\n⏰ טכנאי יגיע תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: HSC-${context.serviceNumber || serviceCallCounter}`, 
+                response: `🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך מיידי!**\n\n⏰ טכנאי יגיע תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: HSC-${context.serviceNumber}`, 
                 stage: 'technician_dispatched', 
                 sendTechnician: true,
                 serviceNumber: context.serviceNumber,
@@ -606,7 +606,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 console.log(`📁 קובץ: ${messageData.fileMessageData.fileName}`);
             }
             
-            console.log(`📞 הודעה מ-${phone} בשעה ${getIsraeliTime()}: ${messageText}`);
+            console.log(`📞 הודעה מ-${phone} (${customerName}) בשעה ${getIsraeliTime()}: ${messageText}`);
             
             // מציאת לקוח - מתקדם
             let customer = findCustomer(phone, messageText);
@@ -620,6 +620,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 customer = result.customer;
                 console.log(`🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
             }
+            
+            console.log(`📊 Stage: ${result.stage || 'לא הוגדר'}, Customer: ${customer ? customer.name : 'לא מזוהה'}`);
             
             // זיכרון
             memory.add(phone, messageText, 'customer', customer);
@@ -653,12 +655,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 }
             }
             
-            // בדיקה מיוחדת לקבצים עם יחידה (רק לאחר זיהוי לקוח)
+            // בדיקה מיוחדת לקבצים עם יחידה - תיקון הלוגיקה
             if (hasFile && customer && context?.stage === 'damage_photo') {
                 const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
                 if (unitMatch) {
                     const unit = unitMatch[1] || unitMatch[2];
-                    serviceCallCounter++; // מספר קריאה גדל גם כאן
+                    serviceCallCounter++; 
                     const currentServiceNumber = serviceCallCounter;
                     
                     const response = `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את התמונה!\n\n🔍 מעביר לטכנאי מיידי\n⏰ טכנאי יגיע תוך 2-4 שעות\n\n🆔 מספר קריאה: HSC-${currentServiceNumber}\n\n📞 039792365`;
@@ -670,8 +672,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         solution: 'נשלח טכנאי לטיפול באתר',
                         resolved: false
                     });
-                    memory.updateStage(phone, 'technician_dispatched', customer);
+                    memory.updateStage(phone, 'damage_completed', customer); // תיקון - לא לחזור לתחילה
                     
+                    return res.status(200).json({ status: 'OK' });
+                } else {
+                    // אם לא כתב מספר יחידה
+                    await sendWhatsApp(phone, `אנא כתוב מספר היחידה עם התמונה\n\nלדוגמה: "יחידה 101"\n\n📞 039792365`);
                     return res.status(200).json({ status: 'OK' });
                 }
             }
