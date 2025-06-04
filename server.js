@@ -5,9 +5,15 @@ const axios = require('axios');
 const fs = require('fs');
 const app = express();
 
+// מספר תקלה גלובלי עם נומרטור מתקדם
+let globalServiceCounter = 10001;
+
+function getNextServiceNumber() {
+    return `HSC-${++globalServiceCounter}`;
+}
+
 // טעינת לקוחות
 let customers = [];
-let serviceCallCounter = 10001;
 
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
@@ -16,6 +22,10 @@ try {
         name: client["שם לקוח"],
         site: client["שם החניון"],
         phone: client["טלפון"],
+        phone1: client["טלפון1"],
+        phone2: client["טלפון2"],
+        phone3: client["טלפון3"],
+        phone4: client["טלפון4"],
         address: client["כתובת הלקוח"],
         email: client["מייל"]
     }));
@@ -249,17 +259,25 @@ function generateResponse(message, customer, context, phone) {
     }
     
     if (msg === '3' || msg.includes('מחיר')) {
-        return { response: `שלום ${customer.name} 👋\n\nמה אתה צריך?\n1️⃣ כרטיסים\n2️⃣ גלילים\n3️⃣ זרועות\n4️⃣ אחר\n\n📞 039792365`, stage: 'equipment' };
+        return { response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\nכמות? (לדוגמה: 20,000 כרטיסים, גלילים, זרועות...)\n\n📞 039792365`, stage: 'order_request' };
+    }
+    
+    // עיבוד הזמנה
+    if (context?.stage === 'order_request') {
+        return { 
+            response: `📋 קיבלתי את בקשת ההזמנה!\n\n"${message}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n📞 039792365`, 
+            stage: 'order_completed',
+            sendOrderEmail: true,
+            orderDetails: message
+        };
     }
     
     // עיבוד תיאור הבעיה עם OpenAI
     if (context?.stage === 'problem_description') {
-        // גדל מספר קריאה בכל פניה
-        serviceCallCounter++;
-        const currentServiceNumber = serviceCallCounter;
+        const currentServiceNumber = getNextServiceNumber();
         
         return { 
-            response: `📋 **קיבלתי את התיאור**\n\n🔍 אני מעבדת את הבעיה עם המערכת החכמה...\n\n⏳ תוך רגע אחזור עם פתרון מיידי\n\n🆔 מספר קריאה: HSC-${currentServiceNumber}\n\n📞 039792365`, 
+            response: `📋 **קיבלתי את התיאור**\n\n🔍 אני מעבדת את הבעיה עם המערכת החכמה...\n\n⏳ תוך רגע אחזור עם פתרון מיידי\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`, 
             stage: 'processing_with_ai',
             serviceNumber: currentServiceNumber,
             problemDescription: message
@@ -288,7 +306,7 @@ function generateResponse(message, customer, context, phone) {
             };
         } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
             return { 
-                response: `🔧 אני מבינה שהפתרון לא עזר.\n\n🚨 **שולחת טכנאי אליך מיידי!**\n\n⏰ טכנאי יגיע תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: HSC-${context.serviceNumber}`, 
+                response: `🔧 אני מבינה שהפתרון לא עזר.\n\n📋 **מעבירה את הפניה לטכנאי**\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: ${context.serviceNumber}`, 
                 stage: 'technician_dispatched', 
                 sendTechnician: true,
                 serviceNumber: context.serviceNumber,
@@ -446,7 +464,7 @@ async function sendWhatsApp(phone, message) {
 // שליחת מייל עם סיכום שיחה מלא
 async function sendEmail(customer, type, details, extraData = {}) {
     try {
-        const serviceNumber = extraData.serviceNumber || `HSC-${++serviceCallCounter}`;
+        const serviceNumber = extraData.serviceNumber || getNextServiceNumber();
         
         // רשימת טלפונים של הלקוח
         const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
@@ -457,9 +475,17 @@ async function sendEmail(customer, type, details, extraData = {}) {
             })
             .join('');
         
-        const subject = type === 'technician' ? 
-            `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})` :
-            `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+        let subject, emailType;
+        if (type === 'technician') {
+            subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
+            emailType = '🚨 קריאת טכנאי דחופה';
+        } else if (type === 'order') {
+            subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
+            emailType = '💰 בקשת הצעת מחיר';
+        } else {
+            subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+            emailType = '📋 סיכום קריאת שירות';
+        }
         
         // בניית סיכום השיחה
         let conversationSummary = '';
@@ -468,6 +494,9 @@ async function sendEmail(customer, type, details, extraData = {}) {
         }
         if (extraData.solution) {
             conversationSummary += `<p><strong>הפתרון שניתן:</strong></p><div style="background: #f8f9fa; padding: 10px; border-radius: 5px;">${extraData.solution.replace(/\n/g, '<br>')}</div>`;
+        }
+        if (extraData.orderDetails) {
+            conversationSummary += `<p><strong>פרטי ההזמנה:</strong> ${extraData.orderDetails}</p>`;
         }
         if (extraData.resolved !== undefined) {
             const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
@@ -478,10 +507,8 @@ async function sendEmail(customer, type, details, extraData = {}) {
             <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
                 <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
                     
-                    <div style="background: linear-gradient(45deg, ${type === 'technician' ? '#dc3545, #c82333' : '#28a745, #20c997'}); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
-                        <h1 style="margin: 0; font-size: 24px;">
-                            ${type === 'technician' ? '🚨 קריאת טכנאי דחופה' : '📋 סיכום קריאת שירות'}
-                        </h1>
+                    <div style="background: linear-gradient(45deg, ${type === 'technician' ? '#dc3545, #c82333' : type === 'order' ? '#ffc107, #e0a800' : '#28a745, #20c997'}); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">${emailType}</h1>
                         <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
                     </div>
                     
@@ -505,7 +532,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
                         <h2 style="color: #856404; margin-top: 0;">📋 פרטי הקריאה</h2>
                         <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
                         <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
-                        <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : 'פתרון טלפוני'}</p>
+                        <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : type === 'order' ? 'בקשת הצעת מחיר' : 'פתרון טלפוני'}</p>
                     </div>
                     
                     ${conversationSummary ? `
@@ -531,6 +558,19 @@ async function sendEmail(customer, type, details, extraData = {}) {
                             <p style="margin: 0;"><strong>🛠️ 4. קח כלים מתאימים לסוג התקלה</strong></p>
                         </div>
                     </div>
+                    ` : type === 'order' ? `
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-right: 4px solid #ffc107;">
+                        <h2 style="color: #856404; margin-top: 0;">💰 פעולות נדרשות - הצעת מחיר</h2>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>📊 1. הכן הצעת מחיר מפורטת</strong></p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>📧 2. שלח הצעה למייל הלקוח תוך 24 שעות</strong></p>
+                        </div>
+                        <div style="background: white; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                            <p style="margin: 0;"><strong>📞 3. צור קשר טלפוני לאישור ההזמנה</strong></p>
+                        </div>
+                    </div>
                     ` : `
                     <div style="background: #d4edda; padding: 20px; border-radius: 10px; border-right: 4px solid #28a745;">
                         <h2 style="color: #155724; margin-top: 0;">✅ הבעיה נפתרה בהצלחה</h2>
@@ -552,7 +592,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
             html: html
         });
         
-        console.log(`📧 מייל נשלח: ${type} - ${customer.name}`);
+        console.log(`📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}`);
     } catch (error) {
         console.error('❌ שגיאת מייל:', error);
     }
@@ -612,6 +652,9 @@ app.post('/webhook/whatsapp', async (req, res) => {
             let customer = findCustomer(phone, messageText);
             const context = customer ? memory.get(phone, customer) : memory.get(phone);
             
+            console.log(`🔍 לקוח: ${customer ? customer.name + ' מ' + customer.site : 'לא מזוהה'}`);
+            console.log(`📊 Context stage: ${context?.stage || 'אין'}`);
+            
             // עיבוד תגובה עם זיהוי לקוח משופר
             let result = generateResponse(messageText, customer, context, phone);
             
@@ -633,7 +676,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 try {
                     const aiSolution = await getAISolution(result.problemDescription, customer, troubleshootingDB);
                     
-                    const finalResponse = `${aiSolution}\n\n🆔 מספר קריאה: HSC-${result.serviceNumber}\n📞 039792365`;
+                    const finalResponse = `${aiSolution}\n\n🆔 מספר קריאה: ${result.serviceNumber}\n📞 039792365`;
                     
                     await sendWhatsApp(phone, finalResponse);
                     memory.add(phone, finalResponse, 'hadar', customer);
@@ -647,10 +690,11 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         context.aiSolution = aiSolution;
                     }
                     
+                    console.log(`✅ פתרון AI נשלח ללקוח ${customer.name} - ${result.serviceNumber}`);
                     return res.status(200).json({ status: 'OK' });
                 } catch (aiError) {
                     console.error('❌ שגיאה בעיבוד AI:', aiError);
-                    await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת החכמה\n\nאנא התקשר ישירות: 📞 039792365\n\n🆔 מספר קריאה: HSC-${result.serviceNumber}`);
+                    await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת החכמה\n\nאנא התקשר ישירות: 📞 039792365\n\n🆔 מספר קריאה: ${result.serviceNumber}`);
                     return res.status(200).json({ status: 'OK' });
                 }
             }
@@ -660,24 +704,27 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
                 if (unitMatch) {
                     const unit = unitMatch[1] || unitMatch[2];
-                    serviceCallCounter++; 
-                    const currentServiceNumber = serviceCallCounter;
+                    const currentServiceNumber = getNextServiceNumber();
                     
-                    const response = `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את התמונה!\n\n🔍 מעביר לטכנאי מיידי\n⏰ טכנאי יגיע תוך 2-4 שעות\n\n🆔 מספר קריאה: HSC-${currentServiceNumber}\n\n📞 039792365`;
+                    console.log(`📁 נזק ביחידה ${unit} - תמונה התקבלה מ${customer.name}`);
+                    
+                    const response = `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את התמונה!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
                     
                     await sendWhatsApp(phone, response);
                     await sendEmail(customer, 'technician', `נזק ביחידה ${unit} - תמונה צורפה`, {
-                        serviceNumber: `HSC-${currentServiceNumber}`,
+                        serviceNumber: currentServiceNumber,
                         problemDescription: `נזק ביחידה ${unit} - ${messageText}`,
                         solution: 'נשלח טכנאי לטיפול באתר',
                         resolved: false
                     });
                     memory.updateStage(phone, 'damage_completed', customer); // תיקון - לא לחזור לתחילה
                     
+                    console.log(`✅ נזק יחידה ${unit} - מייל נשלח - ${currentServiceNumber}`);
                     return res.status(200).json({ status: 'OK' });
                 } else {
                     // אם לא כתב מספר יחידה
                     await sendWhatsApp(phone, `אנא כתוב מספר היחידה עם התמונה\n\nלדוגמה: "יחידה 101"\n\n📞 039792365`);
+                    console.log(`⚠️ תמונה ללא מספר יחידה מ${customer.name}`);
                     return res.status(200).json({ status: 'OK' });
                 }
             }
@@ -689,6 +736,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 if (result.stage) {
                     memory.updateStage(phone, result.stage);
                 }
+                console.log(`📤 תגובה ללא זיהוי לקוח: ${result.stage}`);
                 return res.status(200).json({ status: 'OK' });
             }
             
@@ -700,8 +748,11 @@ app.post('/webhook/whatsapp', async (req, res) => {
             memory.add(phone, finalResult.response, 'hadar', customer);
             memory.updateStage(phone, finalResult.stage, customer);
             
+            console.log(`📤 תגובה נשלחה ללקוח ${customer ? customer.name : 'לא מזוהה'}: ${finalResult.stage}`);
+            
             // שליחת מיילים עם סיכום מלא
             if (finalResult.sendTechnician) {
+                console.log(`📧 שולח מייל טכנאי ללקוח ${customer.name}`);
                 await sendEmail(customer, 'technician', messageText, {
                     serviceNumber: finalResult.serviceNumber,
                     problemDescription: finalResult.problemDescription,
@@ -709,18 +760,25 @@ app.post('/webhook/whatsapp', async (req, res) => {
                     resolved: finalResult.resolved
                 });
             } else if (finalResult.sendSummary) {
+                console.log(`📧 שולח מייל סיכום ללקוח ${customer.name}`);
                 await sendEmail(customer, 'summary', 'בעיה נפתרה בהצלחה', {
                     serviceNumber: finalResult.serviceNumber,
                     problemDescription: finalResult.problemDescription,
                     solution: finalResult.solution,
                     resolved: finalResult.resolved
                 });
+            } else if (finalResult.sendOrderEmail) {
+                console.log(`📧 שולח מייל הזמנה ללקוח ${customer.name}`);
+                await sendEmail(customer, 'order', finalResult.orderDetails, {
+                    serviceNumber: getNextServiceNumber(),
+                    orderDetails: finalResult.orderDetails
+                });
             }
         }
         
         res.status(200).json({ status: 'OK' });
     } catch (error) {
-        console.error('❌ שגיאה:', error);
+        console.error('❌ שגיאה כללית:', error);
         res.status(500).json({ error: 'Server error' });
     }
 });
@@ -735,7 +793,7 @@ app.listen(PORT, () => {
     console.log('🧠 זיכרון: 4 שעות');
     console.log('🤖 OpenAI: מחובר לפתרון תקלות');
     console.log('📋 מסד תקלות: זמין');
-    console.log('🔢 מספרי קריאה: HSC-' + (serviceCallCounter + 1) + '+');
+    console.log('🔢 מספרי קריאה: HSC-' + (globalServiceCounter + 1) + '+');
     console.log('📧 מיילים: סיכום מלא בכל קריאה');
     console.log('✅ מערכת מושלמת מוכנה!');
 });
