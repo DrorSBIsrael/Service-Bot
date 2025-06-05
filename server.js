@@ -48,10 +48,21 @@ try {
 
 // טעינת מסדי הדרכה
 try {
-    trainingDB.parking = fs.readFileSync('./Parking operation 1.docx', 'utf8');
-    trainingDB.scheidt = fs.readFileSync('./Scheidt system operation.pdf', 'utf8'); 
-    trainingDB.examples = fs.readFileSync('./דוגמאות נוספות.txt', 'utf8');
-    console.log('📚 מסדי הדרכה נטענו');
+    if (fs.existsSync('./Parking operation 1.docx')) {
+        trainingDB.parking = fs.readFileSync('./Parking operation 1.docx', 'utf8');
+        console.log('📚 מדריך חניונים נטען');
+    }
+    if (fs.existsSync('./Scheidt system operation.pdf')) {
+        trainingDB.scheidt = fs.readFileSync('./Scheidt system operation.pdf', 'utf8');
+        console.log('📚 מדריך שיידט נטען');
+    }
+    if (fs.existsSync('./דוגמאות נוספות.txt')) {
+        trainingDB.examples = fs.readFileSync('./דוגמאות נוספות.txt', 'utf8');
+        console.log('📚 דוגמאות נטענו');
+    }
+    
+    const loadedFiles = Object.keys(trainingDB).length;
+    console.log(`📚 ${loadedFiles} מסדי הדרכה נטענו מתוך 3`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת הדרכות:', error.message);
 }
