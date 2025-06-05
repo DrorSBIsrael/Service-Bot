@@ -3,6 +3,7 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const fs = require('fs');
+const path = require('path');
 const app = express();
 
 // מספר תקלה גלובלי עם נומרטור מתקדם
@@ -10,6 +11,42 @@ let globalServiceCounter = 10001;
 
 function getNextServiceNumber() {
     return `HSC-${++globalServiceCounter}`;
+}
+// פונקציה להורדת תמונות מוואטסאפ
+async function downloadWhatsAppFile(fileUrl, fileName) {
+    try {
+        console.log('📥 מוריד קובץ מוואטסאפ:', fileName);
+        
+        const response = await axios({
+            method: 'GET',
+            url: fileUrl,
+            responseType: 'stream'
+        });
+        
+        // יצירת תיקיית uploads אם לא קיימת
+        const uploadsDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        // שמירת הקובץ
+        const filePath = path.join(uploadsDir, fileName);
+        const writer = fs.createWriteStream(filePath);
+        
+        response.data.pipe(writer);
+        
+        return new Promise((resolve, reject) => {
+            writer.on('finish', () => {
+                console.log('✅ קובץ נשמר:', filePath);
+                resolve(filePath);
+            });
+            writer.on('error', reject);
+        });
+        
+    } catch (error) {
+        console.error('❌ שגיאה בהורדת קובץ:', error.message);
+        return null;
+    }
 }
 
 // טעינת לקוחות
@@ -542,7 +579,10 @@ async function sendEmail(customer, type, details, extraData = {}) {
             const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
             conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
         }
-        
+        // הוספת מידע על תמונות מצורפות
+        if (extraData.attachments && extraData.attachments.length > 0) {
+            conversationSummary += `<p><strong>📎 קבצים מצורפים:</strong> ${extraData.attachments.length} תמונות</p>`;
+        }
         const html = `
             <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
                 <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
@@ -638,14 +678,30 @@ async function sendEmail(customer, type, details, extraData = {}) {
             </div>
         `;
         
-        await transporter.sendMail({
+// הכנת אובייקט המייל
+        const mailOptions = {
             from: 'Report@sbparking.co.il',
             to: 'Dror@sbparking.co.il',
             subject: subject,
             html: html
-        });
+        };
         
-        console.log(`📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}`);
+        // הוספת קבצים מצורפים אם יש
+        if (extraData.attachments && extraData.attachments.length > 0) {
+            mailOptions.attachments = extraData.attachments.map(filePath => {
+                const fileName = path.basename(filePath);
+                return {
+                    filename: fileName,
+                    path: filePath,
+                    contentType: 'image/jpeg'
+                };
+            });
+            console.log(`📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+        }
+        
+        await transporter.sendMail(mailOptions);
+        
+        console.log(`📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} תמונות` : ''}`);
     } catch (error) {
         console.error('❌ שגיאת מייל:', error);
     }
@@ -755,7 +811,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 }
             }
             
-            // בדיקה מיוחדת לקבצים עם יחידה - תיקון הלוגיקה
+// בדיקה מיוחדת לקבצים עם יחידה - תיקון הלוגיקה
             if (hasFile && customer && context?.stage === 'damage_photo') {
                 const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
                 if (unitMatch) {
@@ -764,6 +820,19 @@ app.post('/webhook/whatsapp', async (req, res) => {
                     
                     console.log(`📁 נזק ביחידה ${unit} - תמונה התקבלה מ${customer.name}`);
                     
+                    // הורדת התמונה מוואטסאפ
+                    let downloadedFiles = [];
+                    if (messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
+                        const timestamp = Date.now();
+                        const fileName = `damage_${customer.id}_${unit}_${timestamp}.jpg`;
+                        
+                        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+                        if (filePath) {
+                            downloadedFiles.push(filePath);
+                            console.log(`✅ תמונה הורדה: ${fileName}`);
+                        }
+                    }
+                    
                     const response = `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את התמונה!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
                     
                     await sendWhatsApp(phone, response);
@@ -771,11 +840,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         serviceNumber: currentServiceNumber,
                         problemDescription: `נזק ביחידה ${unit} - ${messageText}`,
                         solution: 'נשלח טכנאי לטיפול באתר',
-                        resolved: false
+                        resolved: false,
+                        attachments: downloadedFiles
                     });
                     memory.updateStage(phone, 'damage_completed', customer);
                     
-                    console.log(`✅ נזק יחידה ${unit} - מייל נשלח - ${currentServiceNumber}`);
+                    console.log(`✅ נזק יחידה ${unit} - מייל עם תמונה נשלח - ${currentServiceNumber}`);
                     return res.status(200).json({ status: 'OK' });
                 } else {
                     await sendWhatsApp(phone, `אנא כתוב מספר היחידה עם התמונה\n\nלדוגמה: "יחידה 101"\n\n📞 039792365`);
@@ -783,7 +853,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                     return res.status(200).json({ status: 'OK' });
                 }
             }
-            
+
             // אם אין לקוח, נסה לזהות או בקש פרטים
             if (!customer && !result.customer) {
                 await sendWhatsApp(phone, result.response);
