@@ -6,6 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 
+const { OpenAI } = require('openai');
+
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+
 // מספר תקלה גלובלי עם נומרטור מתקדם
 let globalServiceCounter = 10001;
 
@@ -470,42 +476,124 @@ function identifyCustomerInteractively(message) {
     return null;
 }
 
-// OpenAI לפתרון תקלות מקובץ Service failure scenarios.json
+// OpenAI לפתרון תקלות מקובץ Service failure scenarios.json + AI
 async function getAISolution(problemDescription, customer, troubleshootingDB) {
     try {
         console.log('🔍 מחפש פתרון במסד התקלות...');
         
-        // חיפוש בקובץ התקלות
+        // חיפוש בקובץ התקלות - מבנה מערך מתוקן
         const problem = problemDescription.toLowerCase();
         let foundSolution = null;
+        let foundScenario = null;
         
-        if (troubleshootingDB && troubleshootingDB.failures) {
-            // חיפוש לפי מילות מפתח
-            for (const [key, failure] of Object.entries(troubleshootingDB.failures)) {
-                const failureProblem = failure.problem.toLowerCase();
-                const keywords = failureProblem.split(' ');
+        // הקובץ הוא מערך של תרחישים
+        if (troubleshootingDB && Array.isArray(troubleshootingDB)) {
+            console.log(`📋 בודק ${troubleshootingDB.length} תרחישי תקלות...`);
+            
+            // חיפוש בכל התרחישים
+            for (const scenario of troubleshootingDB) {
+                const scenarioText = scenario.תרחיש.toLowerCase();
+                const steps = scenario.שלבים;
                 
-                if (keywords.some(keyword => problem.includes(keyword)) || 
-                    problem.includes(failureProblem)) {
-                    foundSolution = failure.solution;
-                    console.log(`✅ נמצא פתרון לתקלה: ${failure.problem}`);
+                console.log(`🔍 בודק תרחיש: ${scenario.תרחיש}`);
+                
+                // בדיקת מילות מפתח
+                const scenarioWords = scenarioText.split(' ');
+                const problemWords = problem.split(' ');
+                
+                // אם נמצאה התאמה במילות מפתח
+                if (scenarioWords.some(word => word.length > 2 && problemWords.includes(word)) ||
+                    problemWords.some(word => word.length > 2 && scenarioWords.includes(word))) {
+                    
+                    foundSolution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${steps}`;
+                    
+                    if (scenario.הערות && scenario.הערות.trim() !== '') {
+                        foundSolution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+                    }
+                    
+                    foundScenario = scenario;
+                    console.log(`✅ נמצא פתרון לתקלה: ${scenario.תרחיש}`);
                     break;
                 }
             }
         }
         
-        if (foundSolution) {
-            return `🔧 **פתרון מהמאגר:**\n\n${foundSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+        // אם נמצא פתרון במאגר - שלב עם OpenAI לשיפור
+        if (foundSolution && foundScenario) {
+            try {
+                console.log('🤖 משפר את הפתרון עם OpenAI...');
+                
+                const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
+                לקוח דיווח על התקלה: "${problemDescription}"
+                
+                מצאתי פתרון במאגר:
+                תרחיש: ${foundScenario.תרחיש}
+                שלבים: ${foundScenario.שלבים}
+                הערות: ${foundScenario.הערות || 'אין'}
+                
+                אנא שפר את הפתרון:
+                1. הסבר בפשטות את השלבים
+                2. הוסף טיפים מעשיים
+                3. הזהר מפני טעויות נפוצות
+                4. כתב בעברית, קצר ומובן
+                
+                התחל עם "🔧 פתרון מומלץ:" והשאר קצר (עד 150 מילים).`;
+                
+                const aiResponse = await openai.chat.completions.create({
+                    model: "gpt-3.5-turbo",
+                    messages: [{ role: "user", content: aiPrompt }],
+                    max_tokens: 300,
+                    temperature: 0.3,
+                });
+                
+                const aiSolution = aiResponse.choices[0].message.content;
+                console.log('✅ OpenAI שיפר את הפתרון');
+                
+                return `${aiSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                
+            } catch (aiError) {
+                console.error('⚠️ שגיאה ב-OpenAI, מחזיר פתרון מהמאגר:', aiError.message);
+                return `${foundSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            }
         }
         
-        console.log('⚠️ לא נמצא פתרון במאגר - מעביר לטכנאי');
+        // אם לא נמצא במאגר - נסה OpenAI לבד
+        if (!foundSolution) {
+            try {
+                console.log('🤖 לא נמצא במאגר, מנסה OpenAI...');
+                
+                const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
+                לקוח דיווח על התקלה: "${problemDescription}"
+                
+                אם אתה מכיר פתרון לתקלה זו, תן פתרון קצר ומעשי בעברית.
+                אם לא - אל תמציא פתרון! רק כתוב "לא נמצא פתרון מיידי".
+                
+                התחל עם "🔧 פתרון אפשרי:" והשאר קצר (עד 100 מילים).`;
+                
+                const aiResponse = await openai.chat.completions.create({
+                    model: "gpt-3.5-turbo",
+                    messages: [{ role: "user", content: aiPrompt }],
+                    max_tokens: 200,
+                    temperature: 0.2,
+                });
+                
+                const aiSolution = aiResponse.choices[0].message.content;
+                
+                if (!aiSolution.includes('לא נמצא פתרון מיידי')) {
+                    console.log('✅ OpenAI מצא פתרון');
+                    return `${aiSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                }
+                
+            } catch (aiError) {
+                console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
+            }
+        }
+        
+        console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
         return '🔧 **קיבלתי את התיאור**\n\n📋 לא נמצא פתרון מיידי במאגר\n\n📞 מעבירה את הפניה לטכנאי המתמחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365';
         
     } catch (error) {
         console.error('❌ שגיאה בחיפוש פתרון:', error.message);
-        
-        // פתרון fallback - רק מעבירה לטכנאי
-        console.log('⚠️ נופל לפתרון fallback - מעביר לטכנאי');
         
         return '🔧 **קיבלתי את התיאור**\n\n📋 מעבירה את הפניה לטכנאי המתמחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות לפתרון מדויק\n\n📞 **אם הפתרון דחוף:** התקשר מיד 039792365';
     }
