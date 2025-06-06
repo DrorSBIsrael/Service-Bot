@@ -11,8 +11,6 @@ const app = express();
 //     apiKey: process.env.OPENAI_API_KEY,
 // });
 
-
-
 // מספר תקלה גלובלי עם נומרטור מתקדם
 let globalServiceCounter = 10001;
 
@@ -210,7 +208,7 @@ const memory = new SimpleMemory();
 app.use(express.json());
 app.use(express.static('public'));
 
-const transporter = nodemailer.createTransport({
+const transporter = nodemailer.createTransporter({
     host: process.env.EMAIL_HOST || 'smtp.012.net.il',
     port: 465,
     secure: true,
@@ -303,32 +301,38 @@ function identifyCustomerInteractively(message) {
     return null;
 }
 
+// OpenAI לפתרון תקלות - תיקון מלא
 async function getAISolution(problemDescription, customer) {
     try {
         console.log('🔍 מחפש פתרון במסד התקלות...');
         
         const problem = problemDescription.toLowerCase();
         let foundSolution = null;
+        let foundScenario = null;
         
         // בדיקה שהמסד טעון
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             console.error('❌ מסד התקלות ריק או לא טעון');
-            return '🔧 **בעיה במאגר התקלות**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+            return '🔧 **בעיה במאגר התקלות**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
         }
         
         console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
         
         // חיפוש במאגר התקלות
         for (const scenario of serviceFailureDB) {
-            if (!scenario.תרחיש || !scenario.שלבים) continue;
+            if (!scenario.תרחיש || !scenario.שלבים) {
+                console.log('⚠️ תרחיש פגום - מדלג');
+                continue;
+            }
             
             const scenarioText = scenario.תרחיש.toLowerCase();
             console.log(`🔍 בודק תרחיש: ${scenario.תרחיש}`);
             
-            // חיפוש מילות מפתח
+            // בדיקות התאמה מתקדמות
             const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
             const problemWords = problem.split(' ').filter(word => word.length > 2);
             
+            // בדיקת חפיפה במילות מפתח
             let matchCount = 0;
             scenarioWords.forEach(scenarioWord => {
                 problemWords.forEach(problemWord => {
@@ -338,28 +342,22 @@ async function getAISolution(problemDescription, customer) {
                 });
             });
             
-            // אם יש התאמה
-            if (matchCount > 0) {
+            // אם יש התאמה טובה (לפחות מילה אחת)
+            if (matchCount > 0 || 
+                scenarioText.includes(problem.substring(0, 10)) || 
+                problem.includes(scenarioText.substring(0, 10))) {
+                
                 foundSolution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
                 
                 if (scenario.הערות && scenario.הערות.trim() !== '') {
                     foundSolution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
                 }
                 
-                console.log(`✅ נמצא פתרון: ${scenario.תרחיש}`);
-                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                foundScenario = scenario;
+                console.log(`✅ נמצא פתרון לתקלה: ${scenario.תרחיש} (התאמות: ${matchCount})`);
+                break;
             }
         }
-        
-        // אם לא נמצא פתרון
-        console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
-        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
-        
-    } catch (error) {
-        console.error('❌ שגיאה בחיפוש פתרון:', error.message);
-        return '🔧 **בעיה זמנית במערכת**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
-    }
-}
         
         // אם נמצא פתרון במאגר - נסה לשפר עם OpenAI
         if (foundSolution && foundScenario) {
@@ -369,7 +367,7 @@ async function getAISolution(problemDescription, customer) {
                 // בדיקה שיש מפתח API
                 if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
                     console.log('⚠️ אין מפתח OpenAI תקין - מחזיר פתרון מהמאגר');
-	return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                    return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 }
                 
                 const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
@@ -389,24 +387,14 @@ async function getAISolution(problemDescription, customer) {
 
 התחל עם "🔧 פתרון מומלץ:" והשאר קצר (עד 150 מילים).`;
                 
-// const aiResponse = await openai.chat.completions.create({
-//     model: "gpt-3.5-turbo",
-//     messages: [{ role: "user", content: aiPrompt }],
-//     max_tokens: 300,
-//     temperature: 0.3,
-// });
-
-// const aiSolution = aiResponse.choices[0].message.content;
-                
-                const aiSolution = aiResponse.choices[0].message.content;
-                console.log('✅ OpenAI שיפר את הפתרון');
-
-	return `${aiSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                // בכאן - במקום לנסות להפעיל את OpenAI, נחזיר את הפתרון הרגיל
+                console.log('⚠️ OpenAI מושבת זמנית - מחזיר פתרון מהמאגר');
+                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
             } catch (aiError) {
                 console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
                 console.log('📋 מחזיר פתרון מהמאגר בלבד');
-	return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             }
         }
         
@@ -416,41 +404,23 @@ async function getAISolution(problemDescription, customer) {
         try {
             if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
                 console.log('⚠️ אין מפתח OpenAI - מעביר לטכנאי');
-	return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+                return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
             }
             
-            const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
-
-לקוח מ${customer.site} דיווח על התקלה: "${problemDescription}"
-
-אם אתה מכיר פתרון מדויק לתקלה זו במערכות שיידט, תן פתרון קצר ומעשי בעברית.
-אם לא בטוח או לא מכיר - כתוב "לא נמצא פתרון מיידי".
-
-התחל עם "🔧 פתרון אפשרי:" והשאר קצר (עד 100 מילים).`;
-            
-// const aiResponse = await openai.chat.completions.create({
-//     model: "gpt-3.5-turbo",
-//     messages: [{ role: "user", content: aiPrompt }],
-//     max_tokens: 200,
-//     temperature: 0.2,
-// });
-
-// const aiSolution = aiResponse.choices[0].message.content;
-            
-            if (!aiSolution.includes('לא נמצא פתרון מיידי')) {
-                console.log('✅ OpenAI מצא פתרון');
-	return `${aiSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;            }
+            // בכאן גם - במקום לנסות להפעיל OpenAI
+            console.log('⚠️ OpenAI מושבת זמנית - מעביר לטכנאי');
+            return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
             
         } catch (aiError) {
             console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
         }
         
         console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
-        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
         
     } catch (error) {
         console.error('❌ שגיאה כללית בחיפוש פתרון:', error.message);
-       return '🔧 **בעיה זמנית במערכת**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+        return '🔧 **בעיה זמנית במערכת**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
     }
 }
 
