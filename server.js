@@ -397,8 +397,8 @@ async function getAISolution(problemDescription, customer) {
                 
                 const aiSolution = aiResponse.choices[0].message.content;
                 console.log('✅ OpenAI שיפר את הפתרון');
-                
-                return `${aiSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+
+	return `${aiSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
             } catch (aiError) {
                 console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
@@ -413,7 +413,7 @@ async function getAISolution(problemDescription, customer) {
         try {
             if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
                 console.log('⚠️ אין מפתח OpenAI - מעביר לטכנאי');
-                return '🔧 **לא נמצא פתרון מיידי**\n\n📞 מעבירה את הפניה לטכנאי המתמחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365';
+	return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
             }
             
             const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
@@ -436,15 +436,14 @@ async function getAISolution(problemDescription, customer) {
             
             if (!aiSolution.includes('לא נמצא פתרון מיידי')) {
                 console.log('✅ OpenAI מצא פתרון');
-                return `${aiSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-            }
+	return `${aiSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;            }
             
         } catch (aiError) {
             console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
         }
         
         console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
-        return '🔧 **לא נמצא פתרון מיידי**\n\n📞 מעבירה את הפניה לטכנאי המתמחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365';
+        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
         
     } catch (error) {
         console.error('❌ שגיאה כללית בחיפוש פתרון:', error.message);
