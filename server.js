@@ -301,7 +301,7 @@ function identifyCustomerInteractively(message) {
     return null;
 }
 
-// OpenAI לפתרון תקלות - תיקון מלא
+// 🔧 תיקון 1: פונקציה getAISolution מתוקנת (מייל מיידי)
 async function getAISolution(problemDescription, customer) {
     try {
         console.log('🔍 מחפש פתרון במסד התקלות...');
@@ -313,7 +313,19 @@ async function getAISolution(problemDescription, customer) {
         // בדיקה שהמסד טעון
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             console.error('❌ מסד התקלות ריק או לא טעון');
-            return '🔧 **בעיה במאגר התקלות**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+            // 🔧 תיקון 1: שליחת מייל מיידי ללא המתנה
+            const serviceNumber = getNextServiceNumber();
+            await sendEmail(customer, 'technician', problemDescription, {
+                serviceNumber: serviceNumber,
+                problemDescription: problemDescription,
+                solution: 'בעיה במאגר התקלות - נשלח טכנאי',
+                resolved: false
+            });
+            return {
+                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+                serviceNumber: serviceNumber,
+                emailSent: true
+            };
         }
         
         console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
@@ -359,72 +371,51 @@ async function getAISolution(problemDescription, customer) {
             }
         }
         
-        // אם נמצא פתרון במאגר - נסה לשפר עם OpenAI
+        // אם נמצא פתרון במאגר
         if (foundSolution && foundScenario) {
-            console.log('🤖 מנסה לשפר את הפתרון עם OpenAI...');
-            
-            try {
-                // בדיקה שיש מפתח API
-                if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
-                    console.log('⚠️ אין מפתח OpenAI תקין - מחזיר פתרון מהמאגר');
-                    return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-                }
-                
-                const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
-
-לקוח מ${customer.site} דיווח על התקלה: "${problemDescription}"
-
-מצאתי פתרון במאגר:
-תרחיש: ${foundScenario.תרחיש}
-שלבים: ${foundScenario.שלבים}
-הערות: ${foundScenario.הערות || 'אין'}
-
-אנא שפר את הפתרון:
-1. הסבר בפשטות את השלבים
-2. הוסף טיפים מעשיים
-3. הזהר מפני טעויות נפוצות
-4. כתוב בעברית, קצר ומובן
-
-התחל עם "🔧 פתרון מומלץ:" והשאר קצר (עד 150 מילים).`;
-                
-                // בכאן - במקום לנסות להפעיל את OpenAI, נחזיר את הפתרון הרגיל
-                console.log('⚠️ OpenAI מושבת זמנית - מחזיר פתרון מהמאגר');
-                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-                
-            } catch (aiError) {
-                console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
-                console.log('📋 מחזיר פתרון מהמאגר בלבד');
-                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-            }
+            console.log('✅ נמצא פתרון במאגר התקלות');
+            return {
+                response: `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`,
+                emailSent: false
+            };
         }
         
-        // אם לא נמצא במאגר - נסה OpenAI לבד
-        console.log('🤖 לא נמצא במאגר, מנסה OpenAI לבד...');
+        // 🔧 תיקון 1: אם לא נמצא פתרון - שלח מייל מיידי
+        console.log('⚠️ לא נמצא פתרון - שולח מייל מיידי');
+        const serviceNumber = getNextServiceNumber();
+        await sendEmail(customer, 'technician', problemDescription, {
+            serviceNumber: serviceNumber,
+            problemDescription: problemDescription,
+            solution: 'לא נמצא פתרון במאגר - נשלח טכנאי',
+            resolved: false
+        });
         
-        try {
-            if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
-                console.log('⚠️ אין מפתח OpenAI - מעביר לטכנאי');
-                return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
-            }
-            
-            // בכאן גם - במקום לנסות להפעיל OpenAI
-            console.log('⚠️ OpenAI מושבת זמנית - מעביר לטכנאי');
-            return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
-            
-        } catch (aiError) {
-            console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
-        }
-        
-        console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
-        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+        return {
+            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            serviceNumber: serviceNumber,
+            emailSent: true
+        };
         
     } catch (error) {
         console.error('❌ שגיאה כללית בחיפוש פתרון:', error.message);
-        return '🔧 **בעיה זמנית במערכת**\n\n📧 אעביר מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+        // שליחת מייל גם במקרה של שגיאה
+        const serviceNumber = getNextServiceNumber();
+        await sendEmail(customer, 'technician', problemDescription, {
+            serviceNumber: serviceNumber,
+            problemDescription: problemDescription,
+            solution: 'שגיאה במערכת - נשלח טכנאי',
+            resolved: false
+        });
+        
+        return {
+            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            serviceNumber: serviceNumber,
+            emailSent: true
+        };
     }
 }
 
-// תגובה חכמה עם זיהוי לקוח משופר
+// 🔧 תיקון 2: פונקציה generateResponse מתוקנת (תמונות/סרטונים לכל פניה)
 function generateResponse(message, customer, context, phone) {
     const msg = message.toLowerCase();
     
@@ -482,31 +473,34 @@ function generateResponse(message, customer, context, phone) {
         }
     }
     
-    // תפריט ראשי
+    // 🔧 תיקון 2: תפריט ראשי - תקלה עם אפשרות תמונה/סרטון
     if (msg === '1' || msg.includes('תקלה')) {
         return { 
-            response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה כולל סוג היחידה ומספר\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`, 
+            response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון קצר\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`, 
             stage: 'problem_description' 
         };
     }
     
+    // תקלה עם תמונה/סרטון נשארת כמו שהיא
     if (msg === '2' || msg.includes('נזק')) {
         return { 
-            response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא צלם את הנזק ושלח תמונה + מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`, 
+            response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא צלם את הנזק ושלח תמונה/סרטון + מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`, 
             stage: 'damage_photo' 
         };
     }
     
+    // 🔧 תיקון 2: הצעת מחיר עם אפשרות תמונה/סרטון
     if (msg === '3' || msg.includes('מחיר')) {
         return { 
-            response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📞 039792365`, 
+            response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הפריט\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📞 039792365`, 
             stage: 'order_request' 
         };
     }
     
+    // 🔧 תיקון 2: הדרכה עם אפשרות תמונה/סרטון
     if (msg === '4' || msg.includes('הדרכה')) {
         return { 
-            response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n📞 039792365`, 
+            response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הבעיה\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n📞 039792365`, 
             stage: 'training_request' 
         };
     }
@@ -809,26 +803,159 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             memory.add(phone, messageText, 'customer', customer);
             
+// 🔧 תיקון חדש: זיהוי סוג קובץ (תמונה/סרטון)
+            let fileType = '';
+            let downloadedFiles = [];
+            
+            if (hasFile && messageData.fileMessageData) {
+                const fileName = messageData.fileMessageData.fileName || '';
+                const mimeType = messageData.fileMessageData.mimeType || '';
+                
+                if (mimeType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|bmp)$/i)) {
+                    fileType = 'תמונה';
+                } else if (mimeType.startsWith('video/') || fileName.match(/\.(mp4|avi|mov|wmv|3gp)$/i)) {
+                    fileType = 'סרטון';
+                } else {
+                    fileType = 'קובץ';
+                }
+                
+                console.log(`📁 ${fileType}: ${fileName}`);
+            }
+            
+            // 🔧 תיקון חדש: טיפול בקבצים לכל סוג פניה (לא רק נזק)
+            if (hasFile && customer) {
+                const currentServiceNumber = getNextServiceNumber();
+                
+                // הורדת הקובץ
+                if (messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
+                    const timestamp = Date.now();
+                    const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
+                    let filePrefix = 'file';
+                    
+                    // קביעת סוג הקובץ לפי השלב
+                    if (context?.stage === 'damage_photo') {
+                        filePrefix = 'damage';
+                    } else if (context?.stage === 'problem_description') {
+                        filePrefix = 'problem';
+                    } else if (context?.stage === 'order_request') {
+                        filePrefix = 'order';
+                    } else if (context?.stage === 'training_request') {
+                        filePrefix = 'training';
+                    }
+                    
+                    const fileName = `${filePrefix}_${customer.id}_${timestamp}${fileExtension}`;
+                    
+                    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+                    if (filePath) {
+                        downloadedFiles.push(filePath);
+                        console.log(`✅ ${fileType} הורד: ${fileName}`);
+                    }
+                }
+                
+                // טיפול בקבצים לפניות שונות (לא רק נזק)
+                if (context?.stage === 'order_request') {
+                    const response = `📋 **קיבלתי את בקשת ההזמנה עם ${fileType}!**\n\n"${messageText}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
+                    
+                    await sendWhatsApp(phone, response);
+                    await sendEmail(customer, 'order', messageText, {
+                        serviceNumber: currentServiceNumber,
+                        orderDetails: messageText,
+                        attachments: downloadedFiles
+                    });
+                    memory.updateStage(phone, 'order_completed', customer);
+                    
+                    console.log(`✅ הזמנה עם ${fileType} - מייל נשלח - ${currentServiceNumber}`);
+                    return res.status(200).json({ status: 'OK' });
+                }
+                
+                if (context?.stage === 'training_request') {
+                    const response = `📚 **קיבלתי את בקשת ההדרכה עם ${fileType}!**\n\n"${messageText}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
+                    
+                    await sendWhatsApp(phone, response);
+                    await sendEmail(customer, 'training', messageText, {
+                        serviceNumber: currentServiceNumber,
+                        trainingRequest: messageText,
+                        trainingContent: 'חומר הדרכה מותאם עם קבצים מצורפים',
+                        attachments: downloadedFiles
+                    });
+                    memory.updateStage(phone, 'training_completed', customer);
+                    
+                    console.log(`✅ הדרכה עם ${fileType} - מייל נשלח - ${currentServiceNumber}`);
+                    return res.status(200).json({ status: 'OK' });
+                }
+                
+                // טיפול בתקלות עם קבצים
+                if (context?.stage === 'problem_description') {
+                    // כאן נטפל בזה בהמשך עם ה-AI
+                    console.log(`📁 תקלה עם ${fileType} - יטופל עם הפתרון`);
+                }
+            }
+
             // עיבוד מיוחד לתקלות עם AI
             if (result.stage === 'processing_with_ai' && result.problemDescription) {
                 console.log('🔍 מחפש פתרון לתקלה...');
                 
-                try {
-                    const solution = await getAISolution(result.problemDescription, customer);
-                    
-                    const finalResponse = `${solution}\n\n🆔 מספר קריאה: ${result.serviceNumber}`;
-                    
-                    await sendWhatsApp(phone, finalResponse);
-                    memory.add(phone, finalResponse, 'hadar', customer);
-                    memory.updateStage(phone, 'waiting_feedback', customer);
+ try {
+    // 🔧 הורדת קבצים אם יש (לתקלות)
+    if (hasFile && downloadedFiles.length === 0 && messageData.fileMessageData?.downloadUrl) {
+        const timestamp = Date.now();
+        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
+        const fileName = `problem_${customer.id}_${timestamp}${fileExtension}`;
+        
+        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+        if (filePath) {
+            downloadedFiles.push(filePath);
+            console.log(`✅ ${fileType} הורד לתקלה: ${fileName}`);
+        }
+    }
+    
+    const solution = await getAISolution(result.problemDescription, customer);
+    
+    let finalResponse;
+    let contextUpdate = {};
+    
+    // אם נשלח מייל מיידי
+    if (solution.emailSent) {
+        finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${solution.serviceNumber}`;
+        contextUpdate = {
+            serviceNumber: solution.serviceNumber,
+            problemDescription: result.problemDescription,
+            aiSolution: solution.response,
+            emailSent: true
+        };
+        
+        // שלח מייל עם קבצים אם יש
+        if (downloadedFiles.length > 0) {
+            await sendEmail(customer, 'technician', result.problemDescription, {
+                serviceNumber: solution.serviceNumber,
+                problemDescription: result.problemDescription,
+                solution: 'קבצים צורפו לקריאה',
+                resolved: false,
+                attachments: downloadedFiles
+            });
+        }
+        
+        memory.updateStage(phone, 'completed', customer);
+    } else {
+        // אם נמצא פתרון - המתן למשוב
+        finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${result.serviceNumber}`;
+        contextUpdate = {
+            serviceNumber: result.serviceNumber,
+            problemDescription: result.problemDescription,
+            aiSolution: solution.response
+        };
+        memory.updateStage(phone, 'waiting_feedback', customer);
+    }
                     
                     // שמור את המידע לזיכרון
-                    const contextAfter = memory.get(phone, customer);
-                    if (contextAfter) {
-                        contextAfter.serviceNumber = result.serviceNumber;
-                        contextAfter.problemDescription = result.problemDescription;
-                        contextAfter.aiSolution = solution;
-                    }
+// עדכון הקונטקסט
+const contextAfter = memory.get(phone, customer);
+if (contextAfter) {
+    Object.assign(contextAfter, contextUpdate);
+    if (downloadedFiles.length > 0) {
+        contextAfter.attachments = downloadedFiles;
+    }
+}
                     
                     console.log(`✅ פתרון נשלח ללקוח ${customer.name} - ${result.serviceNumber}`);
                     return res.status(200).json({ status: 'OK' });
@@ -959,4 +1086,28 @@ app.listen(PORT, () => {
     console.log('✅ מערכת מושלמת מוכנה!');
 });
 
+function getFileExtension(fileName, mimeType) {
+    // אם יש שם קובץ עם סיומת
+    if (fileName && fileName.includes('.')) {
+        const extension = fileName.substring(fileName.lastIndexOf('.'));
+        return extension;
+    }
+    
+    // אם אין שם קובץ, נקבע לפי mimeType
+    if (mimeType) {
+        if (mimeType.startsWith('image/')) {
+            if (mimeType.includes('jpeg')) return '.jpg';
+            if (mimeType.includes('png')) return '.png';
+            if (mimeType.includes('gif')) return '.gif';
+            return '.jpg'; // ברירת מחדל לתמונות
+        } else if (mimeType.startsWith('video/')) {
+            if (mimeType.includes('mp4')) return '.mp4';
+            if (mimeType.includes('avi')) return '.avi';
+            if (mimeType.includes('quicktime')) return '.mov';
+            return '.mp4'; // ברירת מחדל לסרטונים
+        }
+    }
+    
+    return '.file'; // ברירת מחדל
+}
 module.exports = app;
