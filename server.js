@@ -6,10 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 
-// const { OpenAI } = require('openai');
-// const openai = new OpenAI({
-//     apiKey: process.env.OPENAI_API_KEY,
-// });
+const { OpenAI } = require('openai');
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+});
 
 // מספר תקלה גלובלי עם נומרטור מתקדם
 let globalServiceCounter = 10001;
