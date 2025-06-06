@@ -6,10 +6,12 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 
-const { OpenAI } = require('openai');
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// const { OpenAI } = require('openai');
+// const openai = new OpenAI({
+//     apiKey: process.env.OPENAI_API_KEY,
+// });
+
+
 
 // מספר תקלה גלובלי עם נומרטור מתקדם
 let globalServiceCounter = 10001;
@@ -301,38 +303,32 @@ function identifyCustomerInteractively(message) {
     return null;
 }
 
-// OpenAI לפתרון תקלות - תיקון מלא
 async function getAISolution(problemDescription, customer) {
     try {
         console.log('🔍 מחפש פתרון במסד התקלות...');
         
         const problem = problemDescription.toLowerCase();
         let foundSolution = null;
-        let foundScenario = null;
         
         // בדיקה שהמסד טעון
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
-        console.error('❌ מסד התקלות ריק או לא טעון');
-        return '🔧 **בעיה במאגר התקלות**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+            console.error('❌ מסד התקלות ריק או לא טעון');
+            return '🔧 **בעיה במאגר התקלות**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
         }
         
         console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
         
         // חיפוש במאגר התקלות
         for (const scenario of serviceFailureDB) {
-            if (!scenario.תרחיש || !scenario.שלבים) {
-                console.log('⚠️ תרחיש פגום - מדלג');
-                continue;
-            }
+            if (!scenario.תרחיש || !scenario.שלבים) continue;
             
             const scenarioText = scenario.תרחיש.toLowerCase();
             console.log(`🔍 בודק תרחיש: ${scenario.תרחיש}`);
             
-            // בדיקות התאמה מתקדמות
+            // חיפוש מילות מפתח
             const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
             const problemWords = problem.split(' ').filter(word => word.length > 2);
             
-            // בדיקת חפיפה במילות מפתח
             let matchCount = 0;
             scenarioWords.forEach(scenarioWord => {
                 problemWords.forEach(problemWord => {
@@ -342,22 +338,28 @@ async function getAISolution(problemDescription, customer) {
                 });
             });
             
-            // אם יש התאמה טובה (לפחות מילה אחת)
-            if (matchCount > 0 || 
-                scenarioText.includes(problem.substring(0, 10)) || 
-                problem.includes(scenarioText.substring(0, 10))) {
-                
+            // אם יש התאמה
+            if (matchCount > 0) {
                 foundSolution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
                 
                 if (scenario.הערות && scenario.הערות.trim() !== '') {
                     foundSolution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
                 }
                 
-                foundScenario = scenario;
-                console.log(`✅ נמצא פתרון לתקלה: ${scenario.תרחיש} (התאמות: ${matchCount})`);
-                break;
+                console.log(`✅ נמצא פתרון: ${scenario.תרחיש}`);
+                return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             }
         }
+        
+        // אם לא נמצא פתרון
+        console.log('⚠️ לא נמצא פתרון - מעביר לטכנאי');
+        return '🔧 **לא נמצא פתרון מיידי**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+        
+    } catch (error) {
+        console.error('❌ שגיאה בחיפוש פתרון:', error.message);
+        return '🔧 **בעיה זמנית במערכת**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
+    }
+}
         
         // אם נמצא פתרון במאגר - נסה לשפר עם OpenAI
         if (foundSolution && foundScenario) {
