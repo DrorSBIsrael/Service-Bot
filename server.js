@@ -389,12 +389,14 @@ async function getAISolution(problemDescription, customer) {
 
 התחל עם "🔧 פתרון מומלץ:" והשאר קצר (עד 150 מילים).`;
                 
-                const aiResponse = await openai.chat.completions.create({
-                    model: "gpt-3.5-turbo",
-                    messages: [{ role: "user", content: aiPrompt }],
-                    max_tokens: 300,
-                    temperature: 0.3,
-                });
+// const aiResponse = await openai.chat.completions.create({
+//     model: "gpt-3.5-turbo",
+//     messages: [{ role: "user", content: aiPrompt }],
+//     max_tokens: 300,
+//     temperature: 0.3,
+// });
+
+// const aiSolution = aiResponse.choices[0].message.content;
                 
                 const aiSolution = aiResponse.choices[0].message.content;
                 console.log('✅ OpenAI שיפר את הפתרון');
@@ -426,14 +428,14 @@ async function getAISolution(problemDescription, customer) {
 
 התחל עם "🔧 פתרון אפשרי:" והשאר קצר (עד 100 מילים).`;
             
-            const aiResponse = await openai.chat.completions.create({
-                model: "gpt-3.5-turbo",
-                messages: [{ role: "user", content: aiPrompt }],
-                max_tokens: 200,
-                temperature: 0.2,
-            });
-            
-            const aiSolution = aiResponse.choices[0].message.content;
+// const aiResponse = await openai.chat.completions.create({
+//     model: "gpt-3.5-turbo",
+//     messages: [{ role: "user", content: aiPrompt }],
+//     max_tokens: 200,
+//     temperature: 0.2,
+// });
+
+// const aiSolution = aiResponse.choices[0].message.content;
             
             if (!aiSolution.includes('לא נמצא פתרון מיידי')) {
                 console.log('✅ OpenAI מצא פתרון');
