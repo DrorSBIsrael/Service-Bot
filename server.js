@@ -891,81 +891,81 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 }
             }
 
-            // עיבוד מיוחד לתקלות עם AI
-            if (result.stage === 'processing_with_ai' && result.problemDescription) {
-                console.log('🔍 מחפש פתרון לתקלה...');
-                
- try {
-    // 🔧 הורדת קבצים אם יש (לתקלות)
-    if (hasFile && downloadedFiles.length === 0 && messageData.fileMessageData?.downloadUrl) {
-        const timestamp = Date.now();
-        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-        const fileName = `problem_${customer.id}_${timestamp}${fileExtension}`;
-        
-        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-        if (filePath) {
-            downloadedFiles.push(filePath);
-            console.log(`✅ ${fileType} הורד לתקלה: ${fileName}`);
-        }
-    }
+// 🔧 תיקון הלוגיקה הנכונה לתקלות עם AI
+if (result.stage === 'processing_with_ai' && result.problemDescription) {
+    console.log('🔍 מחפש פתרון לתקלה...');
     
-    const solution = await getAISolution(result.problemDescription, customer);
-    
-    let finalResponse;
-    let contextUpdate = {};
-    
-    // אם נשלח מייל מיידי
-    if (solution.emailSent) {
-        finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${solution.serviceNumber}`;
-        contextUpdate = {
-            serviceNumber: solution.serviceNumber,
-            problemDescription: result.problemDescription,
-            aiSolution: solution.response,
-            emailSent: true
-        };
-        
-        // שלח מייל עם קבצים אם יש
-        if (downloadedFiles.length > 0) {
-            await sendEmail(customer, 'technician', result.problemDescription, {
-                serviceNumber: solution.serviceNumber,
-                problemDescription: result.problemDescription,
-                solution: 'קבצים צורפו לקריאה',
-                resolved: false,
-                attachments: downloadedFiles
-            });
+    try {
+        // 🔧 הורדת קבצים אם יש (לתקלות)
+        if (hasFile && downloadedFiles.length === 0 && messageData.fileMessageData?.downloadUrl) {
+            const timestamp = Date.now();
+            const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
+            const fileName = `problem_${customer.id}_${timestamp}${fileExtension}`;
+            
+            const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+            if (filePath) {
+                downloadedFiles.push(filePath);
+                console.log(`✅ ${fileType} הורד לתקלה: ${fileName}`);
+            }
         }
         
-        memory.updateStage(phone, 'completed', customer);
-    } else {
-        // אם נמצא פתרון - המתן למשוב
-        finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${result.serviceNumber}`;
-        contextUpdate = {
-            serviceNumber: result.serviceNumber,
-            problemDescription: result.problemDescription,
-            aiSolution: solution.response
-        };
-        memory.updateStage(phone, 'waiting_feedback', customer);
-    }
-                    
-                    // שמור את המידע לזיכרון
-// עדכון הקונטקסט
-const contextAfter = memory.get(phone, customer);
-if (contextAfter) {
-    Object.assign(contextAfter, contextUpdate);
-    if (downloadedFiles.length > 0) {
-        contextAfter.attachments = downloadedFiles;
-    }
-}
-                    
-                    console.log(`✅ פתרון נשלח ללקוח ${customer.name} - ${result.serviceNumber}`);
-                    return res.status(200).json({ status: 'OK' });
-                } catch (error) {
-                    console.error('❌ שגיאה בחיפוש פתרון:', error);
-                    await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת\n\nאנא התקשר ישירות: 📞 039792365\n\n🆔 מספר קריאה: ${result.serviceNumber}`);
-                    return res.status(200).json({ status: 'OK' });
+        const solution = await getAISolution(result.problemDescription, customer);
+        
+        let finalResponse;
+        
+        // 🔧 תיקון: רק אם לא נמצא פתרון - שלח מייל מיידי
+        if (solution.emailSent) {
+            // אם נשלח מייל מיידי (כי לא נמצא פתרון)
+            finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${solution.serviceNumber}`;
+            
+            // שלח מייל עם קבצים אם יש
+            if (downloadedFiles.length > 0) {
+                await sendEmail(customer, 'technician', result.problemDescription, {
+                    serviceNumber: solution.serviceNumber,
+                    problemDescription: result.problemDescription,
+                    solution: 'קבצים צורפו לקריאה - לא נמצא פתרון',
+                    resolved: false,
+                    attachments: downloadedFiles
+                });
+            }
+            
+            await sendWhatsApp(phone, finalResponse);
+            memory.add(phone, finalResponse, 'hadar', customer);
+            memory.updateStage(phone, 'completed', customer);
+            
+            console.log(`✅ לא נמצא פתרון - מייל נשלח ללקוח ${customer.name} - ${solution.serviceNumber}`);
+            
+        } else {
+            // 🔧 תיקון: אם נמצא פתרון - רק המתן למשוב (אל תשלח מייל עדיין!)
+            finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${result.serviceNumber}`;
+            
+            await sendWhatsApp(phone, finalResponse);
+            memory.add(phone, finalResponse, 'hadar', customer);
+            memory.updateStage(phone, 'waiting_feedback', customer);
+            
+            // שמור את המידע לזיכרון
+            const contextAfter = memory.get(phone, customer);
+            if (contextAfter) {
+                contextAfter.serviceNumber = result.serviceNumber;
+                contextAfter.problemDescription = result.problemDescription;
+                contextAfter.aiSolution = solution.response;
+                if (downloadedFiles.length > 0) {
+                    contextAfter.attachments = downloadedFiles;
                 }
             }
             
+            console.log(`✅ נמצא פתרון - ממתין למשוב מלקוח ${customer.name} - ${result.serviceNumber}`);
+        }
+        
+        return res.status(200).json({ status: 'OK' });
+        
+    } catch (error) {
+        console.error('❌ שגיאה בחיפוש פתרון:', error);
+        await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת\n\nאנא התקשר ישירות: 📞 039792365\n\n🆔 מספר קריאה: ${result.serviceNumber}`);
+        return res.status(200).json({ status: 'OK' });
+    }
+}
+
             // בדיקה מיוחדת לקבצים עם יחידה
             if (hasFile && customer && context?.stage === 'damage_photo') {
                 const unitMatch = messageText.match(/(\d{3})|יחידה\s*(\d{1,3})/);
