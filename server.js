@@ -6,11 +6,10 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 
-const { OpenAI } = require('openai');
-
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+// const { OpenAI } = require('openai');
+// const openai = new OpenAI({
+//     apiKey: process.env.OPENAI_API_KEY,
+// });
 
 // מספר תקלה גלובלי עם נומרטור מתקדם
 let globalServiceCounter = 10001;
@@ -313,8 +312,8 @@ async function getAISolution(problemDescription, customer) {
         
         // בדיקה שהמסד טעון
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
-            console.error('❌ מסד התקלות ריק או לא טעון');
-            return '🔧 **בעיה במאגר התקלות**\n\n📞 מעבירה את הפניה ישירות לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365';
+        console.error('❌ מסד התקלות ריק או לא טעון');
+        return '🔧 **בעיה במאגר התקלות**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
         }
         
         console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
@@ -368,7 +367,7 @@ async function getAISolution(problemDescription, customer) {
                 // בדיקה שיש מפתח API
                 if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY.includes('fake') || process.env.OPENAI_API_KEY.includes('כאן')) {
                     console.log('⚠️ אין מפתח OpenAI תקין - מחזיר פתרון מהמאגר');
-                    return `${foundSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+	return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 }
                 
                 const aiPrompt = `אתה טכנאי מומחה במערכות חניונים של שיידט. 
@@ -403,7 +402,7 @@ async function getAISolution(problemDescription, customer) {
             } catch (aiError) {
                 console.error('⚠️ שגיאה ב-OpenAI:', aiError.message);
                 console.log('📋 מחזיר פתרון מהמאגר בלבד');
-                return `${foundSolution}\n\n📞 **אם הפתרון לא עזר:** התקשר מיד 039792365\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+	return `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             }
         }
         
@@ -447,7 +446,7 @@ async function getAISolution(problemDescription, customer) {
         
     } catch (error) {
         console.error('❌ שגיאה כללית בחיפוש פתרון:', error.message);
-        return '🔧 **בעיה זמנית במערכת**\n\n📞 מעבירה את הפניה לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365';
+       return '🔧 **בעיה זמנית במערכת**\n\n📧 מעבירה מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365';
     }
 }
 
