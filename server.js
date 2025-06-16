@@ -35,7 +35,7 @@ async function downloadWhatsAppFile(fileUrl, fileName) {
             fs.mkdirSync(uploadsDir, { recursive: true });
         }
         
-        // שמירת הקובץ
+        // שמירת  הקובץ
         const filePath = path.join(uploadsDir, fileName);
         const writer = fs.createWriteStream(filePath);
         
