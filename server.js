@@ -546,30 +546,23 @@ function generateResponse(message, customer, context, phone) {
         if (identification) {
             log('INFO', `🔍 ${identification.method} (רמת ביטחון: ${identification.confidence})`);
             
-            if (identification.confidence === 'high') {
-                // 🔧 עדכן את הזיכרון עם הלקוח החדש
-                memory.add(phone, message, 'customer', identification.customer);
-                memory.updateStage(phone, 'menu', identification.customer);
-                
-                return { 
-                    response: `שלום ${identification.customer.name} מחניון ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                    stage: 'menu',
-                    customer: identification.customer
-                };
-            } else {
-                return { 
-                    response: `שלום! 👋\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
-                    stage: 'confirming_identity',
-                    tentativeCustomer: identification.customer
-                };
-            }
-        }
-        
-        return { 
-            response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`, 
-            stage: 'identifying' 
-        };
+if (identification.confidence === 'high') {
+    // 🔧 עדכן את הזיכרון עם הלקוח החדש - תיקון חשוב!
+    const existingConv = memory.get(phone);
+    if (existingConv) {
+        existingConv.customer = identification.customer;
+        existingConv.stage = 'menu';
+    } else {
+        memory.add(phone, message, 'customer', identification.customer);
     }
+    memory.updateStage(phone, 'menu', identification.customer);
+    
+    return { 
+        response: `שלום ${identification.customer.name} מחניון ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+        stage: 'menu',
+        customer: identification.customer
+    };
+}
     
     // אישור זהות
     if (context?.stage === 'confirming_identity') {
@@ -1027,16 +1020,24 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 log('INFO', `🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
             }
 
-            // 🔧 תיקון: וודא שיש לקוח לפני הוספה לזיכרון
-            if (customer) {
-                memory.add(phone, messageText, 'customer', customer);
-                memory.updateStage(phone, result.stage, customer);
-                log('INFO', `✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
-            } else {
-                memory.add(phone, messageText, 'customer');
-                memory.updateStage(phone, result.stage);
-                log('INFO', `⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
-            }
+// 🔧 תיקון: עדכן את הזיכרון הנכון
+if (customer) {
+    // אם יש כבר conversation, רק עדכן אותו
+    const existingConv = memory.get(phone);
+    if (existingConv && !existingConv.customer) {
+        existingConv.customer = customer;
+        existingConv.stage = result.stage;
+        log('INFO', `🔄 עדכון conversation קיים: ${customer.name} - שלב: ${result.stage}`);
+    } else {
+        memory.add(phone, messageText, 'customer', customer);
+        memory.updateStage(phone, result.stage, customer);
+        log('INFO', `✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
+    }
+} else {
+    memory.add(phone, messageText, 'customer');
+    memory.updateStage(phone, result.stage);
+    log('INFO', `⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
+}
             
             // 🔧 תיקון: אם יש context עם לקוח, השתמש בו
             if (context?.customer && !customer) {
