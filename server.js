@@ -500,17 +500,17 @@ function generateResponse(message, customer, context, phone) {
     
     console.log(`🎯 generateResponse - לקוח: ${customer ? customer.name : 'לא מזוהה'}, שלב: ${context?.stage || 'אין'}`);
     
-    // אם יש לקוח מזוהה - תן תגובה ישירה
-    if (customer) {
-        // תפריט ראשי ללקוח מזוהה
-        if (!context || context.stage === 'greeting' {
-            return { 
-                response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                stage: 'menu',
-                customer: customer
-            };
-        }
+// אם יש לקוח מזוהה - תן תגובה ישירה
+if (customer) {
+    // תפריט ראשי ללקוח מזוהה
+    if (!context || context.stage === 'greeting') {
+        return { 
+            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+            stage: 'menu',
+            customer: customer
+        };
     }
+}
     
     // אם אין לקוח מזוהה, נסה זיהוי אינטראקטיבי
     if (!customer) {
