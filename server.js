@@ -596,6 +596,17 @@ if ((msg === '4' || msg.includes('הדרכה')) && customer) {
     };
 }
 
+// עיבוד נזק
+if (context?.stage === 'damage_photo' && customer) {
+    // אם יש תמונה - זה יטופל בקטע הקבצים למעלה
+    // אם אין תמונה - בקש תמונה
+    return { 
+        response: `📷 **דיווח נזק - חסרה תמונה**\n\nאנא שלח תמונה של הנזק עם מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`, 
+        stage: 'damage_photo',
+        customer: customer
+    };
+}
+
     // עיבוד הזמנה
     if (context?.stage === 'order_request' && customer) {
         return { 
