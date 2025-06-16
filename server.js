@@ -380,6 +380,120 @@ function identifyCustomerInteractively(message) {
     return null;
 }
 
+// הוסף את הפונקציה החסרה getAISolution - הכנס אחרי פונקציה identifyCustomerInteractively
+
+// פונקציה לחיפוש פתרון (ללא OpenAI - פשוטה ויעילה)
+async function getAISolution(problemDescription, customer) {
+    try {
+        console.log('🔍 מחפש פתרון במסד התקלות...');
+        
+        const problem = problemDescription.toLowerCase();
+        let foundSolution = null;
+        let foundScenario = null;
+        
+        // בדיקה שהמסד טעון
+        if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
+            console.error('❌ מסד התקלות ריק או לא טעון');
+            const serviceNumber = getNextServiceNumber();
+            await sendEmail(customer, 'technician', problemDescription, {
+                serviceNumber: serviceNumber,
+                problemDescription: problemDescription,
+                solution: 'בעיה במאגר התקלות - נשלח טכנאי',
+                resolved: false
+            });
+            return {
+                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+                serviceNumber: serviceNumber,
+                emailSent: true
+            };
+        }
+        
+        console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
+        
+        // חיפוש במאגר התקלות
+        for (const scenario of serviceFailureDB) {
+            if (!scenario.תרחיש || !scenario.שלבים) {
+                console.log('⚠️ תרחיש פגום - מדלג');
+                continue;
+            }
+            
+            const scenarioText = scenario.תרחיש.toLowerCase();
+            console.log(`🔍 בודק תרחיש: ${scenario.תרחיש}`);
+            
+            // בדיקות התאמה מתקדמות
+            const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
+            const problemWords = problem.split(' ').filter(word => word.length > 2);
+            
+            // בדיקת חפיפה במילות מפתח
+            let matchCount = 0;
+            scenarioWords.forEach(scenarioWord => {
+                problemWords.forEach(problemWord => {
+                    if (scenarioWord.includes(problemWord) || problemWord.includes(scenarioWord)) {
+                        matchCount++;
+                    }
+                });
+            });
+            
+            // אם יש התאמה טובה (לפחות מילה אחת)
+            if (matchCount > 0 || 
+                scenarioText.includes(problem.substring(0, 10)) || 
+                problem.includes(scenarioText.substring(0, 10))) {
+                
+                foundSolution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
+                
+                if (scenario.הערות && scenario.הערות.trim() !== '') {
+                    foundSolution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+                }
+                
+                foundScenario = scenario;
+                console.log(`✅ נמצא פתרון לתקלה: ${scenario.תרחיש} (התאמות: ${matchCount})`);
+                break;
+            }
+        }
+        
+        // אם נמצא פתרון במאגר
+        if (foundSolution && foundScenario) {
+            console.log('✅ נמצא פתרון במאגר התקלות');
+            return {
+                response: `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`,
+                emailSent: false
+            };
+        }
+        
+        // אם לא נמצא פתרון - שלח מייל מיידי
+        console.log('⚠️ לא נמצא פתרון - שולח מייל מיידי');
+        const serviceNumber = getNextServiceNumber();
+        await sendEmail(customer, 'technician', problemDescription, {
+            serviceNumber: serviceNumber,
+            problemDescription: problemDescription,
+            solution: 'לא נמצא פתרון במאגר - נשלח טכנאי',
+            resolved: false
+        });
+        
+        return {
+            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            serviceNumber: serviceNumber,
+            emailSent: true
+        };
+        
+    } catch (error) {
+        console.error('❌ שגיאה כללית בחיפוש פתרון:', error.message);
+        const serviceNumber = getNextServiceNumber();
+        await sendEmail(customer, 'technician', problemDescription, {
+            serviceNumber: serviceNumber,
+            problemDescription: problemDescription,
+            solution: 'שגיאה במערכת - נשלח טכנאי',
+            resolved: false
+        });
+        
+        return {
+            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            serviceNumber: serviceNumber,
+            emailSent: true
+        };
+    }
+}
+
 // פונקציה משופרת ל-generateResponse - מחליפה את הישנה
 function generateResponse(message, customer, context, phone) {
     const msg = message.toLowerCase();
@@ -754,9 +868,6 @@ app.get('/', (req, res) => {
 });
 
 // WhatsApp Webhook
-
-// החלף את החלק הזה ב-WhatsApp Webhook (בסביבות שורה 580-650)
-
 app.post('/webhook/whatsapp', async (req, res) => {
     try {
         if (req.body.typeWebhook === 'incomingMessageReceived') {
