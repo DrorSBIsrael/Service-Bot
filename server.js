@@ -686,14 +686,23 @@ if (context?.stage === 'damage_photo' && customer) {
         }
     }
     
-    // ברירת מחדל - אם יש לקוח אבל לא מובן מה הוא רוצה
-    if (customer) {
-        return { 
-            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-            stage: 'menu',
+// ברירת מחדל - אם יש לקוח אבל לא מובן מה הוא רוצה
+if (customer) {
+    // אל תחזור לתפריט אם אנחנו באמצע תהליך
+    if (context?.stage && ['damage_photo', 'order_request', 'training_request', 'problem_description', 'waiting_feedback'].includes(context.stage)) {
+        return {
+            response: `לא הבנתי את התגובה.\n\nאנא כתוב בבירור מה אתה צריך.\n\n📞 039792365`,
+            stage: context.stage,
             customer: customer
         };
     }
+    
+    return { 
+        response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+        stage: 'menu',
+        customer: customer
+    };
+}
     
     // ברירת מחדל - אין לקוח
     return { 
