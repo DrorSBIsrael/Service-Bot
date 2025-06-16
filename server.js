@@ -686,7 +686,7 @@ function generateResponse(message, customer, context, phone) {
     
     // ברירת מחדל - אין לקוח
     return { 
-        response: `שלום! ����\n\nכדי לטפל בפנייתך אני צריכה:\n\n���� **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n���� 039792365`, 
+        response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "חניון אינפיניטי" או "חניון מרכז עזריאלי"\n\n📞 039792365`, 
         stage: 'identifying' 
     };
 }
