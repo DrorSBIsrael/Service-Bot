@@ -1014,7 +1014,7 @@ if (customer) {
             }
 
             // הלוגיקה לתקלות עם פתרון תקלות
-            if (result.stage === 'processing_with_ai' && result.problemDescription) {
+                if (result.stage === 'processing_with_ai' && result.problemDescription && context?.stage === 'problem_description') {
                 console.log('🔍 מחפש פתרון לתקלה...');
                 
                 try {
