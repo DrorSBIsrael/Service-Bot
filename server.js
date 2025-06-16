@@ -523,78 +523,19 @@ async function getAISolution(problemDescription, customer) {
     }
 }
 
+
+
+
+
+
+
+
 // פונקציה משופרת ל-generateResponse - מחליפה את הישנה
 function generateResponse(message, customer, context, phone) {
     const msg = message.toLowerCase();
     
     log('INFO', `🎯 generateResponse - לקוח: ${customer ? customer.name : 'לא מזוהה'}, שלב: ${context?.stage || 'אין'}`);
     
-    // 🔧 תיקון: אם יש לקוח מזוהה אבל אין context או שלב לא נכון
-    if (customer && (!context || !context.stage || context.stage === 'identifying')) {
-        log('DEBUG', '🔧 תיקון context עבור לקוח מזוהה');
-        memory.updateStage(phone, 'greeting', customer);
-        return { 
-            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-            stage: 'menu',
-            customer: customer
-        };
-    }
-    
-    // אם אין לקוח מזוהה, נסה זיהוי אינטראקטיבי
-    if (!customer) {
-        const identification = identifyCustomerInteractively(message);
-        if (identification) {
-            log('INFO', `🔍 ${identification.method} (רמת ביטחון: ${identification.confidence})`);
-            
-if (identification.confidence === 'high') {
-    // 🔧 עדכן את הזיכרון עם הלקוח החדש - תיקון חשוב!
-    const existingConv = memory.get(phone);
-    if (existingConv) {
-        existingConv.customer = identification.customer;
-        existingConv.stage = 'menu';
-    } else {
-        memory.add(phone, message, 'customer', identification.customer);
-    }
-    memory.updateStage(phone, 'menu', identification.customer);
-    
-    return { 
-        response: `שלום ${identification.customer.name} מחניון ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-        stage: 'menu',
-        customer: identification.customer
-    };
-}
-    
-    // אישור זהות
-    if (context?.stage === 'confirming_identity') {
-        if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
-            // 🔧 עדכן זיכרון עם לקוח מאושר
-            memory.add(phone, message, 'customer', context.tentativeCustomer);
-            memory.updateStage(phone, 'menu', context.tentativeCustomer);
-            
-            return { 
-                response: `מעולה! שלום ${context.tentativeCustomer.name} מחניון ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                stage: 'menu',
-                customer: context.tentativeCustomer
-            };
-        } else {
-            return { 
-                response: `בסדר, אנא כתוב את שם החניון הנכון:\n\nלדוגמה: "אינפיניטי" או "עזריאלי גבעתיים"\n\n📞 039792365`, 
-                stage: 'identifying' 
-            };
-        }
-    }
-
-// אם יש לקוח מזוהה - תן תגובה ישירה
-if (customer) {
-    // תפריט ראשי ללקוח מזוהה
-    if (!context || context.stage === 'greeting') {
-        return { 
-            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-            stage: 'menu',
-            customer: customer
-        };
-    }
-}    
     // אם אין לקוח מזוהה, נסה זיהוי אינטראקטיבי
     if (!customer) {
         const identification = identifyCustomerInteractively(message);
@@ -602,6 +543,10 @@ if (customer) {
             log('INFO', `🔍 ${identification.method} (רמת ביטחון: ${identification.confidence})`);
             
             if (identification.confidence === 'high') {
+                // צור או עדכן זיכרון עם הלקוח החדש
+                memory.add(phone, message, 'customer', identification.customer);
+                memory.updateStage(phone, 'menu', identification.customer);
+                
                 return { 
                     response: `שלום ${identification.customer.name} מחניון ${identification.customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
                     stage: 'menu',
@@ -622,31 +567,66 @@ if (customer) {
         };
     }
     
-    // אישור זהות
-    if (context?.stage === 'confirming_identity') {
-        if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
+    // אם יש לקוח מזוהה - בדוק שלב נוכחי
+    if (customer) {
+        // אישור זהות
+        if (context?.stage === 'confirming_identity') {
+            if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
+                memory.add(phone, message, 'customer', context.tentativeCustomer);
+                memory.updateStage(phone, 'menu', context.tentativeCustomer);
+                
+                return { 
+                    response: `מעולה! שלום ${context.tentativeCustomer.name} מחניון ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+                    stage: 'menu',
+                    customer: context.tentativeCustomer
+                };
+            } else {
+                return { 
+                    response: `בסדר, אנא כתוב את שם החניון הנכון:\n\nלדוגמה: "אינפיניטי" או "עזריאלי גבעתיים"\n\n📞 039792365`, 
+                    stage: 'identifying' 
+                };
+            }
+        }
+
+        // תפריט ראשי - תקלה
+        if ((msg === '1' || msg.includes('תקלה'))) {
+            log('INFO', `✅ תקלה עם לקוח: ${customer.name}`);
             return { 
-                response: `מעולה! שלום ${context.tentativeCustomer.name} מחניון ${context.tentativeCustomer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                stage: 'menu',
-                customer: context.tentativeCustomer
-            };
-        } else {
-            return { 
-                response: `בסדר, אנא כתוב את שם החניון הנכון:\n\nלדוגמה: "אינפיניטי" או "עזריאלי גבעתיים"\n\n📞 039792365`, 
-                stage: 'identifying' 
+                response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון קצר\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`, 
+                stage: 'problem_description',
+                customer: customer
             };
         }
-    }
 
-// תפריט ראשי - תקלה
-if ((msg === '1' || msg.includes('תקלה')) && customer) {
-    log('INFO', `✅ תקלה עם לקוח: ${customer.name}`);
-    return { 
-        response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון קצר\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`, 
-        stage: 'problem_description',
-        customer: customer
-    };
-}
+        // תפריט ראשי - נזק
+        if ((msg === '2' || msg.includes('נזק'))) {
+            log('INFO', `✅ נזק עם לקוח: ${customer.name}`);
+            return { 
+                response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא צלם את הנזק ושלח תמונה/סרטון + מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`,
+                stage: 'damage_photo',
+                customer: customer
+            };
+        }
+
+        // תפריט ראשי - הצעת מחיר  
+        if ((msg === '3' || msg.includes('מחיר'))) {
+            log('INFO', `✅ הצעת מחיר עם לקוח: ${customer.name}`);
+            return { 
+                response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הפריט\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
+
+        // תפריט ראשי - הדרכה
+        if ((msg === '4' || msg.includes('הדרכה'))) {
+            log('INFO', `✅ הדרכה עם לקוח: ${customer.name}`);
+            return { 
+                response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הבעיה\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n📞 039792365`,
+                stage: 'training_request',
+                customer: customer
+            };
+        }
 
 // תפריט ראשי - נזק
 if ((msg === '2' || msg.includes('נזק')) && customer) {
@@ -790,7 +770,14 @@ if (customer) {
         customer: customer
     };
 }
-    
+            // ברירת מחדל - תפריט ראשי
+        return { 
+            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+            stage: 'menu',
+            customer: customer
+        };
+    }
+
     // ברירת מחדל - אין לקוח
     return { 
         response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`, 
@@ -1013,12 +1000,17 @@ app.post('/webhook/whatsapp', async (req, res) => {
             // 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
             let result = generateResponse(messageText, customer, context, phone);
 
-            // 🔧 תיקון: אם generateResponse מחזיר לקוח חדש, השתמש בו ועדכן context
-            if (result.customer && result.customer !== customer) {
-                customer = result.customer;
-                context = memory.get(phone, customer); // קבל את ה-context המעודכן
-                log('INFO', `🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
-            }
+// 🔧 תיקון: עדכן את הזיכרון הנכון
+if (result.customer) {
+    customer = result.customer; // וודא שהלקוח מעודכן
+    memory.add(phone, messageText, 'customer', customer);
+    memory.updateStage(phone, result.stage, customer);
+    log('INFO', `✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
+} else {
+    memory.add(phone, messageText, 'customer');
+    memory.updateStage(phone, result.stage);
+    log('INFO', `⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
+}
 
 // 🔧 תיקון: עדכן את הזיכרון הנכון
 if (customer) {
@@ -1338,4 +1330,4 @@ function getFileExtension(fileName, mimeType) {
 }
 module.exports = app;
 }
-    }
+}
