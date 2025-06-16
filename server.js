@@ -21,7 +21,7 @@ function getNextServiceNumber() {
 // פונקציה להורדת תמונות מוואטסאפ
 async function downloadWhatsAppFile(fileUrl, fileName) {
     try {
-        console.log('📥 מוריד קובץ מוואטסאפ:', fileName);
+        console.log('ߓŠמוריד קובץ מוואטסאפ:', fileName);
         
         const response = await axios({
             method: 'GET',
@@ -72,7 +72,7 @@ try {
         address: client["כתובת הלקוח"],
         email: client["מייל"]
     }));
-    console.log(`📊 נטענו ${customers.length} לקוחות`);
+    console.log(`ߓʠנטענו ${customers.length} לקוחות`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת לקוחות:', error.message);
     customers = [{ id: 555, name: "דרור פרינץ", site: "חניון רימון", phone: "0545-484210", address: "רימון 8 רמת אפעל", email: "Dror@sbparking.co.il" }];
@@ -91,10 +91,10 @@ try {
         serviceFailureDB = [];
     }
     
-    console.log(`📋 מסד תקלות נטען בהצלחה - ${serviceFailureDB.length} תרחישים`);
+    console.log(`ߓˠמסד תקלות נטען בהצלחה - ${serviceFailureDB.length} תרחישים`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת מסד תקלות:', error.message);
-    console.log('🔧 יוצר קובץ תקלות דוגמה...');
+    console.log('ߔǠיוצר קובץ תקלות דוגמה...');
     
     // יצירת קובץ דוגמה אם לא קיים
     serviceFailureDB = [
@@ -129,19 +129,19 @@ let trainingDB = {};
 try {
     if (fs.existsSync('./Parking operation 1.docx')) {
         trainingDB.parking = fs.readFileSync('./Parking operation 1.docx', 'utf8');
-        console.log('📚 מדריך חניונים נטען');
+        console.log('ߓڠמדריך חניונים נטען');
     }
     if (fs.existsSync('./Scheidt system operation.pdf')) {
         trainingDB.scheidt = fs.readFileSync('./Scheidt system operation.pdf', 'utf8');
-        console.log('📚 מדריך שיידט נטען');
+        console.log('ߓڠמדריך שיידט נטען');
     }
     if (fs.existsSync('./דוגמאות נוספות.txt')) {
         trainingDB.examples = fs.readFileSync('./דוגמאות נוספות.txt', 'utf8');
-        console.log('📚 דוגמאות נטענו');
+        console.log('ߓڠדוגמאות נטענו');
     }
     
     const loadedFiles = Object.keys(trainingDB).length;
-    console.log(`📚 ${loadedFiles} מסדי הדרכה נטענו מתוך 3`);
+    console.log(`ߓڠ${loadedFiles} מסדי הדרכה נטענו מתוך 3`);
 } catch (error) {
     console.error('❌ שגיאה בטעינת הדרכות:', error.message);
 }
@@ -252,15 +252,108 @@ function findCustomer(phone, message = '') {
     return null;
 }
 
-// זיהוי לקוח אינטראקטיבי
+// זיהוי לקוח אינטראקטיבי משופר - מחליף את הפונקציה הישנה
 function identifyCustomerInteractively(message) {
-    const msg = message.toLowerCase();
+    const msg = message.toLowerCase().trim();
+    
+    console.log(`🔍 מחפש לקוח עבור: "${msg}"`);
+    
+    // רשימת מילות מפתח לניקוי
+    const wordsToRemove = ['חניון', 'מרכז', 'קניון', 'מגדל', 'בית', 'פארק', 'סנטר', 'מול'];
+    
+    // ניקוי הטקסט
+    let cleanMsg = msg;
+    wordsToRemove.forEach(word => {
+        cleanMsg = cleanMsg.replace(new RegExp(`\\b${word}\\b`, 'g'), '').trim();
+    });
+    
+    console.log(`🧹 טקסט נקי: "${cleanMsg}"`);
+    
+    // חיפוש מדויק לפי שם חניון - עדיפות גבוהה
+    let bestMatch = null;
+    let bestScore = 0;
+    
+    customers.forEach(customer => {
+        if (!customer.site) return;
+        
+        const siteName = customer.site.toLowerCase();
+        console.log(`🏢 בודק: ${siteName}`);
+        
+        // בדיקה מדויקת - אם המילה קיימת במלואה
+        const siteWords = siteName.split(/\s+/).filter(word => word.length > 2);
+        const msgWords = cleanMsg.split(/\s+/).filter(word => word.length > 2);
+        
+        let score = 0;
+        
+        // בדיקת התאמה מדויקת
+        siteWords.forEach(siteWord => {
+            msgWords.forEach(msgWord => {
+                // התאמה מלאה
+                if (siteWord === msgWord) {
+                    score += 10;
+                    console.log(`✅ התאמה מלאה: ${siteWord} = ${msgWord} (+10)`);
+                }
+                // התאמה חלקית (לפחות 3 תווים)
+                else if (siteWord.length >= 3 && msgWord.length >= 3) {
+                    if (siteWord.includes(msgWord) || msgWord.includes(siteWord)) {
+                        score += 5;
+                        console.log(`✅ התאמה חלקית: ${siteWord} ~ ${msgWord} (+5)`);
+                    }
+                }
+            });
+        });
+        
+        // מקרים מיוחדים - התאמות ידועות
+        const specialMatches = {
+            'אינפיניטי': ['אינפיניטי', 'infinity'],
+            'עזריאלי': ['עזריאלי', 'azrieli'],
+            'גבעתיים': ['גבעתיים', 'givatayim'],
+            'אלקטרה': ['אלקטרה', 'electra'],
+            'מודיעין': ['מודיעין', 'modiin'],
+            'אושילנד': ['אושילנד', 'oshiland'],
+            'ביג': ['ביג', 'big'],
+            'פנורמה': ['פנורמה', 'panorama']
+        };
+        
+        // בדיקת התאמות מיוחדות
+        Object.entries(specialMatches).forEach(([key, variations]) => {
+            variations.forEach(variation => {
+                if (siteName.includes(variation) && cleanMsg.includes(variation)) {
+                    score += 15;
+                    console.log(`🎯 התאמה מיוחדת: ${variation} (+15)`);
+                }
+            });
+        });
+        
+        console.log(`📊 ציון ללקוח ${customer.name} (${siteName}): ${score}`);
+        
+        if (score > bestScore && score >= 5) {
+            bestScore = score;
+            bestMatch = customer;
+        }
+    });
+    
+    if (bestMatch) {
+        console.log(`🏆 נמצא לקוח: ${bestMatch.name} מ${bestMatch.site} (ציון: ${bestScore})`);
+        
+        // קביעת רמת ביטחון
+        let confidence = 'low';
+        if (bestScore >= 15) confidence = 'high';
+        else if (bestScore >= 10) confidence = 'medium';
+        
+        return { 
+            customer: bestMatch, 
+            confidence: confidence,
+            method: `זוהה לפי שם החניון: ${bestMatch.site} (ציון: ${bestScore})`
+        };
+    }
     
     // חיפוש לפי שם לקוח
     const nameMatch = customers.find(c => 
-        c.name && msg.includes(c.name.toLowerCase())
+        c.name && cleanMsg.includes(c.name.toLowerCase())
     );
     if (nameMatch) {
+        console.log(`👤 נמצא לקוח לפי שם: ${nameMatch.name}`);
         return { 
             customer: nameMatch, 
             confidence: 'high',
@@ -268,28 +361,13 @@ function identifyCustomerInteractively(message) {
         };
     }
     
-    // חיפוש לפי שם חניון
-    const siteMatch = customers.find(c => {
-        const siteName = c.site.toLowerCase();
-        const siteWords = siteName.split(/\s+/);
-        return siteWords.some(word => 
-            word.length > 2 && msg.includes(word)
-        );
-    });
-    if (siteMatch) {
-        return { 
-            customer: siteMatch, 
-            confidence: 'medium',
-            method: `זוהה לפי שם החניון: ${siteMatch.site}`
-        };
-    }
-    
     // חיפוש לפי מספר לקוח
-    const idMatch = msg.match(/\d{2,4}/);
+    const idMatch = msg.match(/\b\d{2,4}\b/);
     if (idMatch) {
         const customerId = parseInt(idMatch[0]);
         const customerById = customers.find(c => c.id === customerId);
         if (customerById) {
+            console.log(`🔢 נמצא לקוח לפי מספר: ${customerId}`);
             return { 
                 customer: customerById, 
                 confidence: 'high',
@@ -298,13 +376,14 @@ function identifyCustomerInteractively(message) {
         }
     }
     
+    console.log('❌ לא נמצא לקוח מתאים');
     return null;
 }
 
-// 🔧 תיקון 1: פונקציה getAISolution מתוקנת (מייל מיידי)
+// ߔǠתיקון 1: פונקציה getAISolution מתוקנת (מייל מיידי)
 async function getAISolution(problemDescription, customer) {
     try {
-        console.log('🔍 מחפש פתרון במסד התקלות...');
+        console.log('ߔ͠מחפש פתרון במסד התקלות...');
         
         const problem = problemDescription.toLowerCase();
         let foundSolution = null;
@@ -313,7 +392,7 @@ async function getAISolution(problemDescription, customer) {
         // בדיקה שהמסד טעון
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             console.error('❌ מסד התקלות ריק או לא טעון');
-            // 🔧 תיקון 1: שליחת מייל מיידי ללא המתנה
+            // ߔǠתיקון 1: שליחת מייל מיידי ללא המתנה
             const serviceNumber = getNextServiceNumber();
             await sendEmail(customer, 'technician', problemDescription, {
                 serviceNumber: serviceNumber,
@@ -322,13 +401,13 @@ async function getAISolution(problemDescription, customer) {
                 resolved: false
             });
             return {
-                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+                response: 'ߔǠ**בעיה במאגר התקלות**\n\nߓǠשלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\nߓޠ**דחוף בלבד:** 039792365',
                 serviceNumber: serviceNumber,
                 emailSent: true
             };
         }
         
-        console.log(`📋 בודק ${serviceFailureDB.length} תרחישי תקלות...`);
+        console.log(`ߓˠבודק ${serviceFailureDB.length} תרחישי תקלות...`);
         
         // חיפוש במאגר התקלות
         for (const scenario of serviceFailureDB) {
@@ -338,7 +417,7 @@ async function getAISolution(problemDescription, customer) {
             }
             
             const scenarioText = scenario.תרחיש.toLowerCase();
-            console.log(`🔍 בודק תרחיש: ${scenario.תרחיש}`);
+            console.log(`ߔ͠בודק תרחיש: ${scenario.תרחיש}`);
             
             // בדיקות התאמה מתקדמות
             const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
@@ -359,10 +438,10 @@ async function getAISolution(problemDescription, customer) {
                 scenarioText.includes(problem.substring(0, 10)) || 
                 problem.includes(scenarioText.substring(0, 10))) {
                 
-                foundSolution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
+                foundSolution = `ߔǠ**פתרון לתקלה: ${scenario.תרחיש}**\n\nߓˠ**שלבי הפתרון:**\n${scenario.שלבים}`;
                 
                 if (scenario.הערות && scenario.הערות.trim() !== '') {
-                    foundSolution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+                    foundSolution += `\n\nߒ`**הערות חשובות:**\n${scenario.הערות}`;
                 }
                 
                 foundScenario = scenario;
@@ -375,12 +454,12 @@ async function getAISolution(problemDescription, customer) {
         if (foundSolution && foundScenario) {
             console.log('✅ נמצא פתרון במאגר התקלות');
             return {
-                response: `${foundSolution}\n\n📧 **אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`,
+                response: `${foundSolution}\n\nߓǠ**אם הפתרון לא עזר:** אעביר מייל לשירות\n\n❓ **האם הפתרון עזר?** (כן/לא)`,
                 emailSent: false
             };
         }
         
-        // 🔧 תיקון 1: אם לא נמצא פתרון - שלח מייל מיידי
+        // ߔǠתיקון 1: אם לא נמצא פתרון - שלח מייל מיידי
         console.log('⚠️ לא נמצא פתרון - שולח מייל מיידי');
         const serviceNumber = getNextServiceNumber();
         await sendEmail(customer, 'technician', problemDescription, {
@@ -391,7 +470,7 @@ async function getAISolution(problemDescription, customer) {
         });
         
         return {
-            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            response: 'ߔǠ**לא נמצא פתרון מיידי**\n\nߓǠשלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\nߓޠ**דחוף בלבד:** 039792365',
             serviceNumber: serviceNumber,
             emailSent: true
         };
@@ -408,24 +487,27 @@ async function getAISolution(problemDescription, customer) {
         });
         
         return {
-            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף בלבד:** 039792365',
+            response: 'ߔǠ**בעיה זמנית במערכת**\n\nߓǠשלחתי מייל לשירות\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\nߓޠ**דחוף בלבד:** 039792365',
             serviceNumber: serviceNumber,
             emailSent: true
         };
     }
 }
 
-// 🔧 תיקון 2: פונקציה generateResponse מתוקנת (תמונות/סרטונים לכל פניה)
+// פונקציה משופרת ל-generateResponse - מחליפה את הישנה
 function generateResponse(message, customer, context, phone) {
     const msg = message.toLowerCase();
+    
+    console.log(`🎯 generateResponse - לקוח: ${customer ? customer.name : 'לא מזוהה'}, שלב: ${context?.stage || 'אין'}`);
     
     // אם יש לקוח מזוהה - תן תגובה ישירה
     if (customer) {
         // תפריט ראשי ללקוח מזוהה
-        if (!context || context.stage === 'greeting') {
+        if (!context || context.stage === 'greeting' || context.stage === 'menu') {
             return { 
                 response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-                stage: 'menu' 
+                stage: 'menu',
+                customer: customer
             };
         }
     }
@@ -452,7 +534,7 @@ function generateResponse(message, customer, context, phone) {
         }
         
         return { 
-            response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "חניון אינפיניטי" או "חניון מרכז עזריאלי"\n\n📞 039792365`, 
+            response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`, 
             stage: 'identifying' 
         };
     }
@@ -467,56 +549,61 @@ function generateResponse(message, customer, context, phone) {
             };
         } else {
             return { 
-                response: `בסדר, אנא כתוב את שם החניון הנכון:\n\n📞 039792365`, 
+                response: `בסדר, אנא כתוב את שם החניון הנכון:\n\nלדוגמה: "אינפיניטי" או "עזריאלי גבעתיים"\n\n📞 039792365`, 
                 stage: 'identifying' 
             };
         }
     }
     
-    // 🔧 תיקון 2: תפריט ראשי - תקלה עם אפשרות תמונה/סרטון
-    if (msg === '1' || msg.includes('תקלה')) {
+    // תפריט ראשי - תקלה
+    if ((msg === '1' || msg.includes('תקלה')) && customer) {
         return { 
             response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון קצר\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`, 
-            stage: 'problem_description' 
+            stage: 'problem_description',
+            customer: customer
         };
     }
     
-    // תקלה עם תמונה/סרטון נשארת כמו שהיא
-    if (msg === '2' || msg.includes('נזק')) {
+    // תפריט ראשי - נזק
+    if ((msg === '2' || msg.includes('נזק')) && customer) {
         return { 
             response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא צלם את הנזק ושלח תמונה/סרטון + מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`, 
-            stage: 'damage_photo' 
+            stage: 'damage_photo',
+            customer: customer
         };
     }
     
-    // 🔧 תיקון 2: הצעת מחיר עם אפשרות תמונה/סרטון
-    if (msg === '3' || msg.includes('מחיר')) {
+    // תפריט ראשי - הצעת מחיר
+    if ((msg === '3' || msg.includes('מחיר')) && customer) {
         return { 
             response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הפריט\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📞 039792365`, 
-            stage: 'order_request' 
+            stage: 'order_request',
+            customer: customer
         };
     }
     
-    // 🔧 תיקון 2: הדרכה עם אפשרות תמונה/סרטון
-    if (msg === '4' || msg.includes('הדרכה')) {
+    // תפריט ראשי - הדרכה
+    if ((msg === '4' || msg.includes('הדרכה')) && customer) {
         return { 
             response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📷 **אפשר לצרף:** תמונה או סרטון של הבעיה\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n📞 039792365`, 
-            stage: 'training_request' 
+            stage: 'training_request',
+            customer: customer
         };
     }
     
     // עיבוד הזמנה
-    if (context?.stage === 'order_request') {
+    if (context?.stage === 'order_request' && customer) {
         return { 
             response: `📋 **קיבלתי את בקשת ההזמנה!**\n\n"${message}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n📞 039792365`, 
             stage: 'order_completed',
             sendOrderEmail: true,
-            orderDetails: message
+            orderDetails: message,
+            customer: customer
         };
     }
     
     // עיבוד בקשת הדרכה
-    if (context?.stage === 'training_request') {
+    if (context?.stage === 'training_request' && customer) {
         console.log(`🔍 מחפש הדרכה עבור: ${message}`);
         
         let trainingContent = '';
@@ -537,24 +624,26 @@ function generateResponse(message, customer, context, phone) {
             stage: 'training_completed',
             sendTrainingEmail: true,
             trainingRequest: message,
-            trainingContent: trainingContent
+            trainingContent: trainingContent,
+            customer: customer
         };
     }
     
     // עיבוד תיאור הבעיה
-    if (context?.stage === 'problem_description') {
+    if (context?.stage === 'problem_description' && customer) {
         const currentServiceNumber = getNextServiceNumber();
         
         return { 
             response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n🔍 מחפש פתרון במאגר התקלות...\n⏳ רגע אחד...\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`, 
             stage: 'processing_with_ai',
             serviceNumber: currentServiceNumber,
-            problemDescription: message
+            problemDescription: message,
+            customer: customer
         };
     }
     
     // משוב על פתרון
-    if (context?.stage === 'waiting_feedback') {
+    if (context?.stage === 'waiting_feedback' && customer) {
         if (msg.includes('כן') || msg.includes('נפתר') || msg.includes('תודה') || (msg.includes('עזר') && !msg.includes('לא עזר'))) {
             return { 
                 response: `🎉 **מעולה! הבעיה נפתרה!**\n\nשמח לשמוע שהפתרון עזר!\n\nיום טוב! 😊\n\n📞 039792365`, 
@@ -563,7 +652,8 @@ function generateResponse(message, customer, context, phone) {
                 serviceNumber: context.serviceNumber,
                 problemDescription: context.problemDescription,
                 solution: context.aiSolution,
-                resolved: true
+                resolved: true,
+                customer: customer
             };
         } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
             return { 
@@ -573,20 +663,31 @@ function generateResponse(message, customer, context, phone) {
                 serviceNumber: context.serviceNumber,
                 problemDescription: context.problemDescription,
                 solution: context.aiSolution,
-                resolved: false
+                resolved: false,
+                customer: customer
             };
         } else {
             return {
                 response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
-                stage: 'waiting_feedback'
+                stage: 'waiting_feedback',
+                customer: customer
             };
         }
     }
     
-    // ברירת מחדל
+    // ברירת מחדל - אם יש לקוח אבל לא מובן מה הוא רוצה
+    if (customer) {
+        return { 
+            response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
+            stage: 'menu',
+            customer: customer
+        };
+    }
+    
+    // ברירת מחדל - אין לקוח
     return { 
-        response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`, 
-        stage: 'menu' 
+        response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`, 
+        stage: 'identifying' 
     };
 }
 
@@ -624,17 +725,17 @@ async function sendEmail(customer, type, details, extraData = {}) {
         
         let subject, emailType;
         if (type === 'technician') {
-            subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
-            emailType = '🚨 קריאת טכנאי דחופה';
+            subject = `ߚȠקריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
+            emailType = 'ߚȠקריאת טכנאי דחופה';
         } else if (type === 'order') {
-            subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
-            emailType = '💰 בקשת הצעת מחיר';
+            subject = `ߒРבקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
+            emailType = 'ߒРבקשת הצעת מחיר';
         } else if (type === 'training') {
-            subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
-            emailType = '📚 בקשת הדרכה';
+            subject = `ߓڠבקשת הדרכה ${serviceNumber} - ${customer.name}`;
+            emailType = 'ߓڠבקשת הדרכה';
         } else {
-            subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
-            emailType = '📋 סיכום קריאת שירות';
+            subject = `ߓˠסיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+            emailType = 'ߓˠסיכום קריאת שירות';
         }
         
         // בניית סיכום השיחה
@@ -659,7 +760,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
             conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
         }
         if (extraData.attachments && extraData.attachments.length > 0) {
-            conversationSummary += `<p><strong>📎 קבצים מצורפים:</strong> ${extraData.attachments.length} תמונות</p>`;
+            conversationSummary += `<p><strong>ߓΠקבצים מצורפים:</strong> ${extraData.attachments.length} תמונות</p>`;
         }
 
         const html = `
@@ -672,7 +773,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
                     </div>
                     
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
-                        <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
+                        <h2 style="color: #2c3e50; margin-top: 0;">ߑĠפרטי לקוח</h2>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             <p><strong>שם לקוח:</strong> ${customer.name}</p>
                             <p><strong>מספר לקוח:</strong> #${customer.id}</p>
@@ -683,12 +784,12 @@ async function sendEmail(customer, type, details, extraData = {}) {
                     </div>
                     
                     <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #2196f3;">
-                        <h3 style="margin-top: 0; color: #1976d2;">📞 פרטי קשר</h3>
+                        <h3 style="margin-top: 0; color: #1976d2;">ߓޠפרטי קשר</h3>
                         ${phoneList}
                     </div>
                     
                     <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #ffc107;">
-                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הקריאה</h2>
+                        <h2 style="color: #856404; margin-top: 0;">ߓˠפרטי הקריאה</h2>
                         <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
                         <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
                         <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : type === 'order' ? 'בקשת הצעת מחיר' : type === 'training' ? 'בקשת הדרכה' : 'פתרון טלפוני'}</p>
@@ -696,13 +797,13 @@ async function sendEmail(customer, type, details, extraData = {}) {
                     
                     ${conversationSummary ? `
                     <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
-                        <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
+                        <h2 style="color: #2c3e50; margin-top: 0;">ߒ̠סיכום השיחה</h2>
                         ${conversationSummary}
                     </div>
                     ` : ''}
                     
                     <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
-                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                        <p style="margin: 0;"><strong>ߓޠ039792365 | ߓǠService@sbcloud.co.il</strong></p>
                     </div>
                 </div>
             </div>
@@ -724,11 +825,11 @@ async function sendEmail(customer, type, details, extraData = {}) {
                     contentType: 'image/jpeg'
                 };
             });
-            console.log(`📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+            console.log(`ߓΠמצרף ${extraData.attachments.length} קבצים למייל`);
         }
         
         await transporter.sendMail(mailOptions);
-        console.log(`📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} תמונות` : ''}`);
+        console.log(`ߓǠמייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} תמונות` : ''}`);
     } catch (error) {
         console.error('❌ שגיאת מייל:', error);
     }
@@ -739,26 +840,27 @@ app.get('/', (req, res) => {
     res.send(`
         <div dir="rtl" style="font-family: Arial; padding: 50px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
             <div style="max-width: 600px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px;">
-                <h1 style="color: #2c3e50; text-align: center;">🚗 שיידט את בכמן</h1>
+                <h1 style="color: #2c3e50; text-align: center;">ߚנשיידט את בכמן</h1>
                 <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; margin: 20px 0;">
-                    <h3>👩‍💼 הדר - נציגת שירות לקוחות</h3>
+                    <h3>ߑʢ
+ߒܠהדר - נציגת שירות לקוחות</h3>
                     <ul>
-                        <li>🔧 תקלות ופתרונות מתקדמים</li>
-                        <li>📋 דיווח נזקים עם תמונות</li>
-                        <li>💰 הצעות מחיר</li>
-                        <li>📚 הדרכות</li>
-                        <li>🧠 זיכרון שיחות (4 שעות)</li>
-                        <li>🤖 AI חכם לפתרונות</li>
+                        <li>ߔǠתקלות ופתרונות מתקדמים</li>
+                        <li>ߓˠדיווח נזקים עם תמונות</li>
+                        <li>ߒРהצעות מחיר</li>
+                        <li>ߓڠהדרכות</li>
+                        <li>ߧ זיכרון שיחות (4 שעות)</li>
+                        <li>ߤ֠AI חכם לפתרונות</li>
                     </ul>
-                    <p><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    <p><strong>ߓޠ039792365 | ߓǠService@sbcloud.co.il</strong></p>
                 </div>
                 <div style="text-align: center; background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                    <p><strong>📲 WhatsApp:</strong> 972546284210</p>
-                    <p><strong>👥 לקוחות:</strong> ${customers.length}</p>
-                    <p><strong>🧠 שיחות פעילות:</strong> ${memory.conversations.size}</p>
-                    <p><strong>📋 מסד תקלות:</strong> ${serviceFailureDB.length} תרחישים</p>
-                    <p><strong>📚 מסדי הדרכה:</strong> ${Object.keys(trainingDB).length} קבצים</p>
-                    <p><strong>🤖 OpenAI:</strong> ${process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('fake') && !process.env.OPENAI_API_KEY.includes('כאן') ? '✅ פעיל' : '❌ לא פעיל'}</p>
+                    <p><strong>ߓҠWhatsApp:</strong> 972546284210</p>
+                    <p><strong>ߑŠלקוחות:</strong> ${customers.length}</p>
+                    <p><strong>ߧ שיחות פעילות:</strong> ${memory.conversations.size}</p>
+                    <p><strong>ߓˠמסד תקלות:</strong> ${serviceFailureDB.length} תרחישים</p>
+                    <p><strong>ߓڠמסדי הדרכה:</strong> ${Object.keys(trainingDB).length} קבצים</p>
+                    <p><strong>ߤ֠OpenAI:</strong> ${process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('fake') && !process.env.OPENAI_API_KEY.includes('כאן') ? '✅ פעיל' : '❌ לא פעיל'}</p>
                     <p><strong>✅ מערכת מושלמת מוכנה!</strong></p>
                 </div>
             </div>
@@ -783,27 +885,27 @@ app.post('/webhook/whatsapp', async (req, res) => {
             } else if (messageData.fileMessageData) {
                 hasFile = true;
                 messageText = messageData.fileMessageData.caption || 'שלח קובץ';
-                console.log(`📁 קובץ: ${messageData.fileMessageData.fileName}`);
+                console.log(`ߓ`קובץ: ${messageData.fileMessageData.fileName}`);
             }
             
-            console.log(`📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
+            console.log(`ߓޠהודעה מ-${phone} (${customerName}): ${messageText}`);
             
             let customer = findCustomer(phone, messageText);
             const context = customer ? memory.get(phone, customer) : memory.get(phone);
             
-            console.log(`🔍 לקוח: ${customer ? customer.name + ' מ' + customer.site : 'לא מזוהה'}`);
-            console.log(`📊 Context stage: ${context?.stage || 'אין'}`);
+            console.log(`ߔ͠לקוח: ${customer ? customer.name + ' מ' + customer.site : 'לא מזוהה'}`);
+            console.log(`ߓʠContext stage: ${context?.stage || 'אין'}`);
             
             let result = generateResponse(messageText, customer, context, phone);
             
             if (result.customer && !customer) {
                 customer = result.customer;
-                console.log(`🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
+                console.log(`߆ՠלקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
             }
             
             memory.add(phone, messageText, 'customer', customer);
             
-// 🔧 תיקון חדש: זיהוי סוג קובץ (תמונה/סרטון)
+// ߔǠתיקון חדש: זיהוי סוג קובץ (תמונה/סרטון)
             let fileType = '';
             let downloadedFiles = [];
             
@@ -819,10 +921,10 @@ app.post('/webhook/whatsapp', async (req, res) => {
                     fileType = 'קובץ';
                 }
                 
-                console.log(`📁 ${fileType}: ${fileName}`);
+                console.log(`ߓ`${fileType}: ${fileName}`);
             }
             
-            // 🔧 תיקון חדש: טיפול בקבצים לכל סוג פניה (לא רק נזק)
+            // ߔǠתיקון חדש: טיפול בקבצים לכל סוג פניה (לא רק נזק)
             if (hasFile && customer) {
                 const currentServiceNumber = getNextServiceNumber();
                 
@@ -854,7 +956,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 
                 // טיפול בקבצים לפניות שונות (לא רק נזק)
                 if (context?.stage === 'order_request') {
-                    const response = `📋 **קיבלתי את בקשת ההזמנה עם ${fileType}!**\n\n"${messageText}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
+                    const response = `ߓˠ**קיבלתי את בקשת ההזמנה עם ${fileType}!**\n\n"${messageText}"\n\nߓǠאשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n߆Ԡמספר קריאה: ${currentServiceNumber}\n\nߓޠ039792365`;
                     
                     await sendWhatsApp(phone, response);
                     await sendEmail(customer, 'order', messageText, {
@@ -869,7 +971,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 }
                 
                 if (context?.stage === 'training_request') {
-                    const response = `📚 **קיבלתי את בקשת ההדרכה עם ${fileType}!**\n\n"${messageText}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
+                    const response = `ߓڠ**קיבלתי את בקשת ההדרכה עם ${fileType}!**\n\n"${messageText}"\n\nߓǠאשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n߆Ԡמספר קריאה: ${currentServiceNumber}\n\nߓޠ039792365`;
                     
                     await sendWhatsApp(phone, response);
                     await sendEmail(customer, 'training', messageText, {
@@ -887,16 +989,16 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 // טיפול בתקלות עם קבצים
                 if (context?.stage === 'problem_description') {
                     // כאן נטפל בזה בהמשך עם ה-AI
-                    console.log(`📁 תקלה עם ${fileType} - יטופל עם הפתרון`);
+                    console.log(`ߓ`תקלה עם ${fileType} - יטופל עם הפתרון`);
                 }
             }
 
-// 🔧 תיקון הלוגיקה הנכונה לתקלות עם AI
+// ߔǠתיקון הלוגיקה הנכונה לתקלות עם AI
 if (result.stage === 'processing_with_ai' && result.problemDescription) {
-    console.log('🔍 מחפש פתרון לתקלה...');
+    console.log('ߔ͠מחפש פתרון לתקלה...');
     
     try {
-        // 🔧 הורדת קבצים אם יש (לתקלות)
+        // ߔǠהורדת קבצים אם יש (לתקלות)
         if (hasFile && downloadedFiles.length === 0 && messageData.fileMessageData?.downloadUrl) {
             const timestamp = Date.now();
             const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
@@ -913,10 +1015,10 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
         
         let finalResponse;
         
-        // 🔧 תיקון: רק אם לא נמצא פתרון - שלח מייל מיידי
+        // ߔǠתיקון: רק אם לא נמצא פתרון - שלח מייל מיידי
         if (solution.emailSent) {
             // אם נשלח מייל מיידי (כי לא נמצא פתרון)
-            finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${solution.serviceNumber}`;
+            finalResponse = `${solution.response}\n\n߆Ԡמספר קריאה: ${solution.serviceNumber}`;
             
             // שלח מייל עם קבצים אם יש
             if (downloadedFiles.length > 0) {
@@ -936,8 +1038,8 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
             console.log(`✅ לא נמצא פתרון - מייל נשלח ללקוח ${customer.name} - ${solution.serviceNumber}`);
             
         } else {
-            // 🔧 תיקון: אם נמצא פתרון - רק המתן למשוב (אל תשלח מייל עדיין!)
-            finalResponse = `${solution.response}\n\n🆔 מספר קריאה: ${result.serviceNumber}`;
+            // ߔǠתיקון: אם נמצא פתרון - רק המתן למשוב (אל תשלח מייל עדיין!)
+            finalResponse = `${solution.response}\n\n߆Ԡמספר קריאה: ${result.serviceNumber}`;
             
             await sendWhatsApp(phone, finalResponse);
             memory.add(phone, finalResponse, 'hadar', customer);
@@ -961,7 +1063,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
         
     } catch (error) {
         console.error('❌ שגיאה בחיפוש פתרון:', error);
-        await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת\n\nאנא התקשר ישירות: 📞 039792365\n\n🆔 מספר קריאה: ${result.serviceNumber}`);
+        await sendWhatsApp(phone, `⚠️ יש בעיה זמנית במערכת\n\nאנא התקשר ישירות: ߓޠ039792365\n\n߆Ԡמספר קריאה: ${result.serviceNumber}`);
         return res.status(200).json({ status: 'OK' });
     }
 }
@@ -973,7 +1075,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                     const unit = unitMatch[1] || unitMatch[2];
                     const currentServiceNumber = getNextServiceNumber();
                     
-                    console.log(`📁 נזק ביחידה ${unit} - תמונה התקבלה מ${customer.name}`);
+                    console.log(`ߓ`נזק ביחידה ${unit} - תמונה התקבלה מ${customer.name}`);
                     
                     // הורדת התמונה מוואטסאפ
                     let downloadedFiles = [];
@@ -988,7 +1090,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                         }
                     }
                     
-                    const response = `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את התמונה!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${currentServiceNumber}\n\n📞 039792365`;
+                    const response = `שלום ${customer.name} ߑ̜n\nיחידה ${unit} - קיבלתי את התמונה!\n\nߔ͠מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n߆Ԡמספר קריאה: ${currentServiceNumber}\n\nߓޠ039792365`;
                     
                     await sendWhatsApp(phone, response);
                     await sendEmail(customer, 'technician', `נזק ביחידה ${unit} - תמונה צורפה`, {
@@ -1003,7 +1105,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                     console.log(`✅ נזק יחידה ${unit} - מייל עם תמונה נשלח - ${currentServiceNumber}`);
                     return res.status(200).json({ status: 'OK' });
                 } else {
-                    await sendWhatsApp(phone, `אנא כתוב מספר היחידה עם התמונה\n\nלדוגמה: "יחידה 101"\n\n📞 039792365`);
+                    await sendWhatsApp(phone, `אנא כתוב מספר היחידה עם התמונה\n\nלדוגמה: "יחידה 101"\n\nߓޠ039792365`);
                     console.log(`⚠️ תמונה ללא מספר יחידה מ${customer.name}`);
                     return res.status(200).json({ status: 'OK' });
                 }
@@ -1016,7 +1118,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                 if (result.stage) {
                     memory.updateStage(phone, result.stage);
                 }
-                console.log(`📤 תגובה ללא זיהוי לקוח: ${result.stage}`);
+                console.log(`ߓĠתגובה ללא זיהוי לקוח: ${result.stage}`);
                 return res.status(200).json({ status: 'OK' });
             }
             
@@ -1028,11 +1130,11 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
             memory.add(phone, finalResult.response, 'hadar', customer);
             memory.updateStage(phone, finalResult.stage, customer);
             
-            console.log(`📤 תגובה נשלחה ללקוח ${customer ? customer.name : 'לא מזוהה'}: ${finalResult.stage}`);
+            console.log(`ߓĠתגובה נשלחה ללקוח ${customer ? customer.name : 'לא מזוהה'}: ${finalResult.stage}`);
             
             // שליחת מיילים עם סיכום מלא
             if (finalResult.sendTechnician) {
-                console.log(`📧 שולח מייל טכנאי ללקוח ${customer.name}`);
+                console.log(`ߓǠשולח מייל טכנאי ללקוח ${customer.name}`);
                 await sendEmail(customer, 'technician', messageText, {
                     serviceNumber: finalResult.serviceNumber,
                     problemDescription: finalResult.problemDescription,
@@ -1040,7 +1142,7 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                     resolved: finalResult.resolved
                 });
             } else if (finalResult.sendSummary) {
-                console.log(`📧 שולח מייל סיכום ללקוח ${customer.name}`);
+                console.log(`ߓǠשולח מייל סיכום ללקוח ${customer.name}`);
                 await sendEmail(customer, 'summary', 'בעיה נפתרה בהצלחה', {
                     serviceNumber: finalResult.serviceNumber,
                     problemDescription: finalResult.problemDescription,
@@ -1048,13 +1150,13 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
                     resolved: finalResult.resolved
                 });
             } else if (finalResult.sendOrderEmail) {
-                console.log(`📧 שולח מייל הזמנה ללקוח ${customer.name}`);
+                console.log(`ߓǠשולח מייל הזמנה ללקוח ${customer.name}`);
                 await sendEmail(customer, 'order', finalResult.orderDetails, {
                     serviceNumber: getNextServiceNumber(),
                     orderDetails: finalResult.orderDetails
                 });
             } else if (finalResult.sendTrainingEmail) {
-                console.log(`📧 שולח מייל הדרכה ללקוח ${customer.name}`);
+                console.log(`ߓǠשולח מייל הדרכה ללקוח ${customer.name}`);
                 await sendEmail(customer, 'training', finalResult.trainingRequest, {
                     serviceNumber: getNextServiceNumber(),
                     trainingRequest: finalResult.trainingRequest,
@@ -1073,16 +1175,16 @@ if (result.stage === 'processing_with_ai' && result.problemDescription) {
 // הפעלת שרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log('🚀 השרת פועל על פורט:', PORT);
-    console.log('🕐 שעה נוכחית (ישראל):', getIsraeliTime());
-    console.log('📲 WhatsApp: 972546284210');
-    console.log('👥 לקוחות:', customers.length);
-    console.log('🧠 זיכרון: 4 שעות');
-    console.log('📋 מסד תקלות:', serviceFailureDB.length, 'תרחישים');
-    console.log('📚 מסדי הדרכה:', Object.keys(trainingDB).length, 'קבצים');
-    console.log('🤖 OpenAI:', process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('fake') && !process.env.OPENAI_API_KEY.includes('כאן') ? '✅ פעיל' : '❌ צריך מפתח');
-    console.log('🔢 מספרי קריאה: HSC-' + (globalServiceCounter + 1) + '+');
-    console.log('📧 מיילים: סיכום מלא בכל קריאה');
+    console.log('ߚ השרת פועל על פורט:', PORT);
+    console.log('ߕРשעה נוכחית (ישראל):', getIsraeliTime());
+    console.log('ߓҠWhatsApp: 972546284210');
+    console.log('ߑŠלקוחות:', customers.length);
+    console.log('ߧ זיכרון: 4 שעות');
+    console.log('ߓˠמסד תקלות:', serviceFailureDB.length, 'תרחישים');
+    console.log('ߓڠמסדי הדרכה:', Object.keys(trainingDB).length, 'קבצים');
+    console.log('ߤ֠OpenAI:', process.env.OPENAI_API_KEY && !process.env.OPENAI_API_KEY.includes('fake') && !process.env.OPENAI_API_KEY.includes('כאן') ? '✅ פעיל' : '❌ צריך מפתח');
+    console.log('ߔ מספרי קריאה: HSC-' + (globalServiceCounter + 1) + '+');
+    console.log('ߓǠמיילים: סיכום מלא בכל קריאה');
     console.log('✅ מערכת מושלמת מוכנה!');
 });
 
