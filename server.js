@@ -939,9 +939,11 @@ if (result.customer && !customer) {
 // 🔧 תיקון: וודא שיש לקוח לפני הוספה לזיכרון
 if (customer) {
     memory.add(phone, messageText, 'customer', customer);
+    memory.updateStage(phone, result.stage, customer);
     console.log(`✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
 } else {
     memory.add(phone, messageText, 'customer');
+    memory.updateStage(phone, result.stage);
     console.log(`⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
 }
 
