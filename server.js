@@ -902,19 +902,25 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 customer = context.customer;
                 console.log(`🧠 לקוח מהזיכרון: ${customer.name} מ${customer.site}`);
             }
-            
-            // 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
-            let result = generateResponse(messageText, customer, context, phone);
-            
-            // 🔧 תיקון: אם generateResponse מחזיר לקוח חדש, השתמש בו
-            if (result.customer && !customer) {
-                customer = result.customer;
-                console.log(`🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
-            }
-            
-            // 🔧 תיקון: הוסף הודעה לזיכרון עם הלקוח הנכון
-            memory.add(phone, messageText, 'customer', customer);
-            
+         
+// 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
+let result = generateResponse(messageText, customer, context, phone);
+
+// 🔧 תיקון: אם generateResponse מחזיר לקוח חדש, השתמש בו
+if (result.customer && !customer) {
+    customer = result.customer;
+    console.log(`🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
+}
+
+// 🔧 תיקון: וודא שיש לקוח לפני הוספה לזיכרון
+if (customer) {
+    memory.add(phone, messageText, 'customer', customer);
+    console.log(`✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
+} else {
+    memory.add(phone, messageText, 'customer');
+    console.log(`⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
+}
+
             // זיהוי סוג קובץ (תמונה/סרטון)
             let fileType = '';
             let downloadedFiles = [];
