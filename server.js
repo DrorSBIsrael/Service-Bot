@@ -500,15 +500,6 @@ function isFinishingWord(message) {
     return finishingWords.some(word => msg === word || msg.includes(word));
 }
 
-// ובתחילת כל פונקציית handleXXX תוסיף:
-if (isMenuRequest(message)) {
-    this.memory.updateStage(phone, 'menu', customer);
-    return {
-        response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
-        stage: 'menu',
-        customer: customer
-    };
-}
 // הוספת תמיכה במילים נוספות לחזרה לתפריט בכל שלב:
 function isMenuRequest(message) {
     const msg = message.toLowerCase().trim();
@@ -654,6 +645,22 @@ if (msg === '4' || msg.includes('הדרכה')) {
             return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
         }
         
+async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
+    const serviceNumber = getNextServiceNumber();
+    
+    this.memory.updateStage(phone, 'completed', customer);
+    
+    return {
+        response: `📋 **קיבלתי את בקשת ההזמנה!**\n\n"${message}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        customer: customer,
+        serviceNumber: serviceNumber,
+        sendOrderEmail: true,
+        orderDetails: message,
+        attachments: downloadedFiles
+    };
+}
+
         // טיפול בהזמנות
         if (currentStage === 'order_request') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
