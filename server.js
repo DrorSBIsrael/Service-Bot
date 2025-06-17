@@ -997,20 +997,15 @@ app.post('/webhook/whatsapp', async (req, res) => {
                 log('INFO', `🧠 לקוח מהזיכרון: ${customer.name} מ${customer.site}`);
             }
          
-            // 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
-            let result = generateResponse(messageText, customer, context, phone);
+// 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
+let result = generateResponse(messageText, customer, context, phone);
 
-// 🔧 תיקון: עדכן את הזיכרון הנכון
-if (result.customer) {
-    customer = result.customer; // וודא שהלקוח מעודכן
-    memory.add(phone, messageText, 'customer', customer);
-    memory.updateStage(phone, result.stage, customer);
-    log('INFO', `✅ הוסף לזיכרון: ${customer.name} - שלב: ${result.stage}`);
-} else {
-    memory.add(phone, messageText, 'customer');
-    memory.updateStage(phone, result.stage);
-    log('INFO', `⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
+// 🔧 תיקון חשוב: אם generateResponse זיהה לקוח חדש, עדכן אותו
+if (result.customer && result.customer !== customer) {
+    customer = result.customer;
+    log('INFO', `🆕 לקוח חדש מזוהה: ${customer.name} מ${customer.site}`);
 }
+
 
 // 🔧 תיקון: עדכן את הזיכרון הנכון
 if (customer) {
