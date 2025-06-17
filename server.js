@@ -982,24 +982,6 @@ async function sendEmail(customer, type, details, extraData = {}) {
             conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
         }
 
-if (extraData.attachments && extraData.attachments.length > 0) {
-    try {
-        mailOptions.attachments = extraData.attachments.map(filePath => {
-            const fileName = path.basename(filePath);
-            
-            return {
-                filename: fileName,
-                path: filePath
-            };
-        });
-        
-        log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
-    } catch (attachmentError) {
-        log('ERROR', '❌ שגיאה בהכנת קבצים מצורפים:', attachmentError.message);
-        delete mailOptions.attachments;
-    }
-}
-
         const html = `
             <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
                 <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
@@ -1046,25 +1028,28 @@ if (extraData.attachments && extraData.attachments.length > 0) {
             </div>
         `;
         
-        const mailOptions = {
-            from: 'Report@sbparking.co.il',
-            to: 'Dror@sbparking.co.il',
-            subject: subject,
-            html: html
-        };
-        
-        if (extraData.attachments && extraData.attachments.length > 0) {
-            mailOptions.attachments = extraData.attachments.map(filePath => {
-                const fileName = path.basename(filePath);
-                return {
-                    filename: fileName,
-                    path: filePath,
-                    contentType: fileName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg'
-                };
-            });
-            log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
-        }
-        
+const mailOptions = {
+    from: 'Report@sbparking.co.il',
+    to: 'Dror@sbparking.co.il',
+    subject: subject,
+    html: html
+};
+
+if (extraData.attachments && extraData.attachments.length > 0) {
+    try {
+        mailOptions.attachments = extraData.attachments.map(filePath => {
+            const fileName = path.basename(filePath);
+            return {
+                filename: fileName,
+                path: filePath
+            };
+        });
+        log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+    } catch (attachmentError) {
+        log('ERROR', '❌ שגיאה בהכנת קבצים מצורפים:', attachmentError.message);
+    }
+}
+
         await transporter.sendMail(mailOptions);
         log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
         
