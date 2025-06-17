@@ -983,20 +983,20 @@ app.post('/webhook/whatsapp', async (req, res) => {
             
             log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
             
-            // 🔧 תיקון: תחילה חפש לקוח לפי טלפון
-            let customer = findCustomer(phone, messageText);
-            log('INFO', `🔍 זיהוי לפי טלפון: ${customer ? customer.name + ' מ' + customer.site : 'לא מזוהה'}`);
-            
-            // 🔧 תיקון: קבל context (אם יש לקוח - השתמש בו, אחרת רק לפי טלפון)
-            let context = customer ? memory.get(phone, customer) : memory.get(phone);
-            log('INFO', `📊 Context stage: ${context?.stage || 'אין'}`);
-            
-            // 🔧 תיקון: אם יש context עם לקוח, השתמש בו
-            if (context?.customer && !customer) {
-                customer = context.customer;
-                log('INFO', `🧠 לקוח מהזיכרון: ${customer.name} מ${customer.site}`);
-            }
-         
+// 🔧 תיקון: תחילה חפש לקוח לפי טלפון
+let customer = findCustomer(phone, messageText);
+log('INFO', `🔍 זיהוי לפי טלפון: ${customer ? customer.name + ' מ' + customer.site : 'לא מזוהה'}`);
+
+// 🔧 תיקון: קבל context (אם יש לקוח - השתמש בו, אחרת רק לפי טלפון)
+let context = customer ? memory.get(phone, customer) : memory.get(phone);
+log('INFO', `📊 Context stage: ${context?.stage || 'אין'}`);
+
+// 🔧 תיקון: אם יש context עם לקוח, השתמש בו
+if (context?.customer && !customer) {
+    customer = context.customer;
+    log('INFO', `🧠 לקוח מהזיכרון: ${customer.name} מ${customer.site}`);
+}
+
 // 🔧 תיקון: קרא ל-generateResponse עם הפרמטרים הנכונים
 let result = generateResponse(messageText, customer, context, phone);
 
@@ -1025,12 +1025,6 @@ if (customer) {
     memory.updateStage(phone, result.stage);
     log('INFO', `⚠️ הוסף לזיכרון ללא לקוח - שלב: ${result.stage}`);
 }
-            
-            // 🔧 תיקון: אם יש context עם לקוח, השתמש בו
-            if (context?.customer && !customer) {
-                customer = context.customer;
-                log('INFO', `🧠 לקוח מהזיכרון: ${customer.name} מ${customer.site}`);
-            }
 
             // זיהוי סוג קובץ (תמונה/סרטון)
             let fileType = '';
