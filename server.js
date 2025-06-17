@@ -1,49 +1,4 @@
-if (mailOptions.attachments && mailOptions.attachments.length > 0) {
-            mailOptions.attachments = extraData.attachments.map(filePath => {
-                const fileName = path.basename(filePath);
-                const extension = fileName.toLowerCase();
-                
-                let contentType = 'application/octet-stream'; // ברירת מחדל
-                
-                // זיהוי סוג הקובץ לפי הסיומת
-                if (extension.endsWith('.jpg') || extension.endsWith('.jpeg')) {
-                    contentType = 'image/jpeg';
-                } else if (extension.endsWith('.png')) {
-                    contentType = 'image/png';
-                } else if (extension.endsWith('.gif')) {
-                    contentType = 'image/gif';
-                } else if (extension.endsWith('.pdf')) {
-                    contentType = 'application/pdf';
-                } else if (extension.endsWith('.doc')) {
-                    contentType = 'application/msword';
-                } else if (extension.endsWith('.docx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                } else if (extension.endsWith('.xls')) {
-                    contentType = 'application/vnd.ms-excel';
-                } else if (extension.endsWith('.xlsx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                } else if (extension.endsWith('.ppt')) {
-                    contentType = 'application/vnd.ms-powerpoint';
-                } else if (extension.endsWith('.pptx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-                } else if (extension.endsWith('.mp4')) {
-                    contentType = 'video/mp4';
-                } else if (extension.endsWith('.avi')) {
-                    contentType = 'video/x-msvideo';
-                } else if (extension.endsWith('.mov')) {
-                    contentType = 'video/quicktime';
-                } else if (extension.endsWith('.txt')) {
-                    contentType = 'text/plain';
-                }
-                
-                return {
-                    filename: fileName,
-                    path: filePath,
-                    contentType: contentType
-                };
-            });
-            log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
-        }require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
@@ -619,32 +574,35 @@ class ResponseHandler {
                 };
             }
             
-            if (msg === '2' || msg.includes('נזק')) {
-                this.memory.updateStage(phone, 'damage_photo', customer);
-                return {
-                    response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
-                    stage: 'damage_photo',
-                    customer: customer
-                };
-            }
-            
-            if (msg === '3' || msg.includes('מחיר')) {
-                this.memory.updateStage(phone, 'order_request', customer);
-                return {
-                    response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
-                    stage: 'order_request',
-                    customer: customer
-                };
-            }
-            
-            if (msg === '4' || msg.includes('הדרכה')) {
-                this.memory.updateStage(phone, 'training_request', customer);
-                return {
-                    response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר" + סרטון\n• "טיפול בתקלות" + מסמך שגיאה\n\n📞 039792365`,
-                    stage: 'training_request',
-                    customer: customer
-                };
-            }
+// נזק
+if (msg === '2' || msg.includes('נזק')) {
+    this.memory.updateStage(phone, 'damage_photo', customer);
+    return {
+        response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
+        stage: 'damage_photo',
+        customer: customer
+    };
+}
+
+// הצעת מחיר
+if (msg === '3' || msg.includes('מחיר')) {
+    this.memory.updateStage(phone, 'order_request', customer);
+    return {
+        response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
+        stage: 'order_request',
+        customer: customer
+    };
+}
+
+// הדרכה
+if (msg === '4' || msg.includes('הדרכה')) {
+    this.memory.updateStage(phone, 'training_request', customer);
+    return {
+        response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר" + סרטון\n• "טיפול בתקלות" + מסמך שגיאה\n\n📞 039792365`,
+        stage: 'training_request',
+        customer: customer
+    };
+}
             
             // אם לא הבין - חזור לתפריט
             this.memory.updateStage(phone, 'menu', customer);
@@ -733,41 +691,44 @@ class ResponseHandler {
         }
     }
     
-    async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
-        if (!hasFile) {
-            return {
-                response: `📷 **דיווח נזק - חסרה תמונה**\n\nאנא שלח תמונה של הנזק עם מספר היחידה\n\nדוגמה: תמונה + "יחידה 101"\n\n📞 039792365`,
-                stage: 'damage_photo',
-                customer: customer
-            };
-        }
-        
-        // חיפוש מספר יחידה
-        const unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
-        if (!unitMatch) {
-            return {
-                response: `📷 **אנא כתוב מספר היחידה עם התמונה**\n\nדוגמה: "יחידה 101" או סט "202"\n\n📞 039792365`,
-                stage: 'damage_photo',
-                customer: customer
-            };
-        }
-        
-        const unit = unitMatch[1] || unitMatch[2];
-        const serviceNumber = getNextServiceNumber();
-        
-        this.memory.updateStage(phone, 'completed', customer);
-        
+// החלף את התחלת הפונקציה:
+async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
+    if (!hasFile || downloadedFiles.length === 0) {
         return {
-            response: `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי את ה${fileType}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendTechnicianEmail: true,
-            problemDescription: `נזק ביחידה ${unit} - ${message}`,
-            attachments: downloadedFiles
+            response: `📷 **דיווח נזק - חסרים קבצים**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק עם מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
+            stage: 'damage_photo',
+            customer: customer
         };
     }
     
+    // חיפוש מספר יחידה
+    const unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+    if (!unitMatch) {
+        return {
+            response: `📷 **אנא כתוב מספר היחידה עם הקבצים**\n\nקיבלתי ${downloadedFiles.length} קבצים\n\nדוגמה: "יחידה 101" או "202"\n\n📞 039792365`,
+            stage: 'damage_photo',
+            customer: customer
+        };
+    }
+    
+    const unit = unitMatch[1] || unitMatch[2];
+    const serviceNumber = getNextServiceNumber();
+    
+    this.memory.updateStage(phone, 'completed', customer);
+    
+    const filesDescription = downloadedFiles.length > 1 ? `${downloadedFiles.length} קבצים` : fileType;
+    
+    return {
+        response: `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        customer: customer,
+        serviceNumber: serviceNumber,
+        sendTechnicianEmail: true,
+        problemDescription: `נזק ביחידה ${unit} - ${message}`,
+        attachments: downloadedFiles
+    };
+}
+
     async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         const serviceNumber = getNextServiceNumber();
         
@@ -843,8 +804,6 @@ class ResponseHandler {
 
 const responseHandler = new ResponseHandler(memory, customers);
 
-const responseHandler = new ResponseHandler(memory, customers);
-
 // שליחת WhatsApp
 async function sendWhatsApp(phone, message) {
     const instanceId = '7105253183';
@@ -915,9 +874,53 @@ async function sendEmail(customer, type, details, extraData = {}) {
             const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
             conversationSummary += `<p><strong>סטטוס:</strong> <span style="color: ${extraData.resolved ? 'green' : 'red'};">${status}</span></p>`;
         }
-        if (extraData.attachments && extraData.attachments.length > 0) {
-            conversationSummary += `<p><strong>📎 קבצים מצורפים:</strong> ${extraData.attachments.length} קבצים</p>`;
+
+if (extraData.attachments && extraData.attachments.length > 0) {
+    mailOptions.attachments = extraData.attachments.map(filePath => {
+        const fileName = path.basename(filePath);
+        const extension = fileName.toLowerCase();
+        
+        let contentType = 'application/octet-stream'; // ברירת מחדל
+        
+        // זיהוי סוג הקובץ לפי הסיומת
+        if (extension.endsWith('.jpg') || extension.endsWith('.jpeg')) {
+            contentType = 'image/jpeg';
+        } else if (extension.endsWith('.png')) {
+            contentType = 'image/png';
+        } else if (extension.endsWith('.gif')) {
+            contentType = 'image/gif';
+        } else if (extension.endsWith('.pdf')) {
+            contentType = 'application/pdf';
+        } else if (extension.endsWith('.doc')) {
+            contentType = 'application/msword';
+        } else if (extension.endsWith('.docx')) {
+            contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+        } else if (extension.endsWith('.xls')) {
+            contentType = 'application/vnd.ms-excel';
+        } else if (extension.endsWith('.xlsx')) {
+            contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+        } else if (extension.endsWith('.ppt')) {
+            contentType = 'application/vnd.ms-powerpoint';
+        } else if (extension.endsWith('.pptx')) {
+            contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        } else if (extension.endsWith('.mp4')) {
+            contentType = 'video/mp4';
+        } else if (extension.endsWith('.avi')) {
+            contentType = 'video/x-msvideo';
+        } else if (extension.endsWith('.mov')) {
+            contentType = 'video/quicktime';
+        } else if (extension.endsWith('.txt')) {
+            contentType = 'text/plain';
         }
+        
+        return {
+            filename: fileName,
+            path: filePath,
+            contentType: contentType
+        };
+    });
+    log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+}
 
         const html = `
             <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
@@ -975,45 +978,10 @@ async function sendEmail(customer, type, details, extraData = {}) {
         if (extraData.attachments && extraData.attachments.length > 0) {
             mailOptions.attachments = extraData.attachments.map(filePath => {
                 const fileName = path.basename(filePath);
-                const extension = fileName.toLowerCase();
-                
-                let contentType = 'application/octet-stream'; // ברירת מחדל
-                
-                // זיהוי סוג הקובץ לפי הסיומת
-                if (extension.endsWith('.jpg') || extension.endsWith('.jpeg')) {
-                    contentType = 'image/jpeg';
-                } else if (extension.endsWith('.png')) {
-                    contentType = 'image/png';
-                } else if (extension.endsWith('.gif')) {
-                    contentType = 'image/gif';
-                } else if (extension.endsWith('.pdf')) {
-                    contentType = 'application/pdf';
-                } else if (extension.endsWith('.doc')) {
-                    contentType = 'application/msword';
-                } else if (extension.endsWith('.docx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-                } else if (extension.endsWith('.xls')) {
-                    contentType = 'application/vnd.ms-excel';
-                } else if (extension.endsWith('.xlsx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                } else if (extension.endsWith('.ppt')) {
-                    contentType = 'application/vnd.ms-powerpoint';
-                } else if (extension.endsWith('.pptx')) {
-                    contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-                } else if (extension.endsWith('.mp4')) {
-                    contentType = 'video/mp4';
-                } else if (extension.endsWith('.avi')) {
-                    contentType = 'video/x-msvideo';
-                } else if (extension.endsWith('.mov')) {
-                    contentType = 'video/quicktime';
-                } else if (extension.endsWith('.txt')) {
-                    contentType = 'text/plain';
-                }
-                
                 return {
                     filename: fileName,
                     path: filePath,
-                    contentType: contentType
+                    contentType: fileName.endsWith('.mp4') ? 'video/mp4' : 'image/jpeg'
                 };
             });
             log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
@@ -1027,7 +995,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
     }
 }
 
-// קביעת סוג קובץ מרחיב - תמיכה בכל סוגי הקבצים
+// קביעת סוג קובץ
 function getFileExtension(fileName, mimeType) {
     // אם יש שם קובץ עם סיומת
     if (fileName && fileName.includes('.')) {
@@ -1065,7 +1033,7 @@ function getFileExtension(fileName, mimeType) {
     return '.file'; // ברירת מחדל
 }
 
-// פונקציה לזיהוי סוג קובץ
+// פונקציה לזיהוי סוג קובץ - הוסף אחרי getFileExtension
 function getFileType(fileName, mimeType) {
     const extension = fileName ? fileName.toLowerCase() : '';
     
@@ -1150,7 +1118,7 @@ app.get('/', (req, res) => {
     `);
 });
 
-// WhatsApp Webhook מעולה עם תמיכה במספר קבצים
+// WhatsApp Webhook מעולה
 app.post('/webhook/whatsapp', async (req, res) => {
     try {
         if (req.body.typeWebhook !== 'incomingMessageReceived') {
@@ -1167,36 +1135,88 @@ app.post('/webhook/whatsapp', async (req, res) => {
         let fileType = '';
         let downloadedFiles = [];
         
-        // עיבוד טקסט
-        if (messageData.textMessageData) {
-            messageText = messageData.textMessageData.textMessage;
-        } else if (messageData.fileMessageData) {
-            hasFile = true;
-            messageText = messageData.fileMessageData.caption || 'שלח קובץ';
-            
-            const fileName = messageData.fileMessageData.fileName || '';
-            const mimeType = messageData.fileMessageData.mimeType || '';
-            
-            fileType = getFileType(fileName, mimeType);
-            log('INFO', `📁 ${fileType}: ${fileName}`);
-        }
-        
-        log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
+// עיבוד טקסט - הגרסה הסופית והנכונה
+if (messageData.textMessageData) {
+    messageText = messageData.textMessageData.textMessage;
+} else if (messageData.fileMessageData) {
+    hasFile = true;
+    messageText = messageData.fileMessageData.caption || 'שלח קובץ';
+    
+    const fileName = messageData.fileMessageData.fileName || '';
+    const mimeType = messageData.fileMessageData.mimeType || '';
+    
+    fileType = getFileType(fileName, mimeType); // 🔧 רק השורה הזו!
+    log('INFO', `📁 ${fileType}: ${fileName}`);
+}
+
+      log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
         
         // זיהוי לקוח
         let customer = findCustomerByPhone(phone);
         
-        // הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
+// הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
+if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
+    const conversation = memory.getConversation(phone, customer);
+    const existingFiles = conversation?.data?.tempFiles || [];
+    
+    // בדיקה שלא חורגים מ-4 קבצים בסה"כ
+    if (existingFiles.length >= 4) {
+        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nאם תרצה לשלוח קבצים נוספים, אנא סיים את הפנייה הנוכחית ופתח פנייה חדשה.\n\n📞 039792365`);
+        return res.status(200).json({ status: 'OK - file limit reached' });
+    }
+    
+    const timestamp = Date.now();
+    const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
+    const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
+    
+    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+    if (filePath) {
+        downloadedFiles.push(filePath);
+        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
+        
+        // שמירת הקובץ בזיכרון הזמני של השיחה
+        const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
+        memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
+            ...conversation?.data, 
+            tempFiles: updatedFiles 
+        });
+        
+        // הודעת אישור עם סיכום הקבצים
+        const filesSummary = updatedFiles.map((file, index) => `${index + 1}. ${file.type}`).join('\n');
+        const remainingSlots = 4 - updatedFiles.length;
+        
+        let confirmMessage = `✅ **${fileType} התקבל!**\n\nקבצים שהתקבלו (${updatedFiles.length}/4):\n${filesSummary}`;
+        
+        if (remainingSlots > 0) {
+            confirmMessage += `\n\n📎 ניתן לשלוח עוד ${remainingSlots} קבצים`;
+            confirmMessage += `\n✏️ או לכתוב הודעה לסיום השליחה`;
+        } else {
+            confirmMessage += `\n\n✅ הגעת למקסימום 4 קבצים`;
+            confirmMessage += `\n✏️ כתוב הודעה לסיום השליחה`;
+        }
+        
+        await sendWhatsApp(phone, confirmMessage);
+        return res.status(200).json({ status: 'OK - file received' });
+    }
+}
+
+// הוספה לזיכרון
+memory.addMessage(phone, messageText, 'customer', customer);
+
+// אם יש קבצים זמניים, הוסף אותם לקבצים הנוכחיים
+const conversation = memory.getConversation(phone, customer);
+const tempFiles = conversation?.data?.tempFiles || [];
+if (tempFiles.length > 0) {
+    downloadedFiles = [...downloadedFiles, ...tempFiles.map(f => f.path)];
+    // נקה את הקבצים הזמניים מהזיכרון
+    memory.updateStage(phone, conversation?.stage, customer, { 
+        ...conversation?.data, 
+        tempFiles: [] 
+    });
+}
+
+        // הורדת קבצים אם יש
         if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
-            const conversation = memory.getConversation(phone, customer);
-            const existingFiles = conversation?.data?.tempFiles || [];
-            
-            // בדיקה שלא חורגים מ-4 קבצים בסה"כ
-            if (existingFiles.length >= 4) {
-                await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nאם תרצה לשלוח קבצים נוספים, אנא סיים את הפנייה הנוכחית ופתח פנייה חדשה.\n\n📞 039792365`);
-                return res.status(200).json({ status: 'OK - file limit reached' });
-            }
-            
             const timestamp = Date.now();
             const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
             const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
@@ -1205,55 +1225,19 @@ app.post('/webhook/whatsapp', async (req, res) => {
             if (filePath) {
                 downloadedFiles.push(filePath);
                 log('INFO', `✅ ${fileType} הורד: ${fileName}`);
-                
-                // שמירת הקובץ בזיכרון הזמני של השיחה
-                const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
-                memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
-                    ...conversation?.data, 
-                    tempFiles: updatedFiles 
-                });
-                
-                // הודעת אישור עם סיכום הקבצים
-                const filesSummary = updatedFiles.map((file, index) => `${index + 1}. ${file.type} (${file.name})`).join('\n');
-                const remainingSlots = 4 - updatedFiles.length;
-                
-                let confirmMessage = `✅ **${fileType} התקבל!**\n\nקבצים שהתקבלו (${updatedFiles.length}/4):\n${filesSummary}`;
-                
-                if (remainingSlots > 0) {
-                    confirmMessage += `\n\n📎 ניתן לשלוח עוד ${remainingSlots} קבצים`;
-                    confirmMessage += `\n✏️ או לכתוב הודעה לסיום השליחה`;
-                } else {
-                    confirmMessage += `\n\n✅ הגעת למקסימום 4 קבצים`;
-                    confirmMessage += `\n✏️ כתוב הודעה לסיום השליחה`;
-                }
-                
-                await sendWhatsApp(phone, confirmMessage);
-                return res.status(200).json({ status: 'OK - file received' });
             }
         }
         
         // הוספה לזיכרון
         memory.addMessage(phone, messageText, 'customer', customer);
         
-        // אם יש קבצים זמניים, הוסף אותם לקבצים הנוכחיים
-        const conversation = memory.getConversation(phone, customer);
-        const tempFiles = conversation?.data?.tempFiles || [];
-        if (tempFiles.length > 0) {
-            downloadedFiles = [...downloadedFiles, ...tempFiles.map(f => f.path)];
-            // נקה את הקבצים הזמניים מהזיכרון
-            memory.updateStage(phone, conversation?.stage, customer, { 
-                ...conversation?.data, 
-                tempFiles: [] 
-            });
-        }
-        
         // יצירת תגובה
         const result = await responseHandler.generateResponse(
             messageText, 
             phone, 
             customer, 
-            downloadedFiles.length > 0, 
-            tempFiles.length > 0 ? tempFiles.map(f => f.type).join(', ') : fileType, 
+            hasFile, 
+            fileType, 
             downloadedFiles
         );
         
