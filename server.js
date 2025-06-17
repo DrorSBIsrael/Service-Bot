@@ -762,10 +762,10 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         // חיפוש מספר יחידה בהודעות הקודמות או בהודעה הנוכחית
         let unitNumber = null;
         
-        // חיפוש ביחידה בהודעה הנוכחית
-        let unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+        // חיפוש ביחידה בהודעה הנוכחית - תיקון הביטוי הרגולרי
+        let unitMatch = message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
         if (unitMatch) {
-            unitNumber = unitMatch[1] || unitMatch[2];
+            unitNumber = unitMatch[1] || unitMatch[2] || unitMatch[3] || unitMatch[4];
         }
         
         // אם לא נמצא, חפש בהודעות קודמות
@@ -773,15 +773,17 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
             for (let i = conversation.messages.length - 1; i >= 0; i--) {
                 const pastMessage = conversation.messages[i];
                 if (pastMessage.sender === 'customer') {
-                    const pastUnitMatch = pastMessage.message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+                    const pastUnitMatch = pastMessage.message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
                     if (pastUnitMatch) {
-                        unitNumber = pastUnitMatch[1] || pastUnitMatch[2];
+                        unitNumber = pastUnitMatch[1] || pastUnitMatch[2] || pastUnitMatch[3] || pastUnitMatch[4];
+                        console.log(`DEBUG: נמצא מספר יחידה בהודעה קודמת: ${unitNumber} מתוך: "${pastMessage.message}"`);
                         break;
                     }
                 }
             }
         }
-
+        
+        console.log(`DEBUG: בדיקת סיום - קבצים: ${allFiles.length}, מספר יחידה: ${unitNumber}`);
         
         // בדיקה שיש קבצים
         if (!allFiles || allFiles.length === 0) {
@@ -795,7 +797,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         // בדיקה שיש מספר יחידה
         if (!unitNumber) {
             return {
-                response: `📷 **אנא כתוב מספר היחידה**\n\nקיבלתי ${allFiles.length} קבצים ✅\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "202"\n\n📞 039792365`,
+                response: `📷 **אנא כתוב מספר היחידה**\n\nקיבלתי ${allFiles.length} קבצים ✅\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "202" או "מחסום 150"\n\n📞 039792365`,
                 stage: 'damage_photo',
                 customer: customer
             };
@@ -806,6 +808,8 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         this.memory.updateStage(phone, 'completed', customer);
         
         const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType;
+        
+        console.log(`DEBUG: שולח מייל עם ${allFiles.length} קבצים ליחידה ${unitNumber}`);
         
         return {
             response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
@@ -828,10 +832,11 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         };
     }
     
-    // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה
-    const unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+    // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה - תיקון הביטוי הרגולרי
+    const unitMatch = message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
     if (unitMatch) {
-        const unit = unitMatch[1] || unitMatch[2];
+        const unit = unitMatch[1] || unitMatch[2] || unitMatch[3] || unitMatch[4];
+        console.log(`DEBUG: זוהה מספר יחידה: ${unit} מתוך הודעה: "${message}"`);
         return {
             response: `📝 **מספר יחידה נרשם: ${unit}**\n\nעכשיו שלח תמונות/סרטונים של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
             stage: 'damage_photo',
@@ -841,12 +846,12 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
     
     // אם לא הבין מה הלקוח רוצה
     return {
-        response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
+        response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
         stage: 'damage_photo',
         customer: customer
     };
 }
-    
+
     async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
         const serviceNumber = getNextServiceNumber();
         
