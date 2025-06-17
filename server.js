@@ -983,50 +983,21 @@ async function sendEmail(customer, type, details, extraData = {}) {
         }
 
 if (extraData.attachments && extraData.attachments.length > 0) {
-    mailOptions.attachments = extraData.attachments.map(filePath => {
-        const fileName = path.basename(filePath);
-        const extension = fileName.toLowerCase();
+    try {
+        mailOptions.attachments = extraData.attachments.map(filePath => {
+            const fileName = path.basename(filePath);
+            
+            return {
+                filename: fileName,
+                path: filePath
+            };
+        });
         
-        let contentType = 'application/octet-stream'; // ברירת מחדל
-        
-        // זיהוי סוג הקובץ לפי הסיומת
-        if (extension.endsWith('.jpg') || extension.endsWith('.jpeg')) {
-            contentType = 'image/jpeg';
-        } else if (extension.endsWith('.png')) {
-            contentType = 'image/png';
-        } else if (extension.endsWith('.gif')) {
-            contentType = 'image/gif';
-        } else if (extension.endsWith('.pdf')) {
-            contentType = 'application/pdf';
-        } else if (extension.endsWith('.doc')) {
-            contentType = 'application/msword';
-        } else if (extension.endsWith('.docx')) {
-            contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-        } else if (extension.endsWith('.xls')) {
-            contentType = 'application/vnd.ms-excel';
-        } else if (extension.endsWith('.xlsx')) {
-            contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        } else if (extension.endsWith('.ppt')) {
-            contentType = 'application/vnd.ms-powerpoint';
-        } else if (extension.endsWith('.pptx')) {
-            contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-        } else if (extension.endsWith('.mp4')) {
-            contentType = 'video/mp4';
-        } else if (extension.endsWith('.avi')) {
-            contentType = 'video/x-msvideo';
-        } else if (extension.endsWith('.mov')) {
-            contentType = 'video/quicktime';
-        } else if (extension.endsWith('.txt')) {
-            contentType = 'text/plain';
-        }
-        
-        return {
-            filename: fileName,
-            path: filePath,
-            contentType: contentType
-        };
-    });
-    log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+        log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+    } catch (attachmentError) {
+        log('ERROR', '❌ שגיאה בהכנת קבצים מצורפים:', attachmentError.message);
+        delete mailOptions.attachments;
+    }
 }
 
         const html = `
@@ -1097,9 +1068,10 @@ if (extraData.attachments && extraData.attachments.length > 0) {
         await transporter.sendMail(mailOptions);
         log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
         
-    } catch (error) {
-        log('ERROR', '❌ שגיאת מייל:', error.message);
-    }
+} catch (error) {
+    log('ERROR', '❌ שגיאת מייל מפורטת:', error.message);
+    log('ERROR', 'פרטים נוספים:', error);
+}
 }
 
 // קביעת סוג קובץ
