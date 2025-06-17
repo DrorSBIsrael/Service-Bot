@@ -489,6 +489,37 @@ async function findSolution(problemDescription, customer) {
     }
 }
 
+// פונקציה חדשה לזיהוי מילות סיום - הוסף לפני ה-ResponseHandler:
+function isFinishingWord(message) {
+    const msg = message.toLowerCase().trim();
+    const finishingWords = [
+        'סיום', 'לסיים', 'להגיש', 'לשלוח', 'סיימתי', 
+        'זהו', 'תם', 'הסתיים', 'בחלוק', 'finish', 'done', 'end'
+    ];
+    
+    return finishingWords.some(word => msg === word || msg.includes(word));
+}
+
+// ובתחילת כל פונקציית handleXXX תוסיף:
+if (isMenuRequest(message)) {
+    this.memory.updateStage(phone, 'menu', customer);
+    return {
+        response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+        stage: 'menu',
+        customer: customer
+    };
+}
+// הוספת תמיכה במילים נוספות לחזרה לתפריט בכל שלב:
+function isMenuRequest(message) {
+    const msg = message.toLowerCase().trim();
+    const menuWords = [
+        'תפריט', 'תפריט ראשי', 'חזרה', 'התחלה מחדש', 
+        'ביטול', 'לבטל', 'menu', 'main', 'cancel', 'restart'
+    ];
+    
+    return menuWords.some(word => msg === word || msg.includes(word));
+}
+
 // 🔧 לוגיקת תגובות מרכזית ומשופרת
 class ResponseHandler {
     constructor(memory, customers) {
@@ -691,59 +722,102 @@ if (msg === '4' || msg.includes('הדרכה')) {
         }
     }
     
-// החלף את התחלת הפונקציה:
+// תחליף את הפונקציה handleDamageReport בקוד שלך:
 async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
-    if (!hasFile || downloadedFiles.length === 0) {
-        return {
-            response: `📷 **דיווח נזק - חסרים קבצים**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק עם מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
+    const msg = message.toLowerCase().trim();
     
-    // חיפוש מספר יחידה
-    const unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
-    if (!unitMatch) {
-        return {
-            response: `📷 **אנא כתוב מספר היחידה עם הקבצים**\n\nקיבלתי ${downloadedFiles.length} קבצים\n\nדוגמה: "יחידה 101" או "202"\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
-    
-    const unit = unitMatch[1] || unitMatch[2];
-    const serviceNumber = getNextServiceNumber();
-    
-    this.memory.updateStage(phone, 'completed', customer);
-    
-    const filesDescription = downloadedFiles.length > 1 ? `${downloadedFiles.length} קבצים` : fileType;
-    
-    return {
-        response: `שלום ${customer.name} 👋\n\nיחידה ${unit} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-        stage: 'completed',
-        customer: customer,
-        serviceNumber: serviceNumber,
-        sendTechnicianEmail: true,
-        problemDescription: `נזק ביחידה ${unit} - ${message}`,
-        attachments: downloadedFiles
-    };
-}
-
-    async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
-        const serviceNumber = getNextServiceNumber();
+    // בדיקה אם הלקוח רוצה לסיים
+    if (msg === 'סיום' || msg === 'לסיים' || msg === 'להגיש' || msg === 'לשלוח') {
+        // בדיקה שיש לפחות קובץ אחד וגם מספר יחידה
+        const conversation = this.memory.getConversation(phone, customer);
+        const allFiles = downloadedFiles || [];
         
+        // חיפוש מספר יחידה בהודעות הקודמות או בהודעה הנוכחית
+        let unitNumber = null;
+        
+        // חיפוש ביחידה בהודעה הנוכחית
+        let unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+        if (unitMatch) {
+            unitNumber = unitMatch[1] || unitMatch[2];
+        }
+        
+        // אם לא נמצא, חפש בהודעות קודמות
+        if (!unitNumber && conversation && conversation.messages) {
+            for (let i = conversation.messages.length - 1; i >= 0; i--) {
+                const pastMessage = conversation.messages[i];
+                if (pastMessage.sender === 'customer') {
+                    const pastUnitMatch = pastMessage.message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+                    if (pastUnitMatch) {
+                        unitNumber = pastUnitMatch[1] || pastUnitMatch[2];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // בדיקה שיש קבצים
+        if (!allFiles || allFiles.length === 0) {
+            return {
+                response: `📷 **לא ניתן לסיים - חסרים קבצים**\n\nכדי לדווח על נזק אני צריכה לפחות:\n• תמונה/סרטון אחד של הנזק\n• מספר היחידה\n\nאנא שלח תמונות/סרטונים עם מספר היחידה\n\n📞 039792365`,
+                stage: 'damage_photo',
+                customer: customer
+            };
+        }
+        
+        // בדיקה שיש מספר יחידה
+        if (!unitNumber) {
+            return {
+                response: `📷 **אנא כתוב מספר היחידה**\n\nקיבלתי ${allFiles.length} קבצים ✅\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "202"\n\n📞 039792365`,
+                stage: 'damage_photo',
+                customer: customer
+            };
+        }
+        
+        // אם הכל בסדר - סיום ושליחת מייל
+        const serviceNumber = getNextServiceNumber();
         this.memory.updateStage(phone, 'completed', customer);
         
+        const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType;
+        
         return {
-            response: `📋 **קיבלתי את בקשת ההזמנה!**\n\n"${message}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
-            sendOrderEmail: true,
-            orderDetails: message,
-            attachments: downloadedFiles
+            sendTechnicianEmail: true,
+            problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
+            attachments: allFiles
         };
     }
+    
+    // אם יש קובץ חדש - הוסף אותו
+    if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+        // הודעת אישור על הקבלת הקובץ
+        return {
+            response: `✅ **${fileType} התקבל!**\n\nשלח עוד קבצים או כתוב את מספר היחידה\n\n📎 **אפשר לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום" + מספר היחידה\n\nדוגמה: "סיום יחידה 101"\n\n📞 039792365`,
+            stage: 'damage_photo',
+            customer: customer
+        };
+    }
+    
+    // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה
+    const unitMatch = message.match(/(\d{2,3})|יחידה\s*(\d{1,3})/);
+    if (unitMatch) {
+        const unit = unitMatch[1] || unitMatch[2];
+        return {
+            response: `📝 **מספר יחידה נרשם: ${unit}**\n\nעכשיו שלח תמונות/סרטונים של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
+            stage: 'damage_photo',
+            customer: customer
+        };
+    }
+    
+    // אם לא הבין מה הלקוח רוצה
+    return {
+        response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
+        stage: 'damage_photo',
+        customer: customer
+    };
+}
     
     async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
         const serviceNumber = getNextServiceNumber();
@@ -1153,7 +1227,7 @@ if (messageData.textMessageData) {
         
         // זיהוי לקוח
         let customer = findCustomerByPhone(phone);
-        
+
 // הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
     const conversation = memory.getConversation(phone, customer);
@@ -1161,7 +1235,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     
     // בדיקה שלא חורגים מ-4 קבצים בסה"כ
     if (existingFiles.length >= 4) {
-        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nאם תרצה לשלוח קבצים נוספים, אנא סיים את הפנייה הנוכחית ופתח פנייה חדשה.\n\n📞 039792365`);
+        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n📞 039792365`);
         return res.status(200).json({ status: 'OK - file limit reached' });
     }
     
@@ -1181,19 +1255,25 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
             tempFiles: updatedFiles 
         });
         
-        // הודעת אישור עם סיכום הקבצים
+        // הודעת אישור עם הנחיות ברורות
         const filesSummary = updatedFiles.map((file, index) => `${index + 1}. ${file.type}`).join('\n');
         const remainingSlots = 4 - updatedFiles.length;
         
-        let confirmMessage = `✅ **${fileType} התקבל!**\n\nקבצים שהתקבלו (${updatedFiles.length}/4):\n${filesSummary}`;
+        let confirmMessage = `✅ **${fileType} התקבל בהצלחה!**\n\nקבצים שהתקבלו (${updatedFiles.length}/4):\n${filesSummary}`;
         
         if (remainingSlots > 0) {
             confirmMessage += `\n\n📎 ניתן לשלוח עוד ${remainingSlots} קבצים`;
-            confirmMessage += `\n✏️ או לכתוב הודעה לסיום השליחה`;
-        } else {
-            confirmMessage += `\n\n✅ הגעת למקסימום 4 קבצים`;
-            confirmMessage += `\n✏️ כתוב הודעה לסיום השליחה`;
         }
+        
+        // הנחיות ברורות לסיום
+        if (conversation?.stage === 'damage_photo') {
+            confirmMessage += `\n\n✏️ **לסיום הדיווח:** כתוב "סיום" + מספר היחידה`;
+            confirmMessage += `\nדוגמה: "סיום יחידה 101"`;
+        } else {
+            confirmMessage += `\n\n✏️ **לסיום:** כתוב "סיום"`;
+        }
+        
+        confirmMessage += `\n\n📞 039792365`;
         
         await sendWhatsApp(phone, confirmMessage);
         return res.status(200).json({ status: 'OK - file received' });
@@ -1208,29 +1288,17 @@ const conversation = memory.getConversation(phone, customer);
 const tempFiles = conversation?.data?.tempFiles || [];
 if (tempFiles.length > 0) {
     downloadedFiles = [...downloadedFiles, ...tempFiles.map(f => f.path)];
-    // נקה את הקבצים הזמניים מהזיכרון
-    memory.updateStage(phone, conversation?.stage, customer, { 
-        ...conversation?.data, 
-        tempFiles: [] 
-    });
+    // נקה את הקבצים הזמניים מהזיכרון רק אם הלקוח סיים
+    if (messageText.toLowerCase().includes('סיום') || 
+        messageText.toLowerCase().includes('לסיים') || 
+        messageText.toLowerCase().includes('להגיש')) {
+        memory.updateStage(phone, conversation?.stage, customer, { 
+            ...conversation?.data, 
+            tempFiles: [] 
+        });
+    }
 }
 
-        // הורדת קבצים אם יש
-        if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
-            const timestamp = Date.now();
-            const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-            const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
-            
-            const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-            if (filePath) {
-                downloadedFiles.push(filePath);
-                log('INFO', `✅ ${fileType} הורד: ${fileName}`);
-            }
-        }
-        
-        // הוספה לזיכרון
-        memory.addMessage(phone, messageText, 'customer', customer);
-        
         // יצירת תגובה
         const result = await responseHandler.generateResponse(
             messageText, 
