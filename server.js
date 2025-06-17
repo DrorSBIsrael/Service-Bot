@@ -265,7 +265,7 @@ class AdvancedMemory {
 
 const memory = new AdvancedMemory();
 
-// זיהוי לקוח מתקדם
+// זיהוי לקוח מתקדם - מהקוד המקורי שעובד
 function findCustomerByPhone(phone) {
     const cleanPhone = phone.replace(/[^\d]/g, '');
     
@@ -273,23 +273,16 @@ function findCustomerByPhone(phone) {
         if (!customerPhone) return false;
         const cleanCustomerPhone = customerPhone.replace(/[^\d]/g, '');
         
-        const patterns = [
-            cleanCustomerPhone,
-            cleanCustomerPhone.substring(1), // ללא 0
-            '972' + cleanCustomerPhone.substring(1), // +972
-            '972' + cleanCustomerPhone, // +972 עם 0
-            incomingPhone.substring(3) // ללא +972
-        ];
-        
-        return patterns.some(pattern => 
-            pattern === incomingPhone || 
-            incomingPhone === pattern ||
-            pattern.endsWith(incomingPhone.substring(-7)) ||
-            incomingPhone.endsWith(pattern.substring(-7))
-        );
+        return cleanCustomerPhone === incomingPhone || 
+               cleanCustomerPhone === incomingPhone.substring(3) || 
+               ('972' + cleanCustomerPhone) === incomingPhone ||
+               cleanCustomerPhone === ('0' + incomingPhone.substring(3)) ||
+               ('0' + cleanCustomerPhone.substring(3)) === incomingPhone ||
+               cleanCustomerPhone.substring(1) === incomingPhone.substring(3) ||
+               ('972' + cleanCustomerPhone.substring(1)) === incomingPhone;
     }
     
-    const customer = customers.find(c => {
+    let customer = customers.find(c => {
         return isPhoneMatch(c.phone, cleanPhone) ||
                isPhoneMatch(c.phone1, cleanPhone) ||
                isPhoneMatch(c.phone2, cleanPhone) ||
@@ -299,24 +292,31 @@ function findCustomerByPhone(phone) {
     
     if (customer) {
         log('INFO', `✅ לקוח מזוהה לפי טלפון: ${customer.name} מ${customer.site}`);
-    } else {
-        log('INFO', `⚠️ לקוח לא מזוהה לפי טלפון: ${phone}`);
+        return customer;
     }
     
-    return customer;
+    log('INFO', `⚠️ לקוח לא מזוהה לפי טלפון: ${phone}`);
+    return null;
 }
 
-// זיהוי לקוח לפי שם חניון
+// זיהוי לקוח לפי שם חניון - מהקוד המקורי שעובד
 function findCustomerByName(message) {
-    const msg = message.toLowerCase().trim();
-    log('DEBUG', `🔍 מחפש לקוח לפי טקסט: "${msg}"`);
+    const msg = message.toLowerCase();
     
-    const wordsToRemove = ['חניון', 'מרכז', 'קניון', 'מגדל', 'בית', 'פארק', 'סנטר', 'מול', 'ליד', 'של'];
+    log('DEBUG', `🔍 מחפש לקוח עבור: "${msg}"`);
+    
+    // רשימת מילות מפתח לניקוי
+    const wordsToRemove = ['חניון', 'מרכז', 'קניון', 'מגדל', 'בית', 'פארק', 'סנטר', 'מול'];
+    
+    // ניקוי הטקסט
     let cleanMsg = msg;
     wordsToRemove.forEach(word => {
         cleanMsg = cleanMsg.replace(new RegExp(`\\b${word}\\b`, 'g'), '').trim();
     });
     
+    log('DEBUG', `🧹 טקסט נקי: "${cleanMsg}"`);
+    
+    // חיפוש מדויק לפי שם חניון - עדיפות גבוהה
     let bestMatch = null;
     let bestScore = 0;
     
@@ -324,56 +324,108 @@ function findCustomerByName(message) {
         if (!customer.site) return;
         
         const siteName = customer.site.toLowerCase();
-        let score = 0;
         
-        // בדיקת התאמה מדויקת
+        // בדיקה מדויקת - רק אם המילה קיימת במלואה
         const siteWords = siteName.split(/\s+/).filter(word => word.length > 2);
         const msgWords = cleanMsg.split(/\s+/).filter(word => word.length > 2);
         
+        let score = 0;
+        
+        // בדיקת התאמה מדויקת
         siteWords.forEach(siteWord => {
             msgWords.forEach(msgWord => {
+                // התאמה מלאה
                 if (siteWord === msgWord) {
-                    score += 15;
-                } else if (siteWord.length >= 3 && msgWord.length >= 3) {
+                    score += 10;
+                    log('DEBUG', `✅ התאמה מלאה: ${siteWord} = ${msgWord} (+10)`);
+                }
+                // התאמה חלקית (לפחות 3 תווים)
+                else if (siteWord.length >= 3 && msgWord.length >= 3) {
                     if (siteWord.includes(msgWord) || msgWord.includes(siteWord)) {
-                        score += 8;
+                        score += 5;
+                        log('DEBUG', `✅ התאמה חלקית: ${siteWord} ~ ${msgWord} (+5)`);
                     }
                 }
             });
         });
         
-        // מקרים מיוחדים
+        // מקרים מיוחדים - התאמות ידועות
         const specialMatches = {
-            'עזריאלי': ['עזריאלי', 'azrieli'],
             'אינפיניטי': ['אינפיניטי', 'infinity'],
+            'עזריאלי': ['עזריאלי', 'azrieli'],
             'גבעתיים': ['גבעתיים', 'givatayim'],
             'אלקטרה': ['אלקטרה', 'electra'],
-            'מודיעין': ['מודיעין', 'modiin']
+            'מודיעין': ['מודיעין', 'modiin'],
+            'אושילנד': ['אושילנד', 'oshiland'],
+            'ביג': ['ביג', 'big'],
+            'פנורמה': ['פנורמה', 'panorama']
         };
         
+        // בדיקת התאמות מיוחדות
         Object.entries(specialMatches).forEach(([key, variations]) => {
             variations.forEach(variation => {
                 if (siteName.includes(variation) && cleanMsg.includes(variation)) {
-                    score += 20;
+                    score += 15;
+                    log('DEBUG', `🎯 התאמה מיוחדת: ${variation} (+15)`);
                 }
             });
         });
         
-        if (score > bestScore && score >= 8) {
+        // הדפסת ציון רק אם יש התאמה
+        if (score > 0) {
+            log('DEBUG', `📊 ציון ללקוח ${customer.name} (${siteName}): ${score}`);
+        }
+        
+        if (score > bestScore && score >= 5) {
             bestScore = score;
             bestMatch = customer;
         }
     });
     
     if (bestMatch) {
-        let confidence = 'low';
-        if (bestScore >= 20) confidence = 'high';
-        else if (bestScore >= 15) confidence = 'medium';
+        log('INFO', `🏆 נמצא לקוח: ${bestMatch.name} מ${bestMatch.site} (ציון: ${bestScore})`);
         
-        log('INFO', `🏆 נמצא לקוח: ${bestMatch.name} (${bestMatch.site}) - ציון: ${bestScore} - ביטחון: ${confidence}`);
-        return { customer: bestMatch, confidence, score: bestScore };
+        // קביעת רמת ביטחון
+        let confidence = 'low';
+        if (bestScore >= 15) confidence = 'high';
+        else if (bestScore >= 10) confidence = 'medium';
+        
+        return { 
+            customer: bestMatch, 
+            confidence: confidence,
+            method: `זוהה לפי שם החניון: ${bestMatch.site} (ציון: ${bestScore})`
+        };
     }
     
+    // חיפוש לפי שם לקוח
+    const nameMatch = customers.find(c => 
+        c.name && cleanMsg.includes(c.name.toLowerCase())
+    );
+    if (nameMatch) {
+        log('INFO', `👤 נמצא לקוח לפי שם: ${nameMatch.name}`);
+        return { 
+            customer: nameMatch, 
+            confidence: 'high',
+            method: `זוהה לפי שם הלקוח: ${nameMatch.name}`
+        };
+    }
+    
+    // חיפוש לפי מספר לקוח
+    const idMatch = msg.match(/\b\d{2,4}\b/);
+    if (idMatch) {
+        const customerId = parseInt(idMatch[0]);
+        const customerById = customers.find(c => c.id === customerId);
+        if (customerById) {
+            log('INFO', `🔢 נמצא לקוח לפי מספר: ${customerId}`);
+            return { 
+                customer: customerById, 
+                confidence: 'high',
+                method: `זוהה לפי מספר לקוח: ${customerId}`
+            };
+        }
+    }
+    
+    log('WARN', 'לא נמצא לקוח מתאים');
     return null;
 }
 
