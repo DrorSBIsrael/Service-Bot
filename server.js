@@ -843,6 +843,8 @@ class ResponseHandler {
 
 const responseHandler = new ResponseHandler(memory, customers);
 
+const responseHandler = new ResponseHandler(memory, customers);
+
 // שליחת WhatsApp
 async function sendWhatsApp(phone, message) {
     const instanceId = '7105253183';
