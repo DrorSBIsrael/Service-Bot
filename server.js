@@ -133,7 +133,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // הגדרת מייל
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
     host: process.env.EMAIL_HOST || 'smtp.012.net.il',
     port: 465,
     secure: true,
