@@ -5,6 +5,7 @@ const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 const app = express();
+const OpenAI = require('openai');
 
 // הגדרות דיבוג מתקדמות
 const DEBUG_LEVEL = process.env.DEBUG_LEVEL || 'INFO';
@@ -102,13 +103,39 @@ try {
     }];
 }
 
-// טעינת מסד תקלות
+// טעינת מסד תקלות עם בדיקות מפורטות
 try {
-    serviceFailureDB = JSON.parse(fs.readFileSync('./Service failure scenarios.json', 'utf8'));
-    if (!Array.isArray(serviceFailureDB)) serviceFailureDB = [];
+    const rawData = fs.readFileSync('./Service failure scenarios.json', 'utf8');
+    log('DEBUG', '📄 קובץ התרחישים נקרא בהצלחה');
+    
+    serviceFailureDB = JSON.parse(rawData);
+    if (!Array.isArray(serviceFailureDB)) {
+        log('WARN', '⚠️ קובץ התרחישים אינו מערך - מתקן...');
+        serviceFailureDB = [];
+    }
+    
     log('INFO', `📋 מסד תקלות נטען: ${serviceFailureDB.length} תרחישים`);
+    
+    // בדיקה מפורטת של התוכן
+    serviceFailureDB.forEach((scenario, index) => {
+        log('DEBUG', `תרחיש ${index + 1}: "${scenario.תרחיש || 'לא הוגדר'}"`);
+        
+        // בדיקת תקינות התרחיש
+        if (!scenario.תרחיש || !scenario.שלבים) {
+            log('WARN', `⚠️ תרחיש ${index + 1} לא שלם - חסרים פרטים`);
+        }
+    });
+    
+    // אם יש תרחישים - הדפס דוגמה
+    if (serviceFailureDB.length > 0) {
+        log('DEBUG', '🔍 דוגמה לתרחיש ראשון:');
+        log('DEBUG', JSON.stringify(serviceFailureDB[0], null, 2));
+    }
+    
 } catch (error) {
     log('ERROR', '❌ שגיאה בטעינת מסד תקלות:', error.message);
+    log('ERROR', '📝 יוצר מסד תקלות ברירת מחדל...');
+    
     serviceFailureDB = [
         {
             "תרחיש": "יחידה לא דולקת",
@@ -124,8 +151,20 @@ try {
             "תרחיש": "לא מדפיס כרטיסים",
             "שלבים": "1. בדוק נייר בלנק\n2. בדוק ראש מדפסת\n3. ניקוי מדפסת\n4. החלפת גליל נייר",
             "הערות": "נייר איכותי בלבד"
+        },
+        {
+            "תרחיש": "בעיות אשראי",
+            "שלבים": "1. בדוק חיבור אינטרנט\n2. נסה כמה כרטיסי אשראי שונים\n3. בדוק הגדרות מסוף האשראי\n4. אתחל מסוף אשראי\n5. צור קשר עם חברת האשראי",
+            "הערות": "בעיה יכולה להיות ברשת או במסוף עצמו"
+        },
+        {
+            "תרחיש": "מסך לא עובד",
+            "שלבים": "1. בדוק חיבור המסך\n2. בדוק כבל החשמל של המסך\n3. נסה הפעלה מחדש של המערכת\n4. בדוק בהירות המסך",
+            "הערות": "ייתכן בעיה בכבל או בכרטיס מסך"
         }
     ];
+    
+    log('INFO', `📋 נוצר מסד תקלות ברירת מחדל: ${serviceFailureDB.length} תרחישים`);
 }
 
 // הגדרות Express
@@ -141,6 +180,11 @@ const transporter = nodemailer.createTransport({
         user: process.env.EMAIL_USER || 'Report@sbparking.co.il',
         pass: process.env.EMAIL_PASS || 'o51W38D5'
     }
+});
+
+// הגדרת OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
 });
 
 // 🔧 מחלקת זיכרון משופרת
@@ -429,10 +473,10 @@ function findCustomerByName(message) {
     return null;
 }
 
-// פתרון תקלות
+// פתרון תקלות משופר עם OpenAI
 async function findSolution(problemDescription, customer) {
     try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות...');
+        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
@@ -442,6 +486,79 @@ async function findSolution(problemDescription, customer) {
             };
         }
         
+        // יצירת prompt עבור OpenAI
+        const scenariosText = serviceFailureDB.map((scenario, index) => 
+            `תרחיש ${index + 1}: ${scenario.תרחיש}\nפתרון: ${scenario.שלבים}\nהערות: ${scenario.הערות || 'אין'}`
+        ).join('\n\n');
+        
+        const prompt = `
+אתה מומחה טכני למערכות בקרת חניה. אני אשלח לך תיאור תקלה ורשימת תרחישי פתרון.
+עליך למצוא את התרחיש הכי רלוונטי או לענות שאין פתרון מתאים.
+
+תיאור התקלה: "${problemDescription}"
+
+תרחישי פתרון זמינים:
+${scenariosText}
+
+הוראות:
+1. אם יש תרחיש מתאים - החזר את מספר התרחיש (1-${serviceFailureDB.length}) בלבד
+2. אם אין תרחיש מתאים - החזר "0"
+3. אל תסביר, רק מספר
+
+מספר התרחיש המתאים:`;
+
+        // קריאה ל-OpenAI
+        const completion = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                {
+                    role: "user",
+                    content: prompt
+                }
+            ],
+            max_tokens: 10,
+            temperature: 0.1
+        });
+        
+        const aiResponse = completion.choices[0].message.content.trim();
+        const scenarioNumber = parseInt(aiResponse);
+        
+        log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
+        
+        // בדיקה אם נמצא תרחיש מתאים
+        if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
+            const scenario = serviceFailureDB[scenarioNumber - 1];
+            
+            let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
+            
+            if (scenario.הערות) {
+                solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+            }
+            
+            solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            
+            log('INFO', `✅ OpenAI מצא פתרון: ${scenario.תרחיש}`);
+            return { found: true, response: solution, scenario: scenario };
+        } else {
+            log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים');
+            return {
+                found: false,
+                response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
+            };
+        }
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בחיפוש פתרון עם OpenAI:', error.message);
+        
+        // fallback למערכת הישנה אם OpenAI נכשל
+        log('INFO', '🔄 עובר לחיפוש ישן כ-fallback...');
+        return await findSolutionFallback(problemDescription);
+    }
+}
+
+// פונקציית fallback - המערכת הישנה לבמקרה חירום
+async function findSolutionFallback(problemDescription) {
+    try {
         const problem = problemDescription.toLowerCase();
         
         for (const scenario of serviceFailureDB) {
@@ -460,7 +577,7 @@ async function findSolution(problemDescription, customer) {
                 });
             });
             
-            if (matchCount > 0 || scenarioText.includes(problem.substring(0, 8))) {
+            if (matchCount > 0) {
                 let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
                 
                 if (scenario.הערות) {
@@ -469,19 +586,18 @@ async function findSolution(problemDescription, customer) {
                 
                 solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
-                log('INFO', `✅ נמצא פתרון: ${scenario.תרחיש} (התאמות: ${matchCount})`);
+                log('INFO', `✅ מערכת ישנה מצאה פתרון: ${scenario.תרחיש} (התאמות: ${matchCount})`);
                 return { found: true, response: solution, scenario: scenario };
             }
         }
         
-        log('INFO', '⚠️ לא נמצא פתרון במסד');
         return {
             found: false,
             response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
         };
         
     } catch (error) {
-        log('ERROR', '❌ שגיאה בחיפוש פתרון:', error.message);
+        log('ERROR', '❌ שגיאה גם במערכת הישנה:', error.message);
         return {
             found: false,
             response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
