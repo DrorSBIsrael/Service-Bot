@@ -468,15 +468,14 @@ function findCustomerByName(message) {
             };
         }
     }
-    
     log('WARN', 'לא נמצא לקוח מתאים');
     return null;
 }
 
-// פתרון תקלות משופר עם OpenAI
+// פתרון תקלות משופר ללא OpenAI (עם לוגיקה חכמה יותר)
 async function findSolution(problemDescription, customer) {
     try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI...');
+        log('INFO', '🔍 מחפש פתרון במסד תקלות...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
@@ -486,73 +485,131 @@ async function findSolution(problemDescription, customer) {
             };
         }
         
-        // יצירת prompt עבור OpenAI
-        const scenariosText = serviceFailureDB.map((scenario, index) => 
-            `תרחיש ${index + 1}: ${scenario.תרחיש}\nפתרון: ${scenario.שלבים}\nהערות: ${scenario.הערות || 'אין'}`
-        ).join('\n\n');
+        const problem = problemDescription.toLowerCase();
+        log('DEBUG', `🔍 מחפש פתרון עבור: "${problemDescription}"`);
         
-        const prompt = `
-אתה מומחה טכני למערכות בקרת חניה. אני אשלח לך תיאור תקלה ורשימת תרחישי פתרון.
-עליך למצוא את התרחיש הכי רלוונטי או לענות שאין פתרון מתאים.
-
-תיאור התקלה: "${problemDescription}"
-
-תרחישי פתרון זמינים:
-${scenariosText}
-
-הוראות:
-1. אם יש תרחיש מתאים - החזר את מספר התרחיש (1-${serviceFailureDB.length}) בלבד
-2. אם אין תרחיש מתאים - החזר "0"
-3. אל תסביר, רק מספר
-
-מספר התרחיש המתאים:`;
-
-        // קריאה ל-OpenAI
-        const completion = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                {
-                    role: "user",
-                    content: prompt
-                }
+        // מילות מפתח לכל תרחיש
+        const keywordMapping = {
+            'בעיות אשראי': [
+                'אשראי', 'אשראי לא עובד', 'כרטיס אשראי', 'תשלום', 'חיוב', 
+                'visa', 'mastercard', 'אמקס', 'amex', 'שטר', 'מסוף', 
+                'אשראי תקוע', 'לא מקבל כרטיס', 'דחה כרטיס'
             ],
-            max_tokens: 10,
-            temperature: 0.1
-        });
+            'מחסום לא עולה': [
+                'מחסום לא עולה', 'מחסום תקוע', 'מחסום לא זז', 'מחסום עומד',
+                'חסימה', 'חסום', 'לא עולה', 'לא נפתח', 'נתקע'
+            ],
+            'מחסום לא יורד': [
+                'מחסום לא יורד', 'מחסום לא נסגר', 'מחסום פתוח', 'נשאר פתוח',
+                'לא נסגר', 'לא יורד', 'פתוח כל הזמן'
+            ],
+            'יחידה לא דולקת': [
+                'יחידה לא דולקת', 'לא עובד', 'כבוי', 'לא נדלק', 'מת',
+                'חשמל', 'זרם', 'נתיך', 'אין חשמל', 'לא מגיב'
+            ],
+            'לא מדפיס כרטיסים': [
+                'לא מדפיס', 'לא יוצא כרטיס', 'נייר', 'נגמר נייר', 'גליל',
+                'מדפסת', 'הדפסה', 'כרטיס לא יוצא', 'תקוע בנייר'
+            ],
+            'מסך לא עובד': [
+                'מסך', 'תצוגה', 'מסך שחור', 'לא רואה', 'כהה', 'לא מציג',
+                'תצוגה כהה', 'מסך כבוי', 'אין תמונה'
+            ]
+        };
         
-        const aiResponse = completion.choices[0].message.content.trim();
-        const scenarioNumber = parseInt(aiResponse);
+        let bestMatch = null;
+        let bestScore = 0;
+        let bestMatchType = '';
         
-        log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
-        
-        // בדיקה אם נמצא תרחיש מתאים
-        if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
-            const scenario = serviceFailureDB[scenarioNumber - 1];
+        // חיפוש לפי מילות מפתח מדויקות
+        for (const [scenarioName, keywords] of Object.entries(keywordMapping)) {
+            let score = 0;
+            let matchedKeywords = [];
             
-            let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
+            for (const keyword of keywords) {
+                if (problem.includes(keyword)) {
+                    // ציון גבוה יותר למילות מפתח ארוכות ומדויקות
+                    const keywordScore = keyword.length >= 10 ? 15 : keyword.length >= 6 ? 10 : 5;
+                    score += keywordScore;
+                    matchedKeywords.push(keyword);
+                    log('DEBUG', `✅ נמצאה מילת מפתח: "${keyword}" בתרחיש "${scenarioName}" (+${keywordScore})`);
+                }
+            }
             
-            if (scenario.הערות) {
-                solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+            if (score > bestScore) {
+                // חפש את התרחיש המתאים במסד הנתונים
+                const foundScenario = serviceFailureDB.find(scenario => 
+                    scenario.תרחיש && scenario.תרחיש.includes(scenarioName.split(' ')[0])
+                );
+                
+                if (foundScenario) {
+                    bestScore = score;
+                    bestMatch = foundScenario;
+                    bestMatchType = scenarioName;
+                    log('DEBUG', `🎯 תרחיש מועמד: "${scenarioName}" - ציון: ${score}, מילים: [${matchedKeywords.join(', ')}]`);
+                }
+            }
+        }
+        
+        // אם נמצא פתרון טוב (ציון מעל 5)
+        if (bestMatch && bestScore >= 5) {
+            let solution = `🔧 **פתרון לתקלה: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
+            
+            if (bestMatch.הערות) {
+                solution += `\n\n💡 **הערות חשובות:**\n${bestMatch.הערות}`;
             }
             
             solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             
-            log('INFO', `✅ OpenAI מצא פתרון: ${scenario.תרחיש}`);
-            return { found: true, response: solution, scenario: scenario };
-        } else {
-            log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים');
-            return {
-                found: false,
-                response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
-            };
+            log('INFO', `✅ נמצא פתרון מדויק: "${bestMatch.תרחיש}" (ציון: ${bestScore}, סוג: ${bestMatchType})`);
+            return { found: true, response: solution, scenario: bestMatch };
         }
         
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בחיפוש פתרון עם OpenAI:', error.message);
+        // אם לא נמצא פתרון טוב - fallback לחיפוש רגיל
+        log('INFO', '🔄 לא נמצא פתרון מדויק, מנסה חיפוש כללי...');
         
-        // fallback למערכת הישנה אם OpenAI נכשל
-        log('INFO', '🔄 עובר לחיפוש ישן כ-fallback...');
-        return await findSolutionFallback(problemDescription);
+        for (const scenario of serviceFailureDB) {
+            if (!scenario.תרחיש || !scenario.שלבים) continue;
+            
+            const scenarioText = scenario.תרחיש.toLowerCase();
+            const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
+            const problemWords = problem.split(' ').filter(word => word.length > 2);
+            
+            let matchCount = 0;
+            scenarioWords.forEach(scenarioWord => {
+                problemWords.forEach(problemWord => {
+                    if (scenarioWord.includes(problemWord) || problemWord.includes(scenarioWord)) {
+                        matchCount++;
+                    }
+                });
+            });
+            
+            if (matchCount > 0) {
+                let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
+                
+                if (scenario.הערות) {
+                    solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+                }
+                
+                solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+                
+                log('INFO', `✅ נמצא פתרון כללי: ${scenario.תרחיש} (התאמות: ${matchCount})`);
+                return { found: true, response: solution, scenario: scenario };
+            }
+        }
+        
+        log('INFO', '⚠️ לא נמצא פתרון מתאים');
+        return {
+            found: false,
+            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
+        };
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בחיפוש פתרון:', error.message);
+        return {
+            found: false,
+            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
+        };
     }
 }
 
@@ -604,6 +661,10 @@ async function findSolutionFallback(problemDescription) {
         };
     }
 }
+
+
+
+
 
 // פונקציה חדשה לזיהוי מילות סיום - הוסף לפני ה-ResponseHandler:
 function isFinishingWord(message) {
