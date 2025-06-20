@@ -232,52 +232,40 @@ getConversation(phone, customer = null) {
     return conv;
 }
     
- // יצירת או עדכון שיחה - גרסה מתוקנת
+// יצירת או עדכון שיחה - גרסה מתוקנת
 createOrUpdateConversation(phone, customer = null, initialStage = 'identifying') {
+    // חיפוש conversation קיים לפי טלפון
+    let existingConv = null;
+    for (const [key, conv] of this.conversations.entries()) {
+        if (key.includes(phone)) {
+            existingConv = conv;
+            break;
+        }
+    }
+    
+    if (existingConv) {
+        // עדכן conversation קיים
+        existingConv.lastActivity = new Date();
+        if (customer && !existingConv.customer) {
+            existingConv.customer = customer;
+        }
+        log('DEBUG', `🔄 מצאתי conversation קיים - שלב: ${existingConv.stage}`);
+        return existingConv;
+    }
+    
+    // יצירת conversation חדש רק אם לא קיים
     const key = this.createKey(phone, customer);
-    let conv = this.conversations.get(key);
-    
-    // חיפוש conversation קיים לפי טלפון גם אם המפתח שונה
-    if (!conv && customer) {
-        for (const [existingKey, existingConv] of this.conversations.entries()) {
-            if (existingKey.includes(phone) && existingConv.customer?.id === customer.id) {
-                conv = existingConv;
-                // העבר לכמפתח הנכון
-                this.conversations.delete(existingKey);
-                this.conversations.set(key, conv);
-                // עדכן פעילות
-                conv.lastActivity = new Date();
-                log('DEBUG', `🔄 העברתי conversation קיים למפתח הנכון: ${key} - שלב: ${conv.stage}`);
-                return conv; // **חשוב:** החזר מיד כדי לא ליצור חדש
-            }
-        }
-    }
-    
-    if (!conv) {
-        conv = {
-            phone: phone,
-            customer: customer,
-            stage: customer ? 'menu' : initialStage,
-            messages: [],
-            startTime: new Date(),
-            lastActivity: new Date(),
-            data: {} // נתונים נוספים לשיחה
-        };
-        this.conversations.set(key, conv);
-        log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
-    } else {
-        conv.lastActivity = new Date();
-        // **אל תעדכן את השלב אם יש conversation קיים!**
-        if (customer && !conv.customer) {
-            conv.customer = customer;
-            // רק אם באמת לא היה לקוח קודם
-            if (conv.stage === 'identifying') {
-                conv.stage = 'menu';
-            }
-            log('INFO', `🔄 עדכנתי לקוח בconversation קיים: ${customer.name} - שלב נשאר: ${conv.stage}`);
-        }
-    }
-    
+    const conv = {
+        phone: phone,
+        customer: customer,
+        stage: customer ? 'menu' : initialStage,
+        messages: [],
+        startTime: new Date(),
+        lastActivity: new Date(),
+        data: {}
+    };
+    this.conversations.set(key, conv);
+    log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
     return conv;
 }
     
@@ -501,148 +489,7 @@ function findCustomerByName(message) {
     return null;
 }
 
-// פתרון תקלות משופר ללא OpenAI (עם לוגיקה חכמה יותר)
-async function findSolution(problemDescription, customer) {
-    try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות...');
-        
-        if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
-            log('ERROR', '❌ מסד התקלות ריק');
-            return {
-                found: false,
-                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
-            };
-        }
-        
-        const problem = problemDescription.toLowerCase();
-        log('DEBUG', `🔍 מחפש פתרון עבור: "${problemDescription}"`);
-        
-        // מילות מפתח לכל תרחיש
-        const keywordMapping = {
-            'בעיות אשראי': [
-                'אשראי', 'אשראי לא עובד', 'כרטיס אשראי', 'תשלום', 'חיוב', 
-                'visa', 'mastercard', 'אמקס', 'amex', 'שטר', 'מסוף', 
-                'אשראי תקוע', 'לא מקבל כרטיס', 'דחה כרטיס'
-            ],
-            'מחסום לא עולה': [
-                'מחסום לא עולה', 'מחסום תקוע', 'מחסום לא זז', 'מחסום עומד',
-                'חסימה', 'חסום', 'לא עולה', 'לא נפתח', 'נתקע'
-            ],
-            'מחסום לא יורד': [
-                'מחסום לא יורד', 'מחסום לא נסגר', 'מחסום פתוח', 'נשאר פתוח',
-                'לא נסגר', 'לא יורד', 'פתוח כל הזמן'
-            ],
-            'יחידה לא דולקת': [
-                'יחידה לא דולקת', 'לא עובד', 'כבוי', 'לא נדלק', 'מת',
-                'חשמל', 'זרם', 'נתיך', 'אין חשמל', 'לא מגיב'
-            ],
-            'לא מדפיס כרטיסים': [
-                'לא מדפיס', 'לא יוצא כרטיס', 'נייר', 'נגמר נייר', 'גליל',
-                'מדפסת', 'הדפסה', 'כרטיס לא יוצא', 'תקוע בנייר'
-            ],
-            'מסך לא עובד': [
-                'מסך', 'תצוגה', 'מסך שחור', 'לא רואה', 'כהה', 'לא מציג',
-                'תצוגה כהה', 'מסך כבוי', 'אין תמונה'
-            ]
-        };
-        
-        let bestMatch = null;
-        let bestScore = 0;
-        let bestMatchType = '';
-        
-        // חיפוש לפי מילות מפתח מדויקות
-        for (const [scenarioName, keywords] of Object.entries(keywordMapping)) {
-            let score = 0;
-            let matchedKeywords = [];
-            
-            for (const keyword of keywords) {
-                if (problem.includes(keyword)) {
-                    // ציון גבוה יותר למילות מפתח ארוכות ומדויקות
-                    const keywordScore = keyword.length >= 10 ? 15 : keyword.length >= 6 ? 10 : 5;
-                    score += keywordScore;
-                    matchedKeywords.push(keyword);
-                    log('DEBUG', `✅ נמצאה מילת מפתח: "${keyword}" בתרחיש "${scenarioName}" (+${keywordScore})`);
-                }
-            }
-            
-            if (score > bestScore) {
-                // חפש את התרחיש המתאים במסד הנתונים
-                const foundScenario = serviceFailureDB.find(scenario => 
-                    scenario.תרחיש && scenario.תרחיש.includes(scenarioName.split(' ')[0])
-                );
-                
-                if (foundScenario) {
-                    bestScore = score;
-                    bestMatch = foundScenario;
-                    bestMatchType = scenarioName;
-                    log('DEBUG', `🎯 תרחיש מועמד: "${scenarioName}" - ציון: ${score}, מילים: [${matchedKeywords.join(', ')}]`);
-                }
-            }
-        }
-        
-        // אם נמצא פתרון טוב (ציון מעל 5)
-        if (bestMatch && bestScore >= 5) {
-            let solution = `🔧 **פתרון לתקלה: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
-            
-            if (bestMatch.הערות) {
-                solution += `\n\n💡 **הערות חשובות:**\n${bestMatch.הערות}`;
-            }
-            
-            solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-            
-            log('INFO', `✅ נמצא פתרון מדויק: "${bestMatch.תרחיש}" (ציון: ${bestScore}, סוג: ${bestMatchType})`);
-            return { found: true, response: solution, scenario: bestMatch };
-        }
-        
-        // אם לא נמצא פתרון טוב - fallback לחיפוש רגיל
-        log('INFO', '🔄 לא נמצא פתרון מדויק, מנסה חיפוש כללי...');
-        
-        for (const scenario of serviceFailureDB) {
-            if (!scenario.תרחיש || !scenario.שלבים) continue;
-            
-            const scenarioText = scenario.תרחיש.toLowerCase();
-            const scenarioWords = scenarioText.split(' ').filter(word => word.length > 2);
-            const problemWords = problem.split(' ').filter(word => word.length > 2);
-            
-            let matchCount = 0;
-            scenarioWords.forEach(scenarioWord => {
-                problemWords.forEach(problemWord => {
-                    if (scenarioWord.includes(problemWord) || problemWord.includes(scenarioWord)) {
-                        matchCount++;
-                    }
-                });
-            });
-            
-            if (matchCount > 0) {
-                let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
-                
-                if (scenario.הערות) {
-                    solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
-                }
-                
-                solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-                
-                log('INFO', `✅ נמצא פתרון כללי: ${scenario.תרחיש} (התאמות: ${matchCount})`);
-                return { found: true, response: solution, scenario: scenario };
-            }
-        }
-        
-        log('INFO', '⚠️ לא נמצא פתרון מתאים');
-        return {
-            found: false,
-            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
-        };
-        
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בחיפוש פתרון:', error.message);
-        return {
-            found: false,
-            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
-        };
-    }
-}
-
-// פתרון תקלות עם OpenAI - גרסה עובדת!
+// פתרון תקלות עם OpenAI - prompt משופר
 async function findSolution(problemDescription, customer) {
     try {
         log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI...');
@@ -662,26 +509,32 @@ async function findSolution(problemDescription, customer) {
         }
         
         try {
-            // יצירת prompt עבור OpenAI
+            // יצירת prompt משופר עבור OpenAI
             const scenariosText = serviceFailureDB.map((scenario, index) => 
-                `${index + 1}. ${scenario.תרחיש}`
+                `${index + 1}. ${scenario.תרחיש} - ${scenario.שלבים.substring(0, 50)}...`
             ).join('\n');
             
-            const prompt = `אתה מומחה טכני למערכות בקרת חניה.
+            const prompt = `אתה מומחה טכני למערכות בקרת חניה. אנא קרא בעיון את תיאור התקלה ומצא את התרחיש המתאים ביותר.
 
 תיאור התקלה: "${problemDescription}"
 
 תרחישי פתרון זמינים:
 ${scenariosText}
 
-הוראות:
-- אם יש תרחיש מתאים בדיוק - החזר רק את המספר (1-${serviceFailureDB.length})
-- אם אין תרחיש מתאים - החזר 0
-- רק מספר, בלי הסברים
+כללי התאמה:
+- "לא עובד" או "לא דולק" = תרחיש 1 (יחידה לא דולקת)  
+- "מחסום לא עולה" או "לא נפתח" = תרחיש 2 (מחסום לא עולה)
+- "לא מדפיס" או "נייר" = תרחיש 3 (לא מדפיס כרטיסים)
+- "אשראי" או "תשלום" = תרחיש 4 (בעיות אשראי)
+- "מסך" או "תצוגה" = תרחיש 5 (מסך לא עובד)
 
-מספר:`;
+אם יש התאמה ברורה - החזר את מספר התרחיש (1-${serviceFailureDB.length})
+אם אין התאמה ברורה - החזר 0
+רק מספר, בלי הסברים.
 
-            log('DEBUG', '🤖 שולח בקשה ל-OpenAI...');
+מספר התרחיש:`;
+
+            log('DEBUG', '🤖 שולח בקשה ל-OpenAI עם prompt משופר...');
             
             // קריאה ל-OpenAI עם timeout
             const completion = await Promise.race([
@@ -713,7 +566,7 @@ ${scenariosText}
                 
                 solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
-                log('INFO', `✅ OpenAI מצא פתרון: ${scenario.תרחיש}`);
+                log('INFO', `✅ OpenAI מצא פתרון מתאים: ${scenario.תרחיש}`);
                 return { found: true, response: solution, scenario: scenario };
             } else {
                 log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
@@ -722,11 +575,6 @@ ${scenariosText}
             
         } catch (aiError) {
             log('ERROR', `❌ שגיאה ב-OpenAI: ${aiError.message}`);
-            
-            // אם זה שגיאת API Key
-            if (aiError.message.includes('api key') || aiError.message.includes('unauthorized') || aiError.message.includes('authentication')) {
-                log('ERROR', '🔑 בעיה במפתח API - בדוק את ה-API Key');
-            }
             
             // fallback למערכת הישנה
             log('INFO', '🔄 עובר לחיפוש ישן כ-fallback...');
