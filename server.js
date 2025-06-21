@@ -1249,6 +1249,7 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
             trainingContent: trainingContent.content,
             attachments: downloadedFiles
         };
+
     } else {
         // Assistant לא זמין או נכשל - שיטה רגילה
         this.memory.updateStage(phone, 'completed', customer);
@@ -1733,14 +1734,15 @@ if (tempFiles.length > 0) {
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
-        } else if (result.sendTrainingEmail) {
-            log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
-            await sendEmail(result.customer, 'training', result.trainingRequest, {
-                serviceNumber: result.serviceNumber,
-                trainingRequest: result.trainingRequest,
-                attachments: result.attachments
-            });
-        }
+} else if (result.sendTrainingEmail) {
+    log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
+    await sendEmail(result.customer, 'training', result.trainingRequest, {
+        serviceNumber: result.serviceNumber,
+        trainingRequest: result.trainingRequest,
+        trainingContent: result.trainingContent,
+        attachments: result.attachments
+    });
+}
         
         res.status(200).json({ status: 'OK' });
         
