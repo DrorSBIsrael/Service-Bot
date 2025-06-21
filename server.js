@@ -555,27 +555,27 @@ class AdvancedMemory {
 
 // קבלת שיחה - גרסה מתוקנת
 getConversation(phone, customer = null) {
-    // קודם חפש לפי המפתח המדויק
+    // ניקוי הטלפון
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    
+    // חיפוש לפי מפתח מדויק קודם
     const key = this.createKey(phone, customer);
     let conv = this.conversations.get(key);
     
-    // אם לא נמצא ויש לקוח, חפש לפי כל המפתחות הקיימים של הטלפון
-    if (!conv && customer) {
-        for (const [existingKey, existingConv] of this.conversations.entries()) {
-            if (existingKey.includes(phone)) {
-                conv = existingConv;
-                log('DEBUG', `🔍 נמצא conversation קיים: ${existingKey} עם שלב: ${conv.stage}`);
-                break;
-            }
-        }
-    }
-    
-    // אם עדיין לא נמצא, חפש רק לפי טלפון בלי לקוח
+    // אם לא נמצא - חפש לפי טלפון נקי
     if (!conv) {
         for (const [existingKey, existingConv] of this.conversations.entries()) {
-            if (existingKey.includes(phone)) {
+            // בדיקה אם המפתח מכיל את הטלפון הנקי
+            if (existingKey.includes(cleanPhone)) {
                 conv = existingConv;
-                log('DEBUG', `🔍 נמצא conversation כללי: ${existingKey} עם שלב: ${conv.stage}`);
+                log('DEBUG', `🔍 נמצא conversation קיים: ${existingKey} עם שלב: ${conv.stage}`);
+                
+                // אם יש לקוח חדש - עדכן אותו ב-conversation
+                if (customer && !conv.customer) {
+                    conv.customer = customer;
+                    conv.lastActivity = new Date();
+                    log('DEBUG', `🔄 עדכנתי לקוח ב-conversation: ${customer.name}`);
+                }
                 break;
             }
         }
