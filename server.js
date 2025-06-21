@@ -570,11 +570,13 @@ getConversation(phone, customer = null) {
                 conv = existingConv;
                 log('DEBUG', `🔍 נמצא conversation קיים: ${existingKey} עם שלב: ${conv.stage}`);
                 
-                // אם יש לקוח חדש - עדכן אותו ב-conversation
-                if (customer && !conv.customer) {
+                // עדכון המפתח להיות מדויק יותר
+                if (customer && !existingKey.includes(`customer_${customer.id}`)) {
+                    this.conversations.delete(existingKey);
+                    const newKey = this.createKey(phone, customer);
                     conv.customer = customer;
-                    conv.lastActivity = new Date();
-                    log('DEBUG', `🔄 עדכנתי לקוח ב-conversation: ${customer.name}`);
+                    this.conversations.set(newKey, conv);
+                    log('DEBUG', `🔄 עדכנתי מפתח: ${existingKey} → ${newKey}`);
                 }
                 break;
             }
@@ -967,6 +969,13 @@ async function findSolutionFallback(problemDescription) {
         
         const problem = problemDescription.toLowerCase();
         
+// מילים קצרות שלא צריך לחפש בהן
+const skipWords = ['שלום', 'היי', 'הי', 'בוקר', 'ערב', 'תודה', 'bye', 'hello'];
+if (skipWords.some(word => cleanMsg === word || cleanMsg.includes(word)) && cleanMsg.length < 6) {
+    log('DEBUG', `🚫 דילוג על מילה קצרה: "${cleanMsg}"`);
+    return null;
+}
+
         // מילות מפתח מדויקות לכל תרחיש
         const keywordMapping = {
             'אשראי': ['אשראי', 'כרטיס אשראי', 'תשלום', 'חיוב', 'visa', 'mastercard', 'מסוף'],
