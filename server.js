@@ -81,14 +81,8 @@ async function getLastServiceNumber() {
         log('INFO', `📊 מספר הקריאה האחרון בטבלה: HSC-${maxNumber}`);
         return maxNumber;
 } catch (error) {
-    log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error.message);
-    log('ERROR', 'קוד שגיאה:', error.code);
-    log('ERROR', 'סטטוס שגיאה:', error.status);
-    log('ERROR', 'פרטים מלאים:', error.toString());
-    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
-    if (error.response && error.response.data) {
-        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
-    }
+    console.log('FULL ERROR:', error);
+    log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error);
     return globalServiceCounter;
 }
 }
@@ -123,14 +117,8 @@ async function writeToGoogleSheets(serviceData) {
         log('INFO', `📊 נרשם ב-Google Sheets: ${serviceData.serviceNumber}`);
         return true;
 } catch (error) {
-    log('ERROR', '❌ שגיאה בכתיבה ל-Google Sheets:', error.message);
-    log('ERROR', 'קוד שגיאה:', error.code);
-    log('ERROR', 'סטטוס שגיאה:', error.status);
-    log('ERROR', 'פרטים מלאים:', error.toString());
-    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
-    if (error.response && error.response.data) {
-        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
-    }
+    console.log('FULL ERROR:', error);
+    log('ERROR', '❌ שגיאה ביצירת כותרות:', error);
     return false;
 }
 }
@@ -174,14 +162,8 @@ async function createSheetsHeaders() {
         log('INFO', '📊 כותרות נוצרו בטבלה');
         return true;
 } catch (error) {
-    log('ERROR', '❌ שגיאה ביצירת כותרות:', error.message);
-    log('ERROR', 'קוד שגיאה:', error.code);
-    log('ERROR', 'סטטוס שגיאה:', error.status);
-    log('ERROR', 'פרטים מלאים:', error.toString());
-    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
-    if (error.response && error.response.data) {
-        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
-    }
+    console.log('FULL ERROR:', error);
+    log('ERROR', '❌ שגיאה ביצירת כותרות:', error);
     return false;
 }
 }
@@ -1220,7 +1202,7 @@ if (msg === '4' || msg.includes('הדרכה')) {
     }
     
 async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
-    const serviceNumber = getNextServiceNumber();
+    const serviceNumber = await getNextServiceNumber();
     
     // שמירת פרטי התקלה בזיכרון
     this.memory.updateStage(phone, 'processing_problem', customer, {
@@ -1283,7 +1265,7 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         };
     }
 
-    const serviceNumber = getNextServiceNumber();
+    const serviceNumber = await getNextServiceNumber();
     
     this.memory.updateStage(phone, 'completed', customer);
     
@@ -1363,7 +1345,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         }
         
         // אם הכל בסדר - סיום ושליחת מייל
-        const serviceNumber = getNextServiceNumber();
+        const serviceNumber = await getNextServiceNumber();
         this.memory.updateStage(phone, 'completed', customer);
         
         const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType;
@@ -1412,7 +1394,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
 }
 
 async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
-    const serviceNumber = getNextServiceNumber();
+    const serviceNumber = await getNextServiceNumber();
     
     // ניסיון יצירת חומר הדרכה עם Assistant
     let trainingContent = null;
