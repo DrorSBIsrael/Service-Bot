@@ -1025,6 +1025,12 @@ if (msg === '4' || msg.includes('הדרכה')) {
 async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = getNextServiceNumber();
     
+    // הודעת אישור מיידית
+    const confirmationMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n🔍 **בודקת מול מאגר המידע שלנו...**\n\n⏳ רגע אחד, אני מחפשת פתרון מתאים\n\n🆔 מספר קריאה: ${serviceNumber}`;
+    
+    // שלח אישור מיד
+    await sendWhatsApp(customer.phone.replace(/[^\d]/g, '') || phone, confirmationMessage);
+    
     // שמירת פרטי התקלה בזיכרון
     this.memory.updateStage(phone, 'processing_problem', customer, {
         serviceNumber: serviceNumber,
@@ -1053,8 +1059,11 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
             source: solution.source || 'database'
         });
         
+        // הודעת פתרון (זו ההודעה השנייה)
+        const solutionMessage = `✅ **מצאתי פתרון!**\n\n${solution.response}`;
+        
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: solutionMessage,
             stage: 'waiting_feedback',
             customer: customer,
             serviceNumber: serviceNumber
@@ -1063,8 +1072,10 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         // לא נמצא פתרון - שלח טכנאי
         this.memory.updateStage(phone, 'completed', customer);
         
+        const noSolutionMessage = `${solution.response}`;
+        
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: noSolutionMessage,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
@@ -1217,6 +1228,12 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
 async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = getNextServiceNumber();
     
+    // הודעת אישור מיידית
+    const confirmationMessage = `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n🔍 **בודקת במאגר המידע והמדריכים שלנו...**\n\n⏳ מכינה חומר הדרכה מותאם אישית\n\n🆔 מספר קריאה: ${serviceNumber}`;
+    
+    // שלח אישור מיד
+    await sendWhatsApp(customer.phone.replace(/[^\d]/g, '') || phone, confirmationMessage);
+    
     // ניסיון יצירת חומר הדרכה עם Assistant
     let trainingContent = null;
     if (process.env.OPENAI_ASSISTANT_ID) {
@@ -1237,10 +1254,11 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
             immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${shortContent}`;
         }
         
-        immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}\n📞 039792365`;
+        // הודעת הדרכה (זו ההודעה השנייה)
+        const finalMessage = `✅ **הכנתי חומר הדרכה מותאם!**\n\n${immediateResponse}\n\n📞 039792365`;
         
         return {
-            response: immediateResponse,
+            response: finalMessage,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
@@ -1254,8 +1272,10 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
         // Assistant לא זמין או נכשל - שיטה רגילה
         this.memory.updateStage(phone, 'completed', customer);
         
+        const fallbackMessage = `📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n📞 039792365`;
+        
         return {
-            response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            response: fallbackMessage,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
