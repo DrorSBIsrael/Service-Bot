@@ -6,6 +6,158 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 const OpenAI = require('openai');
+// Google Sheets Integration
+const { google } = require('googleapis');
+
+// הגדרת Google Sheets
+const sheets = google.sheets('v4');
+let auth = null;
+let sheetsAvailable = false;
+
+// אתחול Google Sheets
+async function initializeGoogleSheets() {
+    try {
+        if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_SHEETS_ID) {
+            log('WARN', '⚠️ Google Sheets לא מוגדר - פועל ללא תיעוד');
+            return false;
+        }
+
+        auth = new google.auth.GoogleAuth({
+            credentials: {
+                client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+            },
+            scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+        });
+
+        // בדיקת חיבור
+        const authClient = await auth.getClient();
+        google.options({ auth: authClient });
+        
+        log('INFO', '📊 Google Sheets מחובר בהצלחה');
+        sheetsAvailable = true;
+        return true;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בחיבור Google Sheets:', error.message);
+        sheetsAvailable = false;
+        return false;
+    }
+}
+
+// פונקציה לקריאת מספר הקריאה האחרון מהטבלה
+async function getLastServiceNumber() {
+    try {
+        if (!sheetsAvailable) return globalServiceCounter;
+
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+            range: 'Sheet1!A:A',
+        });
+
+        const rows = response.data.values;
+        if (!rows || rows.length <= 1) {
+            log('INFO', '📊 טבלה ריקה - מתחיל מ-HSC-10001');
+            return 10001;
+        }
+
+        // מחפש את המספר הגבוה ביותר
+        let maxNumber = 10001;
+        for (let i = 1; i < rows.length; i++) {
+            const serviceNumber = rows[i][0];
+            if (serviceNumber && serviceNumber.startsWith('HSC-')) {
+                const number = parseInt(serviceNumber.replace('HSC-', ''));
+                if (number > maxNumber) {
+                    maxNumber = number;
+                }
+            }
+        }
+
+        log('INFO', `📊 מספר הקריאה האחרון בטבלה: HSC-${maxNumber}`);
+        return maxNumber;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error.message);
+        return globalServiceCounter;
+    }
+}
+
+// פונקציה לכתיבה לטבלה
+async function writeToGoogleSheets(serviceData) {
+    try {
+        if (!sheetsAvailable) {
+            log('WARN', '⚠️ Google Sheets לא זמין - לא כותב לטבלה');
+            return false;
+        }
+
+        const row = [
+            serviceData.serviceNumber,
+            serviceData.timestamp,
+            serviceData.referenceType,
+            serviceData.customerName,
+            serviceData.customerSite,
+            serviceData.problemDescription,
+            serviceData.resolved
+        ];
+
+        await sheets.spreadsheets.values.append({
+            spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+            range: 'Sheet1!A:G',
+            valueInputOption: 'RAW',
+            requestBody: {
+                values: [row],
+            },
+        });
+
+        log('INFO', `📊 נרשם ב-Google Sheets: ${serviceData.serviceNumber}`);
+        return true;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בכתיבה ל-Google Sheets:', error.message);
+        return false;
+    }
+}
+
+// פונקציה ליצירת כותרות בטבלה
+async function createSheetsHeaders() {
+    try {
+        if (!sheetsAvailable) return false;
+
+        // בדיקה אם יש כבר כותרות
+        const response = await sheets.spreadsheets.values.get({
+            spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+            range: 'Sheet1!A1:G1',
+        });
+
+        if (response.data.values && response.data.values.length > 0) {
+            log('INFO', '📊 כותרות כבר קיימות בטבלה');
+            return true;
+        }
+
+        // יצירת כותרות
+        const headers = [
+            'Service Number',
+            'Timestamp', 
+            'Reference Type',
+            'Customer Name',
+            'Customer Site',
+            'Problem Description',
+            'Resolved'
+        ];
+
+        await sheets.spreadsheets.values.update({
+            spreadsheetId: process.env.GOOGLE_SHEETS_ID,
+            range: 'Sheet1!A1:G1',
+            valueInputOption: 'RAW',
+            requestBody: {
+                values: [headers],
+            },
+        });
+
+        log('INFO', '📊 כותרות נוצרו בטבלה');
+        return true;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה ביצירת כותרות:', error.message);
+        return false;
+    }
+}
 
 // הגדרות דיבוג מתקדמות
 const DEBUG_LEVEL = process.env.DEBUG_LEVEL || 'INFO';
@@ -19,9 +171,17 @@ function log(level, message, data = null) {
     }
 }
 
-// מספר קריאה גלובלי
+// מספר קריאה גלובלי - עדכון מהטבלה
 let globalServiceCounter = 10001;
-function getNextServiceNumber() {
+let sheetsInitialized = false;
+
+async function getNextServiceNumber() {
+    // אם זו הפעם הראשונה, קרא מהטבלה
+    if (!sheetsInitialized && sheetsAvailable) {
+        globalServiceCounter = await getLastServiceNumber();
+        sheetsInitialized = true;
+    }
+    
     return `HSC-${++globalServiceCounter}`;
 }
 
@@ -509,6 +669,16 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
 
 const memory = new AdvancedMemory();
 
+// אתחול Google Sheets
+(async () => {
+    const initialized = await initializeGoogleSheets();
+    if (initialized) {
+        await createSheetsHeaders();
+        globalServiceCounter = await getLastServiceNumber();
+        log('INFO', `📊 Google Sheets מוכן - מספר קריאה הבא: HSC-${globalServiceCounter + 1}`);
+    }
+})();
+
 // זיהוי לקוח מתקדם - מהקוד המקורי שעובד
 function findCustomerByPhone(phone) {
     const cleanPhone = phone.replace(/[^\d]/g, '');
@@ -943,7 +1113,7 @@ class ResponseHandler {
             if (msg === '1' || msg.includes('תקלה')) {
                 this.memory.updateStage(phone, 'problem_description', customer);
                 return {
-                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n📞 039792365`,
+                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
                     stage: 'problem_description',
                     customer: customer
                 };
@@ -973,7 +1143,7 @@ if (msg === '3' || msg.includes('מחיר')) {
 if (msg === '4' || msg.includes('הדרכה')) {
     this.memory.updateStage(phone, 'training_request', customer);
     return {
-        response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר" + סרטון\n• "טיפול בתקלות" + מסמך שגיאה\n\n📞 039792365`,
+        response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
         stage: 'training_request',
         customer: customer
     };
@@ -1457,6 +1627,19 @@ if (extraData.attachments && extraData.attachments.length > 0) {
         await transporter.sendMail(mailOptions);
         log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
         
+// כתיבה ל-Google Sheets
+        const serviceData = {
+            serviceNumber: serviceNumber,
+            timestamp: getIsraeliTime(),
+            referenceType: type === 'technician' ? 'problem' : type === 'order' ? 'order' : type === 'training' ? 'training' : 'problem',
+            customerName: customer.name,
+            customerSite: customer.site,
+            problemDescription: extraData.problemDescription || extraData.orderDetails || extraData.trainingRequest || details,
+            resolved: extraData.resolved !== undefined ? (extraData.resolved ? 'כן' : 'לא') : 'בטיפול'
+        };
+        
+        await writeToGoogleSheets(serviceData);
+
 } catch (error) {
     log('ERROR', '❌ שגיאת מייל מפורטת:', error.message);
     log('ERROR', 'פרטים נוספים:', error);
@@ -1783,5 +1966,21 @@ function checkOpenAIConfig() {
 }
 
 checkOpenAIConfig();
+
+// בדיקת Google Sheets
+function checkGoogleSheetsConfig() {
+    console.log('🔍 בדיקת הגדרות Google Sheets:');
+    console.log('GOOGLE_SHEETS_ID:', process.env.GOOGLE_SHEETS_ID ? '✅ מוגדר' : '❌ חסר');
+    console.log('GOOGLE_SERVICE_ACCOUNT_EMAIL:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL ? '✅ מוגדר' : '❌ חסר');
+    console.log('GOOGLE_PRIVATE_KEY:', process.env.GOOGLE_PRIVATE_KEY ? '✅ מוגדר' : '❌ חסר');
+    
+    if (process.env.GOOGLE_SHEETS_ID && process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+        console.log('📊 Google Sheets מוכן לפעולה!');
+    } else {
+        console.log('⚠️ Google Sheets לא יפעל - חסרים פרמטרים');
+    }
+}
+
+checkGoogleSheetsConfig();
 
 module.exports = app;
