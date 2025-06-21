@@ -1101,14 +1101,16 @@ class ResponseHandler {
         
         // אישור זהות
         if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
-            if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
-                const customer = conversation.data.tentativeCustomer;
-                this.memory.updateStage(phone, 'menu', customer);
-                return {
-                    response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
-                    stage: 'menu',
-                    customer: customer
-                };
+if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
+    const customer = conversation.data.tentativeCustomer;
+    this.memory.updateStage(phone, 'menu', customer);
+    this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
+    return {
+        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+        stage: 'menu',
+        customer: customer
+    };
+
             } else {
                 this.memory.updateStage(phone, 'identifying');
                 return {
