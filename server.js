@@ -605,20 +605,31 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
         return existingConv;
     }
     
-    // יצירת conversation חדש רק אם לא קיים
-    const key = this.createKey(phone, customer);
-    const conv = {
-        phone: phone,
-        customer: customer,
-        stage: customer ? 'menu' : initialStage,
-        messages: [],
-        startTime: new Date(),
-        lastActivity: new Date(),
-        data: {}
-    };
-    this.conversations.set(key, conv);
-    log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
-    return conv;
+// יצירת conversation חדש רק אם לא קיים
+const key = this.createKey(phone, customer);
+
+// אם יש לקוח - נקה conversations ישנים של אותו טלפון קודם
+if (customer) {
+    for (const [existingKey, existingConv] of this.conversations.entries()) {
+        if (existingKey !== key && existingKey.includes(phone)) {
+            this.conversations.delete(existingKey);
+            log('DEBUG', `🧹 ניקיתי conversation ישן: ${existingKey}`);
+        }
+    }
+}
+
+const conv = {
+    phone: phone,
+    customer: customer,
+    stage: customer ? 'menu' : initialStage,
+    messages: [],
+    startTime: new Date(),
+    lastActivity: new Date(),
+    data: {}
+};
+this.conversations.set(key, conv);
+log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
+return conv;
 }
     
     // הוספת הודעה
@@ -1073,6 +1084,7 @@ class ResponseHandler {
             if (identification.confidence === 'high') {
                 const customer = identification.customer;
                 this.memory.createOrUpdateConversation(phone, customer, 'menu');
+                this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
                 return {
                     response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
                     stage: 'menu',
@@ -1655,6 +1667,11 @@ if (extraData.attachments && extraData.attachments.length > 0) {
 }
 }
 
+log('DEBUG', `🎯 מעבד הודעה: טלפון=${phone}, לקוח=${customer ? customer.name : 'לא מזוהה'}, הודעה="${messageText}"`);
+
+const currentConv = memory.getConversation(phone, customer);
+log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
+
 // קביעת סוג קובץ
 function getFileExtension(fileName, mimeType) {
     // אם יש שם קובץ עם סיומת
@@ -1811,8 +1828,15 @@ if (messageData.textMessageData) {
 
       log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
         
-        // זיהוי לקוח
-        let customer = findCustomerByPhone(phone);
+// זיהוי לקוח
+let customer = findCustomerByPhone(phone);
+
+// בדיקה אם יש לקוח בזיכרון
+const existingConv = memory.getConversation(phone);
+if (existingConv && existingConv.customer && !customer) {
+    customer = existingConv.customer;
+    log('DEBUG', `🔍 נמצא לקוח בזיכרון: ${customer.name}`);
+}
 
 // הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
