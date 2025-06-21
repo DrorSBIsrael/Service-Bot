@@ -82,8 +82,13 @@ async function getLastServiceNumber() {
         return maxNumber;
 } catch (error) {
     log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error.message);
-    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'קוד שגיאה:', error.code);
+    log('ERROR', 'סטטוס שגיאה:', error.status);
+    log('ERROR', 'פרטים מלאים:', error.toString());
     log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    if (error.response && error.response.data) {
+        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
+    }
     return globalServiceCounter;
 }
 }
@@ -119,8 +124,13 @@ async function writeToGoogleSheets(serviceData) {
         return true;
 } catch (error) {
     log('ERROR', '❌ שגיאה בכתיבה ל-Google Sheets:', error.message);
-    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'קוד שגיאה:', error.code);
+    log('ERROR', 'סטטוס שגיאה:', error.status);
+    log('ERROR', 'פרטים מלאים:', error.toString());
     log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    if (error.response && error.response.data) {
+        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
+    }
     return false;
 }
 }
@@ -165,8 +175,13 @@ async function createSheetsHeaders() {
         return true;
 } catch (error) {
     log('ERROR', '❌ שגיאה ביצירת כותרות:', error.message);
-    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'קוד שגיאה:', error.code);
+    log('ERROR', 'סטטוס שגיאה:', error.status);
+    log('ERROR', 'פרטים מלאים:', error.toString());
     log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    if (error.response && error.response.data) {
+        log('ERROR', 'תגובת השרת:', JSON.stringify(error.response.data));
+    }
     return false;
 }
 }
