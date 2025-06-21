@@ -38,6 +38,189 @@ function getIsraeliTime() {
     });
 }
 
+// פונקציות OpenAI Assistant
+async function createThread() {
+    try {
+        const thread = await openai.beta.threads.create();
+        log('INFO', `🧵 נוצר thread חדש: ${thread.id}`);
+        return thread.id;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה ביצירת thread:', error.message);
+        return null;
+    }
+}
+
+async function addMessageToThread(threadId, message) {
+    try {
+        await openai.beta.threads.messages.create(threadId, {
+            role: "user",
+            content: message
+        });
+        log('DEBUG', `💬 הודעה נוספה ל-thread ${threadId}`);
+        return true;
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בהוספת הודעה:', error.message);
+        return false;
+    }
+}
+
+async function runAssistant(threadId, assistantId, instructions = "") {
+    try {
+        const run = await openai.beta.threads.runs.create(threadId, {
+            assistant_id: assistantId,
+            instructions: instructions
+        });
+        
+        log('INFO', `🤖 מפעיל Assistant: ${run.id}`);
+        
+        // המתנה לסיום
+        let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+        
+        while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+        }
+        
+        if (runStatus.status === 'completed') {
+            const messages = await openai.beta.threads.messages.list(threadId);
+            const lastMessage = messages.data[0];
+            
+            if (lastMessage.role === 'assistant') {
+                const response = lastMessage.content[0].text.value;
+                log('INFO', '✅ תגובה מהAssistant התקבלה');
+                return response;
+            }
+        }
+        
+        log('WARN', `⚠️ Assistant לא השלים בהצלחה: ${runStatus.status}`);
+        return null;
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בהפעלת Assistant:', error.message);
+        return null;
+    }
+}
+
+// פונקציה מיוחדת לטיפול בתקלות עם Assistant
+async function handleProblemWithAssistant(problemDescription, customer) {
+    try {
+        log('INFO', '🔧 מעבד תקלה עם OpenAI Assistant...');
+        
+        // יצירת thread חדש
+        const threadId = await createThread();
+        if (!threadId) {
+            log('WARN', '⚠️ נכשל ביצירת thread - עובר לשיטה הרגילה');
+            return await findSolution(problemDescription, customer);
+        }
+        
+        // בניית הודעה מפורטת עם קשר לקבצי החניה
+        const contextMessage = `
+שלום! אני עוזר טכני למערכות בקרת חניה של חברת שיידט את בכמן.
+
+פרטי הלקוח:
+- שם: ${customer.name}
+- חניון: ${customer.site}
+- כתובת: ${customer.address}
+
+תיאור התקלה שדווחה:
+"${problemDescription}"
+
+אנא חפש במדריכי ההפעלה שלך פתרון מתאים לתקלה זו ותן הוראות צעד אחר צעד. 
+השתמש במידע מהקבצים המצורפים במערכת (מדריכי הפעלה של מערכות החניה).
+התמקד בפתרונות מעשיים שהלקוח יכול לבצע בעצמו.
+`;
+
+        // שליחת ההודעה ל-Assistant
+        const messageAdded = await addMessageToThread(threadId, contextMessage);
+        if (!messageAdded) {
+            log('WARN', '⚠️ נכשל בהוספת הודעה - עובר לשיטה הרגילה');
+            return await findSolution(problemDescription, customer);
+        }
+        
+        // הפעלת Assistant עם אינסטרוקציות מותאמות לחברה
+        const assistantResponse = await runAssistant(
+            threadId, 
+            process.env.OPENAI_ASSISTANT_ID,
+            "אתה מומחה למערכות בקרת חניה של חברת שיידט את בכמן. השתמש במדריכי ההפעלה במערכת כדי לתת פתרון מדויק ומפורט בעברית. השתמש באימוג'י לבהירות."
+        );
+        
+        if (assistantResponse) {
+            log('INFO', '✅ Assistant נתן פתרון מותאם אישית');
+            
+            // עיצוב התגובה
+            let formattedResponse = `🔧 **פתרון מותאם אישית מהמומחה שלנו:**\n\n${assistantResponse}`;
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            
+            return { 
+                found: true, 
+                response: formattedResponse, 
+                source: 'assistant',
+                threadId: threadId 
+            };
+        } else {
+            log('WARN', '⚠️ Assistant לא החזיר תגובה - עובר לשיטה הרגילה');
+            return await findSolution(problemDescription, customer);
+        }
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה כללית בAssistant - עובר לשיטה הרגילה:', error.message);
+        return await findSolution(problemDescription, customer);
+    }
+}
+
+// פונקציה מיוחדת לטיפול בהדרכה עם Assistant
+async function handleTrainingWithAssistant(trainingRequest, customer) {
+    try {
+        log('INFO', '📚 מעבד בקשת הדרכה עם OpenAI Assistant...');
+        
+        const threadId = await createThread();
+        if (!threadId) {
+            return null;
+        }
+        
+        const contextMessage = `
+שלום! אני מבקש הדרכה למערכת בקרת החניה של שיידט את בכמן.
+
+פרטי הלקוח:
+- שם: ${customer.name}
+- חניון: ${customer.site}
+- כתובת: ${customer.address}
+
+נושא ההדרכה:
+"${trainingRequest}"
+
+אנא חפש במדריכי ההפעלה והחומרים שלך והכן חומר הדרכה מפורט ומותאם לנושא זה.
+השתמש במידע מהקבצים המצורפים במערכת (מדריכי הפעלה של מערכות החניה).
+כלול הסברים צעד אחר צעד, טיפים חשובים ודברים שחשוב להימנע מהם.
+`;
+
+        const messageAdded = await addMessageToThread(threadId, contextMessage);
+        if (!messageAdded) return null;
+        
+        const assistantResponse = await runAssistant(
+            threadId, 
+            process.env.OPENAI_ASSISTANT_ID,
+            "אתה מדריך מומחה למערכות בקרת חניה של חברת שיידט את בכמן. השתמש במדריכי ההפעלה במערכת להכנת חומר הדרכה מפורט, ברור ומעשי בעברית. השתמש באימוג'י ובמבנה ברור."
+        );
+        
+        if (assistantResponse) {
+            log('INFO', '✅ Assistant הכין חומר הדרכה מותאם');
+            return {
+                success: true,
+                content: assistantResponse,
+                source: 'assistant',
+                threadId: threadId
+            };
+        }
+        
+        return null;
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בהדרכה עם Assistant:', error.message);
+        return null;
+    }
+}
+
 // פונקציה להורדת קבצים מוואטסאפ
 async function downloadWhatsAppFile(fileUrl, fileName) {
     try {
@@ -839,49 +1022,58 @@ if (msg === '4' || msg.includes('הדרכה')) {
         };
     }
     
-    async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
-        const serviceNumber = getNextServiceNumber();
-        
-        // שמירת פרטי התקלה בזיכרון
-        this.memory.updateStage(phone, 'processing_problem', customer, {
+async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
+    const serviceNumber = getNextServiceNumber();
+    
+    // שמירת פרטי התקלה בזיכרון
+    this.memory.updateStage(phone, 'processing_problem', customer, {
+        serviceNumber: serviceNumber,
+        problemDescription: message,
+        attachments: downloadedFiles
+    });
+    
+    // ניסיון פתרון עם Assistant קודם
+    let solution;
+    if (process.env.OPENAI_ASSISTANT_ID) {
+        log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
+        solution = await handleProblemWithAssistant(message, customer);
+    } else {
+        log('INFO', '🔧 Assistant לא זמין - משתמש בשיטה הרגילה');
+        solution = await findSolution(message, customer);
+    }
+    
+    if (solution.found) {
+        // נמצא פתרון - המתן למשוב
+        this.memory.updateStage(phone, 'waiting_feedback', customer, {
             serviceNumber: serviceNumber,
             problemDescription: message,
-            attachments: downloadedFiles
+            solution: solution.response,
+            attachments: downloadedFiles,
+            threadId: solution.threadId || null,
+            source: solution.source || 'database'
         });
         
-        // חיפוש פתרון
-        const solution = await findSolution(message, customer);
+        return {
+            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            stage: 'waiting_feedback',
+            customer: customer,
+            serviceNumber: serviceNumber
+        };
+    } else {
+        // לא נמצא פתרון - שלח טכנאי
+        this.memory.updateStage(phone, 'completed', customer);
         
-        if (solution.found) {
-            // נמצא פתרון - המתן למשוב
-            this.memory.updateStage(phone, 'waiting_feedback', customer, {
-                serviceNumber: serviceNumber,
-                problemDescription: message,
-                solution: solution.response,
-                attachments: downloadedFiles
-            });
-            
-            return {
-                response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
-                stage: 'waiting_feedback',
-                customer: customer,
-                serviceNumber: serviceNumber
-            };
-        } else {
-            // לא נמצא פתרון - שלח טכנאי
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
-                stage: 'completed',
-                customer: customer,
-                serviceNumber: serviceNumber,
-                sendTechnicianEmail: true,
-                problemDescription: message,
-                attachments: downloadedFiles
-            };
-        }
+        return {
+            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            stage: 'completed',
+            customer: customer,
+            serviceNumber: serviceNumber,
+            sendTechnicianEmail: true,
+            problemDescription: message,
+            attachments: downloadedFiles
+        };
     }
+}
 
 async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
     // בדיקה אם הלקוח רוצה לחזור לתפריט
@@ -1022,9 +1214,43 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
     };
 }
 
-    async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
-        const serviceNumber = getNextServiceNumber();
+async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
+    const serviceNumber = getNextServiceNumber();
+    
+    // ניסיון יצירת חומר הדרכה עם Assistant
+    let trainingContent = null;
+    if (process.env.OPENAI_ASSISTANT_ID) {
+        log('INFO', '📚 מנסה הדרכה עם OpenAI Assistant...');
+        trainingContent = await handleTrainingWithAssistant(message, customer);
+    }
+    
+    if (trainingContent && trainingContent.success) {
+        // נוצר חומר הדרכה מותאם - שלח מיד
+        this.memory.updateStage(phone, 'completed', customer);
         
+        // שליחת החומר ישירות בWhatsApp (עד 4096 תווים)
+        let immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${trainingContent.content}`;
+        
+        // אם החומר ארוך מדי, קצר אותו ושלח גם למייל
+        if (immediateResponse.length > 4000) {
+            const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
+            immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${shortContent}`;
+        }
+        
+        immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}\n📞 039792365`;
+        
+        return {
+            response: immediateResponse,
+            stage: 'completed',
+            customer: customer,
+            serviceNumber: serviceNumber,
+            sendTrainingEmail: true,
+            trainingRequest: message,
+            trainingContent: trainingContent.content,
+            attachments: downloadedFiles
+        };
+    } else {
+        // Assistant לא זמין או נכשל - שיטה רגילה
         this.memory.updateStage(phone, 'completed', customer);
         
         return {
@@ -1037,6 +1263,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
             attachments: downloadedFiles
         };
     }
+}
     
     async handleFeedback(message, phone, customer, conversation) {
         const msg = message.toLowerCase().trim();
@@ -1100,6 +1327,9 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
+
+
+
 // שליחת מייל משופרת
 async function sendEmail(customer, type, details, extraData = {}) {
     try {
@@ -1146,6 +1376,9 @@ async function sendEmail(customer, type, details, extraData = {}) {
         }
         if (extraData.trainingRequest) {
             conversationSummary += `<p><strong>נושא ההדרכה:</strong> ${extraData.trainingRequest}</p>`;
+        }
+       if (extraData.trainingContent) {
+            conversationSummary += `<div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin-top: 10px;"><h4>📚 חומר הדרכה מותאם:</h4><div style="white-space: pre-line;">${extraData.trainingContent.replace(/\n/g, '<br>')}</div></div>`;
         }
         if (extraData.resolved !== undefined) {
             const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
@@ -1532,5 +1765,21 @@ app.listen(PORT, () => {
     log('INFO', '📊 ניהול שלבים: מושלם');
     log('INFO', '✅ מערכת מעולה מוכנה!');
 });
+
+// 🔧 בדיקות מערכת - חדש!
+function checkOpenAIConfig() {
+    console.log('🔍 בדיקת הגדרות OpenAI Assistant:');
+    console.log('OPENAI_ASSISTANT_ID:', process.env.OPENAI_ASSISTANT_ID ? '✅ מוגדר' : '❌ חסר');
+    console.log('OPENAI_VECTOR_STORE_ID:', process.env.OPENAI_VECTOR_STORE_ID ? '✅ מוגדר' : '❌ חסר');
+    console.log('OPENAI_API_KEY:', process.env.OPENAI_API_KEY ? '✅ מוגדר' : '❌ חסר');
+    
+    if (process.env.OPENAI_ASSISTANT_ID && process.env.OPENAI_API_KEY) {
+        console.log('🤖 Assistant מוכן לפעולה!');
+    } else {
+        console.log('⚠️ Assistant לא יפעל - משתמש בשיטה הרגילה');
+    }
+}
+
+checkOpenAIConfig();
 
 module.exports = app;
