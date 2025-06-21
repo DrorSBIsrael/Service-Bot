@@ -737,11 +737,11 @@ function findCustomerByPhone(phone) {
 
 // זיהוי לקוח לפי שם חניון - מהקוד המקורי שעובד
 function findCustomerByName(message) {
-    const msg = message.toLowerCase();
+    const msg = message.toLowerCase().trim();
     
     log('DEBUG', `🔍 מחפש לקוח עבור: "${msg}"`);
     
-    // רשימת מילות מפתח לניקוי
+    // מילות מפתח לניקוי
     const wordsToRemove = ['חניון', 'מרכז', 'קניון', 'מגדל', 'בית', 'פארק', 'סנטר', 'מול'];
     
     // ניקוי הטקסט
@@ -752,7 +752,7 @@ function findCustomerByName(message) {
     
     log('DEBUG', `🧹 טקסט נקי: "${cleanMsg}"`);
     
-    // חיפוש מדויק לפי שם חניון - עדיפות גבוהה
+    // חיפוש מדויק לפי שם חניון
     let bestMatch = null;
     let bestScore = 0;
     
@@ -760,54 +760,39 @@ function findCustomerByName(message) {
         if (!customer.site) return;
         
         const siteName = customer.site.toLowerCase();
-        
-        // בדיקה מדויקת - רק אם המילה קיימת במלואה
-        const siteWords = siteName.split(/\s+/).filter(word => word.length > 2);
-        const msgWords = cleanMsg.split(/\s+/).filter(word => word.length > 2);
-        
         let score = 0;
         
-        // בדיקת התאמה מדויקת
-        siteWords.forEach(siteWord => {
-            msgWords.forEach(msgWord => {
-                // התאמה מלאה
-                if (siteWord === msgWord) {
-                    score += 10;
-                    log('DEBUG', `✅ התאמה מלאה: ${siteWord} = ${msgWord} (+10)`);
-                }
-                // התאמה חלקית (לפחות 3 תווים)
-                else if (siteWord.length >= 3 && msgWord.length >= 3) {
-                    if (siteWord.includes(msgWord) || msgWord.includes(siteWord)) {
-                        score += 5;
-                        log('DEBUG', `✅ התאמה חלקית: ${siteWord} ~ ${msgWord} (+5)`);
-                    }
-                }
-            });
+        // בדיקה אם המילה קיימת בשם החניון
+        const msgWords = cleanMsg.split(/\s+/).filter(word => word.length > 2);
+        
+        msgWords.forEach(msgWord => {
+            if (siteName.includes(msgWord)) {
+                score += msgWord.length * 2; // ציון כפול למילים ארוכות
+                log('DEBUG', `✅ התאמה: "${msgWord}" נמצא ב-"${siteName}" (+${msgWord.length * 2})`);
+            }
         });
         
-        // מקרים מיוחדים - התאמות ידועות
+        // התאמות מיוחדות לחניונים נפוצים
         const specialMatches = {
-            'אינפיניטי': ['אינפיניטי', 'infinity'],
+            'דיזינגוף': ['דיזינגוף', 'dizengoff'],
             'עזריאלי': ['עזריאלי', 'azrieli'],
+            'אינפיניטי': ['אינפיניטי', 'infinity'],
             'גבעתיים': ['גבעתיים', 'givatayim'],
-            'אלקטרה': ['אלקטרה', 'electra'],
             'מודיעין': ['מודיעין', 'modiin'],
-            'אושילנד': ['אושילנד', 'oshiland'],
+            'אלקטרה': ['אלקטרה', 'electra'],
             'ביג': ['ביג', 'big'],
             'פנורמה': ['פנורמה', 'panorama']
         };
         
-        // בדיקת התאמות מיוחדות
         Object.entries(specialMatches).forEach(([key, variations]) => {
             variations.forEach(variation => {
-                if (siteName.includes(variation) && cleanMsg.includes(variation)) {
-                    score += 15;
-                    log('DEBUG', `🎯 התאמה מיוחדת: ${variation} (+15)`);
+                if (siteName.includes(key) && cleanMsg.includes(variation)) {
+                    score += 20;
+                    log('DEBUG', `🎯 התאמה מיוחדת: ${variation} ל-${key} (+20)`);
                 }
             });
         });
         
-        // הדפסת ציון רק אם יש התאמה
         if (score > 0) {
             log('DEBUG', `📊 ציון ללקוח ${customer.name} (${siteName}): ${score}`);
         }
@@ -821,9 +806,8 @@ function findCustomerByName(message) {
     if (bestMatch) {
         log('INFO', `🏆 נמצא לקוח: ${bestMatch.name} מ${bestMatch.site} (ציון: ${bestScore})`);
         
-        // קביעת רמת ביטחון
         let confidence = 'low';
-        if (bestScore >= 15) confidence = 'high';
+        if (bestScore >= 20) confidence = 'high';
         else if (bestScore >= 10) confidence = 'medium';
         
         return { 
@@ -833,33 +817,6 @@ function findCustomerByName(message) {
         };
     }
     
-    // חיפוש לפי שם לקוח
-    const nameMatch = customers.find(c => 
-        c.name && cleanMsg.includes(c.name.toLowerCase())
-    );
-    if (nameMatch) {
-        log('INFO', `👤 נמצא לקוח לפי שם: ${nameMatch.name}`);
-        return { 
-            customer: nameMatch, 
-            confidence: 'high',
-            method: `זוהה לפי שם הלקוח: ${nameMatch.name}`
-        };
-    }
-    
-    // חיפוש לפי מספר לקוח
-    const idMatch = msg.match(/\b\d{2,4}\b/);
-    if (idMatch) {
-        const customerId = parseInt(idMatch[0]);
-        const customerById = customers.find(c => c.id === customerId);
-        if (customerById) {
-            log('INFO', `🔢 נמצא לקוח לפי מספר: ${customerId}`);
-            return { 
-                customer: customerById, 
-                confidence: 'high',
-                method: `זוהה לפי מספר לקוח: ${customerId}`
-            };
-        }
-    }
     log('WARN', 'לא נמצא לקוח מתאים');
     return null;
 }
@@ -969,13 +926,6 @@ async function findSolutionFallback(problemDescription) {
         
         const problem = problemDescription.toLowerCase();
         
-// מילים קצרות שלא צריך לחפש בהן
-const skipWords = ['שלום', 'היי', 'הי', 'בוקר', 'ערב', 'תודה', 'bye', 'hello'];
-if (skipWords.some(word => cleanMsg === word || cleanMsg.includes(word)) && cleanMsg.length < 6) {
-    log('DEBUG', `🚫 דילוג על מילה קצרה: "${cleanMsg}"`);
-    return null;
-}
-
         // מילות מפתח מדויקות לכל תרחיש
         const keywordMapping = {
             'אשראי': ['אשראי', 'כרטיס אשראי', 'תשלום', 'חיוב', 'visa', 'mastercard', 'מסוף'],
@@ -994,13 +944,12 @@ if (skipWords.some(word => cleanMsg === word || cleanMsg.includes(word)) && clea
             
             for (const variation of variations) {
                 if (problem.includes(variation)) {
-                    score += variation.length; // ציון גבוה יותר למילים ארוכות
+                    score += variation.length;
                     log('DEBUG', `✅ נמצאה מילת מפתח: "${variation}" עבור ${keyword} (+${variation.length})`);
                 }
             }
             
             if (score > bestScore) {
-                // מציאת התרחיש המתאים
                 const foundScenario = serviceFailureDB.find(scenario => 
                     scenario.תרחיש && scenario.תרחיש.toLowerCase().includes(keyword)
                 );
@@ -1014,13 +963,13 @@ if (skipWords.some(word => cleanMsg === word || cleanMsg.includes(word)) && clea
         }
         
         if (bestMatch && bestScore >= 3) {
-            let solution = `🔧 **פתרון לתקלה: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
+            let solution = `🔧 **פתרון: ${bestMatch.תרחיש}**\n\n${bestMatch.שלבים}`;
             
             if (bestMatch.הערות) {
-                solution += `\n\n💡 **הערות חשובות:**\n${bestMatch.הערות}`;
+                solution += `\n\n💡 ${bestMatch.הערות}`;
             }
             
-            solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            solution += `\n\n❓ האם עזר? (כן/לא)`;
             
             log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
             return { found: true, response: solution, scenario: bestMatch };
@@ -1029,14 +978,14 @@ if (skipWords.some(word => cleanMsg === word || cleanMsg.includes(word)) && clea
         log('INFO', '⚠️ גם fallback לא מצא פתרון מתאים');
         return {
             found: false,
-            response: '🔧 **לא נמצא פתרון מיידי**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
+            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
         };
         
     } catch (error) {
         log('ERROR', '❌ שגיאה גם ב-fallback:', error.message);
         return {
             found: false,
-            response: '🔧 **בעיה זמנית במערכת**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
+            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
         };
     }
 }
@@ -1327,22 +1276,23 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         let unitNumber = null;
         
         // חיפוש ביחידה בהודעה הנוכחית - תיקון הביטוי הרגולרי
-        let unitMatch = message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
-        if (unitMatch) {
-            unitNumber = unitMatch[1] || unitMatch[2] || unitMatch[3] || unitMatch[4];
-        }
+let unitMatch = message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(\d{1,3})/i);
+if (unitMatch) {
+    unitNumber = unitMatch[1];
+    log('DEBUG', `🎯 זוהה מספר יחידה: ${unitNumber} מתוך הודעה: "${message}"`);
+}
         
         // אם לא נמצא, חפש בהודעות קודמות
         if (!unitNumber && conversation && conversation.messages) {
             for (let i = conversation.messages.length - 1; i >= 0; i--) {
                 const pastMessage = conversation.messages[i];
                 if (pastMessage.sender === 'customer') {
-                    const pastUnitMatch = pastMessage.message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
-                    if (pastUnitMatch) {
-                        unitNumber = pastUnitMatch[1] || pastUnitMatch[2] || pastUnitMatch[3] || pastUnitMatch[4];
-                        console.log(`DEBUG: נמצא מספר יחידה בהודעה קודמת: ${unitNumber} מתוך: "${pastMessage.message}"`);
-                        break;
-                    }
+const pastUnitMatch = pastMessage.message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(\d{1,3})/i);
+if (pastUnitMatch) {
+    unitNumber = pastUnitMatch[1];
+    log('DEBUG', `נמצא מספר יחידה בהודעה קודמת: ${unitNumber} מתוך: "${pastMessage.message}"`);
+    break;
+}
                 }
             }
         }
