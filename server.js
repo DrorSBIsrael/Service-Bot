@@ -16,6 +16,10 @@ let sheetsAvailable = false;
 
 // אתחול Google Sheets
 async function initializeGoogleSheets() {
+// שורות דיבוג זמניות
+    console.log('🔍 DEBUG - SHEETS_ID:', process.env.GOOGLE_SHEETS_ID);
+    console.log('🔍 DEBUG - EMAIL:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+    console.log('🔍 DEBUG - PRIVATE_KEY exists:', !!process.env.GOOGLE_PRIVATE_KEY);
     try {
         if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_SHEETS_ID) {
             log('WARN', '⚠️ Google Sheets לא מוגדר - פועל ללא תיעוד');
