@@ -34,7 +34,9 @@ async function initializeGoogleSheets() {
         const authClient = await auth.getClient();
         google.options({ auth: authClient });
         
-        log('INFO', '📊 Google Sheets מחובר בהצלחה');
+log('INFO', '📊 Google Sheets מחובר בהצלחה');
+log('INFO', 'מזהה הטבלה:', process.env.GOOGLE_SHEETS_ID);
+log('INFO', 'Service Account:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
         sheetsAvailable = true;
         return true;
     } catch (error) {
@@ -74,10 +76,12 @@ async function getLastServiceNumber() {
 
         log('INFO', `📊 מספר הקריאה האחרון בטבלה: HSC-${maxNumber}`);
         return maxNumber;
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error.message);
-        return globalServiceCounter;
-    }
+} catch (error) {
+    log('ERROR', '❌ שגיאה בקריאת מספר קריאה מהטבלה:', error.message);
+    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    return globalServiceCounter;
+}
 }
 
 // פונקציה לכתיבה לטבלה
@@ -109,10 +113,12 @@ async function writeToGoogleSheets(serviceData) {
 
         log('INFO', `📊 נרשם ב-Google Sheets: ${serviceData.serviceNumber}`);
         return true;
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בכתיבה ל-Google Sheets:', error.message);
-        return false;
-    }
+} catch (error) {
+    log('ERROR', '❌ שגיאה בכתיבה ל-Google Sheets:', error.message);
+    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    return false;
+}
 }
 
 // פונקציה ליצירת כותרות בטבלה
@@ -153,10 +159,12 @@ async function createSheetsHeaders() {
 
         log('INFO', '📊 כותרות נוצרו בטבלה');
         return true;
-    } catch (error) {
-        log('ERROR', '❌ שגיאה ביצירת כותרות:', error.message);
-        return false;
-    }
+} catch (error) {
+    log('ERROR', '❌ שגיאה ביצירת כותרות:', error.message);
+    log('ERROR', 'פרטי השגיאה:', JSON.stringify(error, null, 2));
+    log('ERROR', 'SHEETS_ID בשימוש:', process.env.GOOGLE_SHEETS_ID);
+    return false;
+}
 }
 
 // הגדרות דיבוג מתקדמות
