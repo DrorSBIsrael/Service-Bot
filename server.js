@@ -1667,11 +1667,6 @@ if (extraData.attachments && extraData.attachments.length > 0) {
 }
 }
 
-log('DEBUG', `🎯 מעבד הודעה: טלפון=${phone}, לקוח=${customer ? customer.name : 'לא מזוהה'}, הודעה="${messageText}"`);
-
-const currentConv = memory.getConversation(phone, customer);
-log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
-
 // קביעת סוג קובץ
 function getFileExtension(fileName, mimeType) {
     // אם יש שם קובץ עם סיומת
@@ -1837,6 +1832,11 @@ if (existingConv && existingConv.customer && !customer) {
     customer = existingConv.customer;
     log('DEBUG', `🔍 נמצא לקוח בזיכרון: ${customer.name}`);
 }
+
+log('DEBUG', `🎯 מעבד הודעה: טלפון=${phone}, לקוח=${customer ? customer.name : 'לא מזוהה'}, הודעה="${messageText}"`);
+
+const currentConv = memory.getConversation(phone, customer);
+log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
 
 // הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
