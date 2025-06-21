@@ -1028,8 +1028,9 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
     // הודעת אישור מיידית
     const confirmationMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n🔍 **בודקת מול מאגר המידע שלנו...**\n\n⏳ רגע אחד, אני מחפשת פתרון מתאים\n\n🆔 מספר קריאה: ${serviceNumber}`;
     
-    // שלח אישור מיד
-    await sendWhatsApp(customer.phone.replace(/[^\d]/g, '') || phone, confirmationMessage);
+    // שלח אישור מיד - תיקון השגיאה
+    const customerPhone = (customer.phone || phone).replace(/[^\d]/g, '');
+    await sendWhatsApp(customerPhone, confirmationMessage);
     
     // שמירת פרטי התקלה בזיכרון
     this.memory.updateStage(phone, 'processing_problem', customer, {
@@ -1231,8 +1232,9 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
     // הודעת אישור מיידית
     const confirmationMessage = `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n🔍 **בודקת במאגר המידע והמדריכים שלנו...**\n\n⏳ מכינה חומר הדרכה מותאם אישית\n\n🆔 מספר קריאה: ${serviceNumber}`;
     
-    // שלח אישור מיד
-    await sendWhatsApp(customer.phone.replace(/[^\d]/g, '') || phone, confirmationMessage);
+    // שלח אישור מיד - תיקון השגיאה
+    const customerPhone = (customer.phone || phone).replace(/[^\d]/g, '');
+    await sendWhatsApp(customerPhone, confirmationMessage);
     
     // ניסיון יצירת חומר הדרכה עם Assistant
     let trainingContent = null;
