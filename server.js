@@ -435,10 +435,6 @@ try {
         name: client["שם לקוח"],
         site: client["שם החניון"],
         phone: client["טלפון"],
-        phone1: client["טלפון1"],
-        phone2: client["טלפון2"],
-        phone3: client["טלפון3"],
-        phone4: client["טלפון4"],
         address: client["כתובת הלקוח"],
         email: client["מייל"]
     }));
