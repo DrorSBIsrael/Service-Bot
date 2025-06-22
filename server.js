@@ -1509,32 +1509,49 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
             };
         }
         
-        // בדיקה אם הלקוח רוצה לסיים
-        if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-            // בדיקה שיש לפחות תיאור של מה מבקשים
-            if (!message || message.trim().length < 5) {
-                return {
-                    response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📎 **ניתן לצרף:** תמונות, PDF, מפרטים\n\n📞 039792365`,
-                    stage: 'order_request',
-                    customer: customer
-                };
-            }
-            
-            // אם יש תיאור - סיום ושליחת מייל
-            const serviceNumber = await getNextServiceNumber();
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${message}\n\n${downloadedFiles && downloadedFiles.length > 0 ? `📎 **קבצים:** ${downloadedFiles.length} קבצים צורפו\n\n` : ''}📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                stage: 'completed',
-                customer: customer,
-                serviceNumber: serviceNumber,
-                sendOrderEmail: true,
-                orderDetails: message,
-                attachments: downloadedFiles
-            };
-        }
+// בדיקה אם הלקוח רוצה לסיים
+if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
+    // חיפוש הזמנה קודמת בשיחה
+    const conversation = this.memory.getConversation(phone, customer);
+    let orderDescription = '';
+    
+    if (conversation && conversation.messages) {
+        const orderMessages = conversation.messages.filter(msg => 
+            msg.sender === 'customer' && 
+            msg.message.length > 4 && 
+            !msg.message.toLowerCase().includes('סיום') &&
+            !msg.message.toLowerCase().includes('לסיים')
+        );
         
+        if (orderMessages.length > 0) {
+            orderDescription = orderMessages[orderMessages.length - 1].message;
+        }
+    }
+    
+    // אם לא נמצאה הזמנה קודמת
+    if (!orderDescription) {
+        return {
+            response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
+            stage: 'order_request',
+            customer: customer
+        };
+    }
+    
+    // סיום ההזמנה
+    const serviceNumber = await getNextServiceNumber();
+    this.memory.updateStage(phone, 'completed', customer);
+    
+    return {
+        response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        customer: customer,
+        serviceNumber: serviceNumber,
+        sendOrderEmail: true,
+        orderDetails: orderDescription,
+        attachments: downloadedFiles
+    };
+}
+
         // אם יש קובץ חדש - הוסף אותו
         if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
             return {
