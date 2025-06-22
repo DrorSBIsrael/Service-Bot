@@ -1219,32 +1219,6 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
     }
 }
 
-async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
-    // בדיקה אם הלקוח רוצה לחזור לתפריט
-    if (isMenuRequest(message)) {
-        this.memory.updateStage(phone, 'menu', customer);
-        return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer
-        };
-    }
-
-    const serviceNumber = await getNextServiceNumber();
-    
-    this.memory.updateStage(phone, 'completed', customer);
-    
-    return {
-        response: `📋 **קיבלתי את בקשת ההזמנה!**\n\n"${message}"\n\n📧 אשלח הצעת מחיר מפורטת למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-        stage: 'completed',
-        customer: customer,
-        serviceNumber: serviceNumber,
-        sendOrderEmail: true,
-        orderDetails: message,
-        attachments: downloadedFiles
-    };
-}
-
 // תחליף את הפונקציה handleDamageReport בקוד שלך:
 async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
     const msg = message.toLowerCase().trim();
