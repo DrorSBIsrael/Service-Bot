@@ -1169,8 +1169,30 @@ if (msg === '4' || msg.includes('הדרכה')) {
             customer: customer
         };
     }
-    
+
 async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
+    // אם הלקוח כתב "סיום" - פרש את זה כסיום התקלה, לא כתקלה חדשה
+    if (message.toLowerCase().includes('סיום')) {
+        // השתמש בהודעה הקודמת כתיאור התקלה
+        const conversation = this.memory.getConversation(phone, customer);
+        let actualProblemDescription = "תקלה עם קבצים מצורפים";
+        
+        // חפש את התיאור האמיתי בהודעות הקודמות
+        if (conversation && conversation.messages) {
+            for (let i = conversation.messages.length - 1; i >= 0; i--) {
+                const msg = conversation.messages[i];
+                if (msg.sender === 'customer' && 
+                    !msg.message.toLowerCase().includes('סיום') && 
+                    msg.message !== 'שלח קובץ') {
+                    actualProblemDescription = msg.message;
+                    break;
+                }
+            }
+        }
+        
+        message = actualProblemDescription;
+    }
+    
     const serviceNumber = await getNextServiceNumber();
     
     // שמירת פרטי התקלה בזיכרון
