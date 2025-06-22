@@ -1295,9 +1295,9 @@ if (msg === '4' || msg.includes('הדרכה')) {
             return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
         }
         
-        // משוב על פתרון
-        if (currentStage === 'waiting_feedback') {
-            return await this.handleFeedback(message, phone, customer, conversation);
+        // 🔧 NEW: משוב על הדרכה
+        if (currentStage === 'waiting_training_feedback') {
+            return await this.handleTrainingFeedback(message, phone, customer, conversation);
         }
         
         // ברירת מחדל - חזור לתפריט
@@ -1460,7 +1460,7 @@ if (pastUnitMatch) {
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
-            sendTechnicianEmail: true,
+            sendDamageEmail: true,
             problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
             attachments: allFiles
         };
@@ -1578,8 +1578,20 @@ if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes
         };
     }
 
+// תחליף את הפונקציה handleTrainingRequest ב-ResponseHandler:
+
 async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = await getNextServiceNumber();
+    
+    // בדיקה אם הלקוח רוצה לחזור לתפריט
+    if (isMenuRequest(message)) {
+        this.memory.updateStage(phone, 'menu', customer);
+        return {
+            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            stage: 'menu',
+            customer: customer
+        };
+    }
     
     // ניסיון יצירת חומר הדרכה עם Assistant
     let trainingContent = null;
@@ -1589,37 +1601,45 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
     }
     
     if (trainingContent && trainingContent.success) {
-        // נוצר חומר הדרכה מותאם - שלח מיד
-        this.memory.updateStage(phone, 'completed', customer);
+        // נוצר חומר הדרכה מותאם - המתן למשוב כמו בתקלות
+        this.memory.updateStage(phone, 'waiting_training_feedback', customer, {
+            serviceNumber: serviceNumber,
+            trainingRequest: message,
+            trainingContent: trainingContent.content,
+            attachments: downloadedFiles
+        });
         
         // שליחת החומר ישירות בWhatsApp (עד 4096 תווים)
         let immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${trainingContent.content}`;
         
         // אם החומר ארוך מדי, קצר אותו ושלח גם למייל
+        let needsEmail = false;
         if (immediateResponse.length > 4000) {
             const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
             immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${shortContent}`;
+            needsEmail = true;
         }
         
-        immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}\n📞 039792365`;
+        immediateResponse += `\n\n❓ **האם ההדרכה ברורה?** (כן/לא)`;
+        immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
         
         return {
             response: immediateResponse,
-            stage: 'completed',
+            stage: 'waiting_training_feedback',
             customer: customer,
             serviceNumber: serviceNumber,
-            sendTrainingEmail: true,
+            sendTrainingEmailImmediate: needsEmail, // שלח מייל מיד אם החומר ארוך
             trainingRequest: message,
             trainingContent: trainingContent.content,
             attachments: downloadedFiles
         };
 
     } else {
-        // Assistant לא זמין או נכשל - שיטה רגילה
+        // Assistant לא זמין או נכשל - שיטה רגילה עם מייל
         this.memory.updateStage(phone, 'completed', customer);
         
         return {
-            response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n❓ **כדי לחזור לתפריט הראשי** - כתוב "תפריט"\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
@@ -1629,45 +1649,51 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
         };
     }
 }
+
+// הוסף פונקציה חדשה לטיפול במשוב הדרכה:
+async handleTrainingFeedback(message, phone, customer, conversation) {
+    const msg = message.toLowerCase().trim();
+    const data = conversation.data;
     
-    async handleFeedback(message, phone, customer, conversation) {
-        const msg = message.toLowerCase().trim();
-        const data = conversation.data;
+    if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה') || 
+        msg.includes('הבנתי') || (msg.includes('מעולה') && !msg.includes('לא'))) {
         
-        if (msg.includes('כן') || msg.includes('נפתר') || msg.includes('תודה') || (msg.includes('עזר') && !msg.includes('לא עזר'))) {
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `🎉 **מעולה! הבעיה נפתרה!**\n\nשמח לשמוע שהפתרון עזר!\n\nיום טוב! 😊\n\n📞 039792365`,
-                stage: 'completed',
-                customer: customer,
-                sendSummaryEmail: true,
-                serviceNumber: data.serviceNumber,
-                problemDescription: data.problemDescription,
-                solution: data.solution,
-                resolved: true
-            };
-        } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `🔧 **מבין שהפתרון לא עזר**\n\n📋 מעבירה את הפניה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: ${data.serviceNumber}`,
-                stage: 'completed',
-                customer: customer,
-                sendTechnicianEmail: true,
-                serviceNumber: data.serviceNumber,
-                problemDescription: data.problemDescription,
-                solution: data.solution,
-                resolved: false,
-                attachments: data.attachments
-            };
-        } else {
-            return {
-                response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
-                stage: 'waiting_feedback',
-                customer: customer
-            };
-        }
+        this.memory.updateStage(phone, 'menu', customer); // 🔧 חזרה לתפריט!
+        
+        return {
+            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\nשמחה שהמידע עזר!\n\n🔄 **חזרה לתפריט הראשי:**\n\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            stage: 'menu',
+            customer: customer,
+            sendTrainingEmailFinal: true, // 🔧 שלח מייל סיכום
+            serviceNumber: data.serviceNumber,
+            trainingRequest: data.trainingRequest,
+            trainingContent: data.trainingContent,
+            resolved: true,
+            attachments: data.attachments
+        };
+        
+    } else if (msg.includes('לא') || msg.includes('לא ברור') || msg.includes('לא הבנתי')) {
+        
+        this.memory.updateStage(phone, 'menu', customer); // 🔧 חזרה לתפריט!
+        
+        return {
+            response: `📚 **אשלח הדרכה מפורטת יותר**\n\n📧 נכין חומר הדרכה נוסף ונשלח למייל\n⏰ תוך 24 שעות\n\n🔄 **חזרה לתפריט הראשי:**\n\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            stage: 'menu',
+            customer: customer,
+            sendTrainingEmailExpanded: true, // 🔧 שלח מייל מורחב
+            serviceNumber: data.serviceNumber,
+            trainingRequest: data.trainingRequest,
+            trainingContent: data.trainingContent,
+            resolved: false,
+            attachments: data.attachments
+        };
+        
+    } else {
+        return {
+            response: `❓ **האם ההדרכה הייתה ברורה?**\n\n✅ כתוב "כן" אם ההדרכה הייתה ברורה\n❌ כתוב "לא" אם צריך הסבר נוסף\n\n📞 039792365`,
+            stage: 'waiting_training_feedback',
+            customer: customer
+        };
     }
 }
 
@@ -2049,7 +2075,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
             memory.addMessage(phone, result.response, 'hadar', result.customer);
             
             log('INFO', `📤 תקלה עובדה עם קובץ ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
-            
+
             // שליחת מיילים לפי הצורך
             if (result.sendTechnicianEmail) {
                 log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
@@ -2069,7 +2095,6 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     resolved: result.resolved
                 });
             }
-            
             return res.status(200).json({ status: 'OK - problem processed with file' });
         }
     }
@@ -2153,7 +2178,7 @@ if (tempFiles.length > 0) {
             downloadedFiles
         );
         
-// שליחת תגובה
+        // שליחת תגובה
         await sendWhatsApp(phone, result.response);
         memory.addMessage(phone, result.response, 'hadar', result.customer);
         
@@ -2184,8 +2209,55 @@ if (tempFiles.length > 0) {
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
+} else if (result.sendDamageEmail) {
+    log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
+    await sendEmail(result.customer, 'damage', result.problemDescription, {
+        serviceNumber: result.serviceNumber,
+        problemDescription: result.problemDescription,
+        attachments: result.attachments
+    });
+} else if (result.sendTrainingEmail) {
+    log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
+    await sendEmail(result.customer, 'training', result.trainingRequest, {
+        serviceNumber: result.serviceNumber,
+        trainingRequest: result.trainingRequest,
+        trainingContent: result.trainingContent,
+        attachments: result.attachments
+    });
+}
+
+        if (result.sendTrainingEmailImmediate) {
+            log('INFO', `📧 שולח מייל הדרכה מיידי ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'training', result.trainingRequest, {
+                serviceNumber: result.serviceNumber,
+                trainingRequest: result.trainingRequest,
+                trainingContent: result.trainingContent,
+                attachments: result.attachments
+            });
         }
         
+        if (result.sendTrainingEmailFinal) {
+            log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'training', result.trainingRequest, {
+                serviceNumber: result.serviceNumber,
+                trainingRequest: result.trainingRequest,
+                trainingContent: result.trainingContent,
+                resolved: result.resolved,
+                attachments: result.attachments
+            });
+        }
+        
+        if (result.sendTrainingEmailExpanded) {
+            log('INFO', `📧 שולח מייל הדרכה מורחב ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'training', `${result.trainingRequest} - דרושה הדרכה מורחבת`, {
+                serviceNumber: result.serviceNumber,
+                trainingRequest: result.trainingRequest,
+                trainingContent: result.trainingContent,
+                resolved: result.resolved,
+                attachments: result.attachments
+            });
+        }
+
         res.status(200).json({ status: 'OK' });
         
     } catch (error) {
