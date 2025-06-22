@@ -1688,6 +1688,47 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
     }
 }
 
+async handleFeedback(message, phone, customer, conversation) {
+        const msg = message.toLowerCase().trim();
+        const data = conversation.data;
+        
+        if (msg.includes('כן') || msg.includes('נפתר') || msg.includes('תודה') || (msg.includes('עזר') && !msg.includes('לא עזר'))) {
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `🎉 **מעולה! הבעיה נפתרה!**\n\nשמח לשמוע שהפתרון עזר!\n\nיום טוב! 😊\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                sendSummaryEmail: true,
+                serviceNumber: data.serviceNumber,
+                problemDescription: data.problemDescription,
+                solution: data.solution,
+                resolved: true
+            };
+        } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `🔧 **מבין שהפתרון לא עזר**\n\n📋 מעבירה את הפניה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: ${data.serviceNumber}`,
+                stage: 'completed',
+                customer: customer,
+                sendTechnicianEmail: true,
+                serviceNumber: data.serviceNumber,
+                problemDescription: data.problemDescription,
+                solution: data.solution,
+                resolved: false,
+                attachments: data.attachments
+            };
+        } else {
+            return {
+                response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
+                stage: 'waiting_feedback',
+                customer: customer
+            };
+        }
+    }
+} 
+
 const responseHandler = new ResponseHandler(memory, customers);
 
 // שליחת WhatsApp
