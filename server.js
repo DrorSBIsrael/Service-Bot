@@ -1496,6 +1496,71 @@ if (pastUnitMatch) {
     };
 }
 
+async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
+        const msg = message.toLowerCase().trim();
+        
+        // בדיקה אם הלקוח רוצה לחזור לתפריט
+        if (isMenuRequest && isMenuRequest(message)) {
+            this.memory.updateStage(phone, 'menu', customer);
+            return {
+                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        }
+        
+        // בדיקה אם הלקוח רוצה לסיים
+        if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
+            // בדיקה שיש לפחות תיאור של מה מבקשים
+            if (!message || message.trim().length < 5) {
+                return {
+                    response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר"\n• "זרוע חלופית"\n\n📎 **ניתן לצרף:** תמונות, PDF, מפרטים\n\n📞 039792365`,
+                    stage: 'order_request',
+                    customer: customer
+                };
+            }
+            
+            // אם יש תיאור - סיום ושליחת מייל
+            const serviceNumber = await getNextServiceNumber();
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${message}\n\n${downloadedFiles && downloadedFiles.length > 0 ? `📎 **קבצים:** ${downloadedFiles.length} קבצים צורפו\n\n` : ''}📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendOrderEmail: true,
+                orderDetails: message,
+                attachments: downloadedFiles
+            };
+        }
+        
+        // אם יש קובץ חדש - הוסף אותו
+        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+            return {
+                response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
+        
+        // טיפול בהודעה רגילה
+        if (message && message.trim().length >= 5) {
+            return {
+                response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
+        
+        // אם לא הבין מה הלקוח רוצה
+        return {
+            response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
+            stage: 'order_request',
+            customer: customer
+        };
+    }
+
 async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = await getNextServiceNumber();
     
@@ -2112,6 +2177,15 @@ if (tempFiles.length > 0) {
     });
 }
         
+} else if (result.sendOrderEmail) {
+    log('INFO', `📧 שולח מייל הזמנה ללקוח ${result.customer.name}`);
+    await sendEmail(result.customer, 'order', result.orderDetails, {
+        serviceNumber: result.serviceNumber,
+        orderDetails: result.orderDetails,
+        attachments: result.attachments
+    });
+}
+
         res.status(200).json({ status: 'OK' });
         
     } catch (error) {
