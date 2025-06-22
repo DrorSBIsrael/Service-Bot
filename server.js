@@ -1289,7 +1289,9 @@ if (msg === '4' || msg.includes('הדרכה')) {
         if (currentStage === 'order_request') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-        
+        if (currentStage === 'waiting_feedback') {
+    return await this.handleFeedback(message, phone, customer, conversation);
+        }
         // טיפול בהדרכה
         if (currentStage === 'training_request') {
             return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
@@ -1655,42 +1657,31 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
     const msg = message.toLowerCase().trim();
     const data = conversation.data;
     
-    if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה') || 
-        msg.includes('הבנתי') || (msg.includes('מעולה') && !msg.includes('לא'))) {
-        
-        this.memory.updateStage(phone, 'menu', customer); // 🔧 חזרה לתפריט!
+    if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה')) {
+        this.memory.updateStage(phone, 'menu', customer);
         
         return {
-            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\nשמחה שהמידע עזר!\n\n🔄 **חזרה לתפריט הראשי:**\n\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
             stage: 'menu',
             customer: customer,
-            sendTrainingEmailFinal: true, // 🔧 שלח מייל סיכום
+            sendTrainingEmailFinal: true,
             serviceNumber: data.serviceNumber,
-            trainingRequest: data.trainingRequest,
-            trainingContent: data.trainingContent,
-            resolved: true,
-            attachments: data.attachments
+            resolved: true
         };
-        
-    } else if (msg.includes('לא') || msg.includes('לא ברור') || msg.includes('לא הבנתי')) {
-        
-        this.memory.updateStage(phone, 'menu', customer); // 🔧 חזרה לתפריט!
+    } else if (msg.includes('לא')) {
+        this.memory.updateStage(phone, 'menu', customer);
         
         return {
-            response: `📚 **אשלח הדרכה מפורטת יותר**\n\n📧 נכין חומר הדרכה נוסף ונשלח למייל\n⏰ תוך 24 שעות\n\n🔄 **חזרה לתפריט הראשי:**\n\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `📚 **אשלח הדרכה מפורטת למייל**\n\n🔄 **חזרה לתפריט:**\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
             stage: 'menu',
             customer: customer,
-            sendTrainingEmailExpanded: true, // 🔧 שלח מייל מורחב
+            sendTrainingEmailExpanded: true,
             serviceNumber: data.serviceNumber,
-            trainingRequest: data.trainingRequest,
-            trainingContent: data.trainingContent,
-            resolved: false,
-            attachments: data.attachments
+            resolved: false
         };
-        
     } else {
         return {
-            response: `❓ **האם ההדרכה הייתה ברורה?**\n\n✅ כתוב "כן" אם ההדרכה הייתה ברורה\n❌ כתוב "לא" אם צריך הסבר נוסף\n\n📞 039792365`,
+            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n📞 039792365`,
             stage: 'waiting_training_feedback',
             customer: customer
         };
