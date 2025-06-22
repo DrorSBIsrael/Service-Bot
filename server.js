@@ -1037,13 +1037,13 @@ class ResponseHandler {
                 this.memory.createOrUpdateConversation(phone, customer, 'menu');
                 this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
                 return {
-                    response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                    response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
                     stage: 'menu',
                     customer: customer
                 };
             } else {
                 return {
-                    response: `שלום! 👋\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
+                    response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
                     stage: 'confirming_identity',
                     tentativeCustomer: identification.customer
                 };
@@ -1057,7 +1057,7 @@ if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')
     this.memory.updateStage(phone, 'menu', customer);
     this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
     return {
-        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
         stage: 'menu',
         customer: customer
     };
@@ -1073,7 +1073,7 @@ if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')
         
         // בקשת זיהוי ראשונה
         return {
-            response: `שלום! 👋\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`,
+            response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`,
             stage: 'identifying'
         };
     }
@@ -1097,7 +1097,7 @@ if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')
 if (msg === '2' || msg.includes('נזק')) {
     this.memory.updateStage(phone, 'damage_photo', customer);
     return {
-        response: `שלום ${customer.name} 👋\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
         stage: 'damage_photo',
         customer: customer
     };
@@ -1107,7 +1107,7 @@ if (msg === '2' || msg.includes('נזק')) {
 if (msg === '3' || msg.includes('מחיר')) {
     this.memory.updateStage(phone, 'order_request', customer);
     return {
-        response: `שלום ${customer.name} 👋\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
         stage: 'order_request',
         customer: customer
     };
@@ -1117,7 +1117,7 @@ if (msg === '3' || msg.includes('מחיר')) {
 if (msg === '4' || msg.includes('הדרכה')) {
     this.memory.updateStage(phone, 'training_request', customer);
     return {
-        response: `שלום ${customer.name} 👋\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
         stage: 'training_request',
         customer: customer
     };
