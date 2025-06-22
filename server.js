@@ -1167,40 +1167,12 @@ if (msg === '4' || msg.includes('הדרכה')) {
     }
 
 async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
-    let actualProblemDescription = message;
-    
-    // אם הלקוח כתב "סיום" - חפש את התיאור האמיתי
-    if (message.toLowerCase().includes('סיום')) {
-        const conversation = this.memory.getConversation(phone, customer);
-        
-        // חפש את התיאור האמיתי בהודעות הקודמות
-        if (conversation && conversation.messages) {
-            for (let i = conversation.messages.length - 1; i >= 0; i--) {
-                const msg = conversation.messages[i];
-                if (msg.sender === 'customer' && 
-                    !msg.message.toLowerCase().includes('סיום') && 
-                    msg.message !== 'שלח קובץ' &&
-                    msg.message.length > 3) { // וודא שזה לא רק מספר או מילה קצרה
-                    actualProblemDescription = msg.message;
-                    log('DEBUG', `🔍 מצאתי תיאור תקלה אמיתי: "${actualProblemDescription}"`);
-                    break;
-                }
-            }
-        }
-        
-        // אם לא מצאנו תיאור טוב, השתמש בברירת מחדל
-        if (actualProblemDescription === message) {
-            actualProblemDescription = "תקלה עם קבצים מצורפים";
-            log('DEBUG', '⚠️ לא נמצא תיאור תקלה, משתמש בברירת מחדל');
-        }
-    }
-    
     const serviceNumber = await getNextServiceNumber();
     
     // שמירת פרטי התקלה בזיכרון
     this.memory.updateStage(phone, 'processing_problem', customer, {
         serviceNumber: serviceNumber,
-        problemDescription: actualProblemDescription,
+        problemDescription: message,
         attachments: downloadedFiles
     });
     
@@ -1208,17 +1180,17 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
     let solution;
     if (process.env.OPENAI_ASSISTANT_ID) {
         log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
-        solution = await handleProblemWithAssistant(actualProblemDescription, customer);
+        solution = await handleProblemWithAssistant(message, customer);
     } else {
         log('INFO', '🔧 Assistant לא זמין - משתמש בשיטה הרגילה');
-        solution = await findSolution(actualProblemDescription, customer);
+        solution = await findSolution(message, customer);
     }
     
     if (solution.found) {
         // נמצא פתרון - המתן למשוב
         this.memory.updateStage(phone, 'waiting_feedback', customer, {
             serviceNumber: serviceNumber,
-            problemDescription: actualProblemDescription,
+            problemDescription: message,
             solution: solution.response,
             attachments: downloadedFiles,
             threadId: solution.threadId || null,
@@ -1226,7 +1198,7 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         });
         
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${actualProblemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
             stage: 'waiting_feedback',
             customer: customer,
             serviceNumber: serviceNumber
@@ -1236,12 +1208,12 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         this.memory.updateStage(phone, 'completed', customer);
         
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${actualProblemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
             sendTechnicianEmail: true,
-            problemDescription: actualProblemDescription,
+            problemDescription: message,
             attachments: downloadedFiles
         };
     }
