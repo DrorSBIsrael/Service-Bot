@@ -1583,7 +1583,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
         
 const mailOptions = {
     from: 'Report@sbparking.co.il',
-    to: 'Dror@sbparking.co.il',
+    to: 'service@SBcloud.co.il',
     subject: subject,
     html: html
 };
