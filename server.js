@@ -1500,7 +1500,7 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         const msg = message.toLowerCase().trim();
         
         // בדיקה אם הלקוח רוצה לחזור לתפריט
-        if (isMenuRequest && isMenuRequest(message)) {
+        if (isMenuRequest(message)) {
             this.memory.updateStage(phone, 'menu', customer);
             return {
                 response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
@@ -2167,14 +2167,6 @@ if (tempFiles.length > 0) {
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
-} else if (result.sendTrainingEmail) {
-    log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
-    await sendEmail(result.customer, 'training', result.trainingRequest, {
-        serviceNumber: result.serviceNumber,
-        trainingRequest: result.trainingRequest,
-        trainingContent: result.trainingContent,
-        attachments: result.attachments
-    });
 }
         
 } else if (result.sendOrderEmail) {
