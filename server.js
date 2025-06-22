@@ -549,38 +549,23 @@ class AdvancedMemory {
     }
     
     // יצירת מפתח ייחודי ללקוח
-    createKey(phone, customer = null) {
-        return customer ? `customer_${customer.id}_${phone}` : `unknown_${phone}`;
-    }
+createKey(phone, customer = null) {
+    const cleanPhone = phone.replace(/[^\d]/g, '');
+    return `conv_${cleanPhone}`;
+}
 
 // קבלת שיחה - גרסה מתוקנת
 getConversation(phone, customer = null) {
-    // ניקוי הטלפון
     const cleanPhone = phone.replace(/[^\d]/g, '');
-    
-    // חיפוש לפי מפתח מדויק קודם
     const key = this.createKey(phone, customer);
+    
     let conv = this.conversations.get(key);
     
-    // אם לא נמצא - חפש לפי טלפון נקי
-    if (!conv) {
-        for (const [existingKey, existingConv] of this.conversations.entries()) {
-            // בדיקה אם המפתח מכיל את הטלפון הנקי
-            if (existingKey.includes(cleanPhone)) {
-                conv = existingConv;
-                log('DEBUG', `🔍 נמצא conversation קיים: ${existingKey} עם שלב: ${conv.stage}`);
-                
-                // עדכון המפתח להיות מדויק יותר
-                if (customer && !existingKey.includes(`customer_${customer.id}`)) {
-                    this.conversations.delete(existingKey);
-                    const newKey = this.createKey(phone, customer);
-                    conv.customer = customer;
-                    this.conversations.set(newKey, conv);
-                    log('DEBUG', `🔄 עדכנתי מפתח: ${existingKey} → ${newKey}`);
-                }
-                break;
-            }
-        }
+    // אם נמצא conversation ויש לקוח חדש - עדכן אותו
+    if (conv && customer && !conv.customer) {
+        conv.customer = customer;
+        conv.stage = 'menu';
+        log('DEBUG', `🔄 עדכנתי conversation עם לקוח: ${customer.name}`);
     }
     
     return conv;
@@ -588,52 +573,36 @@ getConversation(phone, customer = null) {
     
 // יצירת או עדכון שיחה - גרסה מתוקנת
 createOrUpdateConversation(phone, customer = null, initialStage = 'identifying') {
-    // חיפוש conversation קיים לפי טלפון
-    let existingConv = null;
-    for (const [key, conv] of this.conversations.entries()) {
-        if (key.includes(phone)) {
-            existingConv = conv;
-            break;
-        }
-    }
+    const key = this.createKey(phone, customer);
+    let conv = this.conversations.get(key);
     
-    if (existingConv) {
+    if (conv) {
         // עדכן conversation קיים
-        existingConv.lastActivity = new Date();
-        if (customer && !existingConv.customer) {
-            existingConv.customer = customer;
+        conv.lastActivity = new Date();
+        if (customer && !conv.customer) {
+            conv.customer = customer;
+            conv.stage = 'menu';
         }
-        log('DEBUG', `🔄 מצאתי conversation קיים - שלב: ${existingConv.stage}`);
-        return existingConv;
+        log('DEBUG', `🔄 מצאתי conversation קיים - שלב: ${conv.stage}`);
+        return conv;
     }
     
-// יצירת conversation חדש רק אם לא קיים
-const key = this.createKey(phone, customer);
-
-// אם יש לקוח - נקה conversations ישנים של אותו טלפון קודם
-if (customer) {
-    for (const [existingKey, existingConv] of this.conversations.entries()) {
-        if (existingKey !== key && existingKey.includes(phone)) {
-            this.conversations.delete(existingKey);
-            log('DEBUG', `🧹 ניקיתי conversation ישן: ${existingKey}`);
-        }
-    }
-}
-
-const conv = {
-    phone: phone,
-    customer: customer,
-    stage: customer ? 'menu' : initialStage,
-    messages: [],
-    startTime: new Date(),
-    lastActivity: new Date(),
-    data: {}
-};
-this.conversations.set(key, conv);
-log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
-return conv;
-}
+    // יצירת conversation חדש
+    conv = {
+        phone: phone,
+        customer: customer,
+        stage: customer ? 'menu' : initialStage,
+        messages: [],
+        startTime: new Date(),
+        lastActivity: new Date(),
+        data: {}
+    };
     
+    this.conversations.set(key, conv);
+    log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
+    return conv;
+}
+
     // הוספת הודעה
     addMessage(phone, message, sender, customer = null) {
         const conv = this.createOrUpdateConversation(phone, customer);
@@ -689,6 +658,34 @@ return conv;
     }
 }
 
+class MessageTracker {
+    constructor() {
+        this.processedMessages = new Map(); // שנה ל-Map עם זמן
+        setInterval(() => this.cleanup(), 30 * 60 * 1000); // 30 דקות במקום 10
+    }
+    
+    isProcessed(messageId) {
+        const entry = this.processedMessages.get(messageId);
+        if (!entry) return false;
+        // אם עברו יותר מ-30 דקות, נחשב שלא עובד
+        return (Date.now() - entry.timestamp) < 30 * 60 * 1000;
+    }
+    
+    markProcessed(messageId) {
+        this.processedMessages.set(messageId, { timestamp: Date.now() });
+    }
+    
+    cleanup() {
+        const now = Date.now();
+        for (const [messageId, entry] of this.processedMessages.entries()) {
+            if (now - entry.timestamp > 30 * 60 * 1000) {
+                this.processedMessages.delete(messageId);
+            }
+        }
+    }
+}
+
+const messageTracker = new MessageTracker();
 const memory = new AdvancedMemory();
 
 // אתחול Google Sheets
@@ -1758,6 +1755,12 @@ app.post('/webhook/whatsapp', async (req, res) => {
             return res.status(200).json({ status: 'OK - not a message' });
         }
         
+        const messageId = req.body.messageData?.id || req.body.messageData?.messageId || Date.now();
+        if (messageTracker.isProcessed(messageId)) {
+            log('INFO', '🔄 הודעה כבר עובדה - מדלג');
+            return res.status(200).json({ status: 'Already processed' });
+        }
+        messageTracker.markProcessed(messageId);
         const messageData = req.body.messageData;
         const senderData = req.body.senderData;
         
@@ -1786,15 +1789,13 @@ if (messageData.textMessageData) {
         
 // זיהוי לקוח
 let customer = findCustomerByPhone(phone);
-
-// בדיקה אם יש לקוח בזיכרון
-const existingConv = memory.getConversation(phone);
-if (existingConv && existingConv.customer && !customer) {
-    customer = existingConv.customer;
-    log('DEBUG', `🔍 נמצא לקוח בזיכרון: ${customer.name}`);
+if (!customer) {
+    const existingConv = memory.getConversation(phone);
+    if (existingConv && existingConv.customer) {
+        customer = existingConv.customer;
+        log('DEBUG', `🔍 נמצא לקוח בזיכרון: ${customer.name}`);
+    }
 }
-
-log('DEBUG', `🎯 מעבד הודעה: טלפון=${phone}, לקוח=${customer ? customer.name : 'לא מזוהה'}, הודעה="${messageText}"`);
 
 const currentConv = memory.getConversation(phone, customer);
 log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
