@@ -2136,7 +2136,7 @@ if (tempFiles.length > 0) {
             downloadedFiles
         );
         
-        // שליחת תגובה
+// שליחת תגובה
         await sendWhatsApp(phone, result.response);
         memory.addMessage(phone, result.response, 'hadar', result.customer);
         
@@ -2167,17 +2167,8 @@ if (tempFiles.length > 0) {
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
-}
+        }
         
-} else if (result.sendOrderEmail) {
-    log('INFO', `📧 שולח מייל הזמנה ללקוח ${result.customer.name}`);
-    await sendEmail(result.customer, 'order', result.orderDetails, {
-        serviceNumber: result.serviceNumber,
-        orderDetails: result.orderDetails,
-        attachments: result.attachments
-    });
-}
-
         res.status(200).json({ status: 'OK' });
         
     } catch (error) {
