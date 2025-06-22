@@ -1176,7 +1176,7 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         attachments: downloadedFiles
     });
     
-    // ניסיון פתרון עם Assistant קודם
+    // מיד עבד את התקלה - בין אם יש קבצים או לא
     let solution;
     if (process.env.OPENAI_ASSISTANT_ID) {
         log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
@@ -1197,8 +1197,18 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
             source: solution.source || 'database'
         });
         
+        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
+        
+        // אם יש קבצים מצורפים - הוסף אישור
+        if (downloadedFiles && downloadedFiles.length > 0) {
+            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
+            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+        }
+        
+        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+        
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: responseMessage,
             stage: 'waiting_feedback',
             customer: customer,
             serviceNumber: serviceNumber
@@ -1207,8 +1217,18 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         // לא נמצא פתרון - שלח טכנאי
         this.memory.updateStage(phone, 'completed', customer);
         
+        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
+        
+        // אם יש קבצים מצורפים - הוסף אישור
+        if (downloadedFiles && downloadedFiles.length > 0) {
+            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
+            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+        }
+        
+        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+        
         return {
-            response: `📋 **קיבלתי את התיאור**\n\n"${message}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`,
+            response: responseMessage,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
@@ -1773,6 +1793,58 @@ log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.s
 // הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
     const conversation = memory.getConversation(phone, customer);
+    
+    // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
+    if (conversation?.stage === 'problem_description') {
+        const timestamp = Date.now();
+        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
+        const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
+        
+        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
+        if (filePath) {
+            downloadedFiles.push(filePath);
+            log('INFO', `✅ ${fileType} הורד עבור תקלה: ${fileName}`);
+            
+            // עבד את התקלה מיד עם הקובץ
+            const result = await responseHandler.generateResponse(
+                messageText, 
+                phone, 
+                customer, 
+                hasFile, 
+                fileType, 
+                downloadedFiles
+            );
+            
+            await sendWhatsApp(phone, result.response);
+            memory.addMessage(phone, result.response, 'hadar', result.customer);
+            
+            log('INFO', `📤 תקלה עובדה עם קובץ ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
+            
+            // שליחת מיילים לפי הצורך
+            if (result.sendTechnicianEmail) {
+                log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
+                await sendEmail(result.customer, 'technician', messageText, {
+                    serviceNumber: result.serviceNumber,
+                    problemDescription: result.problemDescription,
+                    solution: result.solution,
+                    resolved: result.resolved,
+                    attachments: result.attachments
+                });
+            } else if (result.sendSummaryEmail) {
+                log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
+                await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
+                    serviceNumber: result.serviceNumber,
+                    problemDescription: result.problemDescription,
+                    solution: result.solution,
+                    resolved: result.resolved
+                });
+            }
+            
+            return res.status(200).json({ status: 'OK - problem processed with file' });
+        }
+    }
+    
+    // עבור שלבים אחרים (damage_photo, order_request וכו') - השאר את הלוגיקה הקיימת
     const existingFiles = conversation?.data?.tempFiles || [];
     
     // בדיקה שלא חורגים מ-4 קבצים בסה"כ
@@ -1807,7 +1879,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
             confirmMessage += `\n\n📎 ניתן לשלוח עוד ${remainingSlots} קבצים`;
         }
         
-        // הנחיות ברורות לסיום
+        // הנחיות ברורות לסיום (רק עבור נזקים והזמנות)
         if (conversation?.stage === 'damage_photo') {
             confirmMessage += `\n\n✏️ **לסיום הדיווח:** כתוב "סיום" + מספר היחידה`;
             confirmMessage += `\nדוגמה: "סיום יחידה 101"`;
