@@ -1933,9 +1933,14 @@ if (!customer) {
 const currentConv = memory.getConversation(phone, customer);
 log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
 
-// הורדת קבצים אם יש - עם הגבלת 4 קבצים מקסימום
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
     const conversation = memory.getConversation(phone, customer);
+    
+    // ❗️ אם אנחנו במצב waiting_feedback - התעלם מקבצים חדשים
+    if (conversation?.stage === 'waiting_feedback') {
+        log('INFO', `⚠️ מתעלם מקובץ ${fileType} - כבר במצב המתנה למשוב`);
+        return res.status(200).json({ status: 'OK - ignoring file after solution' });
+    }
     
     // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
     if (conversation?.stage === 'problem_description') {
