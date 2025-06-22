@@ -427,18 +427,39 @@ let customers = [];
 let serviceFailureDB = [];
 let trainingDB = {};
 
-// טעינת לקוחות
+// טעינת לקוחות עם דיבוג משופר
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
+    
+    // בדיקת המבנה של הקובץ
+    log('DEBUG', '🔍 בדיקת מבנה קובץ לקוחות:');
+    if (customersData.length > 0) {
+        const firstCustomer = customersData[0];
+        log('DEBUG', 'שדות זמינים:', Object.keys(firstCustomer));
+        log('DEBUG', 'דוגמה ללקוח ראשון:', JSON.stringify(firstCustomer, null, 2));
+    }
+    
     customers = customersData.map(client => ({
-        id: client["מספר לקוח"],
-        name: client["שם לקוח"],
-        site: client["שם החניון"],
-        phone: client["טלפון"],
-        address: client["כתובת הלקוח"],
-        email: client["מייל"]
+        id: client["מספר לקוח"] || client.id || client.customer_id,
+        name: client["שם לקוח"] || client.name || client.customer_name,
+        site: client["שם החניון"] || client.site || client.parking_name,
+        phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
+        phone1: client["טלפון1"] || client.phone1,
+        phone2: client["טלפון2"] || client.phone2, 
+        phone3: client["טלפון3"] || client.phone3,
+        phone4: client["טלפון4"] || client.phone4,
+        address: client["כתובת הלקוח"] || client.address || client.customer_address,
+        email: client["מייל"] || client.email
     }));
+    
     log('INFO', `📊 נטענו ${customers.length} לקוחות`);
+    
+    // הצגת כמה דוגמאות לדיבוג
+    log('DEBUG', '👥 דוגמאות לקוחות:');
+    customers.slice(0, 3).forEach((customer, index) => {
+        log('DEBUG', `${index + 1}. ${customer.name} - טלפון: ${customer.phone}`);
+    });
+    
 } catch (error) {
     log('ERROR', '❌ שגיאה בטעינת לקוחות:', error.message);
     customers = [{ 
@@ -696,37 +717,125 @@ const memory = new AdvancedMemory();
 
 // זיהוי לקוח מתקדם - מהקוד המקורי שעובד
 function findCustomerByPhone(phone) {
-    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const cleanIncomingPhone = phone.replace(/[^\d]/g, '');
     
-    function isPhoneMatch(customerPhone, incomingPhone) {
-        if (!customerPhone) return false;
-        const cleanCustomerPhone = customerPhone.replace(/[^\d]/g, '');
+    log('DEBUG', `🔍 מחפש לקוח עבור טלפון נכנס: ${phone} -> נקי: ${cleanIncomingPhone}`);
+    
+    function normalizePhone(phoneNumber) {
+        if (!phoneNumber) return '';
         
-        return cleanCustomerPhone === incomingPhone || 
-               cleanCustomerPhone === incomingPhone.substring(3) || 
-               ('972' + cleanCustomerPhone) === incomingPhone ||
-               cleanCustomerPhone === ('0' + incomingPhone.substring(3)) ||
-               ('0' + cleanCustomerPhone.substring(3)) === incomingPhone ||
-               cleanCustomerPhone.substring(1) === incomingPhone.substring(3) ||
-               ('972' + cleanCustomerPhone.substring(1)) === incomingPhone;
+        // הסרת כל התווים שאינם ספרות
+        let clean = phoneNumber.replace(/[^\d]/g, '');
+        
+        // רשימת נורמליזציות אפשריות
+        const normalized = [];
+        
+        // הוספת המספר כפי שהוא
+        normalized.push(clean);
+        
+        // אם מתחיל ב-972 (קוד ישראל) - הוסף גרסה ללא 972
+        if (clean.startsWith('972')) {
+            normalized.push(clean.substring(3));
+        }
+        
+        // אם מתחיל ב-0 - הוסף גרסה עם 972
+        if (clean.startsWith('0')) {
+            normalized.push('972' + clean.substring(1));
+            normalized.push(clean.substring(1)); // גם בלי ה-0
+        }
+        
+        // אם לא מתחיל ב-972 או ב-0, נסה להוסיף 972
+        if (!clean.startsWith('972') && !clean.startsWith('0') && clean.length >= 9) {
+            normalized.push('972' + clean);
+            normalized.push('0' + clean);
+        }
+        
+        // אם מתחיל ב-5 (סלולרי ישראלי) - הוסף גרסאות נוספות
+        if (clean.startsWith('5') && clean.length === 9) {
+            normalized.push('0' + clean);
+            normalized.push('972' + clean);
+        }
+        
+        return [...new Set(normalized)]; // הסרת כפילויות
     }
     
-    let customer = customers.find(c => {
-        return isPhoneMatch(c.phone, cleanPhone) ||
-               isPhoneMatch(c.phone1, cleanPhone) ||
-               isPhoneMatch(c.phone2, cleanPhone) ||
-               isPhoneMatch(c.phone3, cleanPhone) ||
-               isPhoneMatch(c.phone4, cleanPhone);
-    });
+    // נורמליזציה של הטלפון הנכנס
+    const incomingVariations = normalizePhone(cleanIncomingPhone);
     
-    if (customer) {
-        log('INFO', `✅ לקוח מזוהה לפי טלפון: ${customer.name} מ${customer.site}`);
-        return customer;
+    log('DEBUG', `📱 וריאציות טלפון נכנס: ${incomingVariations.join(', ')}`);
+    
+    // חיפוש בכל הלקוחות
+    for (const customer of customers) {
+        const phoneFields = [
+            customer.phone, 
+            customer.phone1, 
+            customer.phone2, 
+            customer.phone3, 
+            customer.phone4,
+            customer.טלפון, // אולי יש שדה עברית
+            customer.mobile,
+            customer.cell
+        ].filter(p => p && p.trim() !== '');
+        
+        for (const customerPhone of phoneFields) {
+            const customerVariations = normalizePhone(customerPhone);
+            
+            // בדיקת התאמה בין כל הוריאציות
+            for (const incomingVar of incomingVariations) {
+                for (const customerVar of customerVariations) {
+                    // התאמה מדויקת
+                    if (incomingVar === customerVar) {
+                        log('INFO', `✅ התאמה מדויקת: ${incomingVar} = ${customerVar} ללקוח ${customer.name}`);
+                        return customer;
+                    }
+                    
+                    // התאמה חלקית (8-9 ספרות אחרונות)
+                    if (incomingVar.length >= 8 && customerVar.length >= 8) {
+                        const incomingSuffix = incomingVar.slice(-9);
+                        const customerSuffix = customerVar.slice(-9);
+                        
+                        if (incomingSuffix === customerSuffix) {
+                            log('INFO', `✅ התאמה חלקית: ${incomingSuffix} ללקוח ${customer.name}`);
+                            return customer;
+                        }
+                    }
+                }
+            }
+        }
     }
     
-    log('INFO', `⚠️ לקוח לא מזוהה לפי טלפון: ${phone}`);
+    log('WARN', `⚠️ לא נמצא לקוח עבור טלפון: ${phone} (נורמליזציות: ${incomingVariations.join(', ')})`);
     return null;
 }
+
+// גם הוסף פונקציה עזר לדיבוג - הוסף אחרי הפונקציה למעלה:
+
+function debugPhoneSearch(targetPhone) {
+    console.log(`\n🔍 DEBUG PHONE SEARCH: ${targetPhone}`);
+    const cleanPhone = targetPhone.replace(/[^\d]/g, '');
+    console.log(`📱 נוקה ל: ${cleanPhone}`);
+    
+    // הצג כמה לקוחות לדוגמה
+    const sampleCustomers = customers.slice(0, 5);
+    sampleCustomers.forEach(customer => {
+        console.log(`👤 ${customer.name}:`);
+        [customer.phone, customer.phone1, customer.phone2].forEach((phone, index) => {
+            if (phone) {
+                const cleanCustomerPhone = phone.replace(/[^\d]/g, '');
+                console.log(`   📞 phone${index || ''}: ${phone} -> ${cleanCustomerPhone}`);
+            }
+        });
+    });
+    
+    console.log(`\n🎯 מחפש התאמה עבור: ${targetPhone}`);
+    const result = findCustomerByPhone(targetPhone);
+    console.log(`📊 תוצאה: ${result ? result.name : 'לא נמצא'}\n`);
+    
+    return result;
+}
+
+// להוסיף לבדיקה - קרא לפונקציה הזו מה-webhook כדי לבדוק:
+// debugPhoneSearch('972543084210'); // הטלפון של יעקב פזרקן
 
 // זיהוי לקוח לפי שם חניון - מהקוד המקורי שעובד
 function findCustomerByName(message) {
@@ -1026,58 +1135,92 @@ class ResponseHandler {
         // שלב 2: טיפול לפי שלב נוכחי
         return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles);
     }
-    
-    async handleCustomerIdentification(message, phone, conversation) {
-        // נסיון זיהוי לפי שם חניון
-        const identification = findCustomerByName(message);
-        
-        if (identification) {
-            if (identification.confidence === 'high') {
-                const customer = identification.customer;
-                this.memory.createOrUpdateConversation(phone, customer, 'menu');
-                this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
-                return {
-                    response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
-                    stage: 'menu',
-                    customer: customer
-                };
-            } else {
-                return {
-                    response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
-                    stage: 'confirming_identity',
-                    tentativeCustomer: identification.customer
-                };
-            }
-        }
-        
-        // אישור זהות
-        if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
-if (msg.includes('כן') || msg.includes('נכון') || msg.includes('תקין')) {
-    const customer = conversation.data.tentativeCustomer;
-    this.memory.updateStage(phone, 'menu', customer);
-    this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
-    return {
-        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
-        stage: 'menu',
-        customer: customer
-    };
 
-            } else {
-                this.memory.updateStage(phone, 'identifying');
-                return {
-                    response: `בסדר, אנא כתוב את שם החניון הנכון:\n\nלדוגמה: "אינפיניטי" או "עזריאלי גבעתיים"\n\n📞 039792365`,
-                    stage: 'identifying'
-                };
-            }
+async handleCustomerIdentification(message, phone, conversation) {
+    // נסיון זיהוי לפי שם חניון
+    const identification = findCustomerByName(message);
+    
+    if (identification) {
+        if (identification.confidence === 'high') {
+            const customer = identification.customer;
+            this.memory.createOrUpdateConversation(phone, customer, 'menu');
+            this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
+            return {
+                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        } else {
+            // שמירת הלקוח הזמני בנתונים
+            this.memory.updateStage(phone, 'confirming_identity', null, {
+                tentativeCustomer: identification.customer
+            });
+            
+            return {
+                response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
+                stage: 'confirming_identity',
+                tentativeCustomer: identification.customer
+            };
         }
-        
-        // בקשת זיהוי ראשונה
-        return {
-            response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nלדוגמה: "אינפיניטי" או "עזריאלי תל אביב"\n\n📞 039792365`,
-            stage: 'identifying'
-        };
     }
     
+    // אישור זהות - תיקון הקוד
+    if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
+        if (message.toLowerCase().includes('כן') || 
+            message.toLowerCase().includes('נכון') || 
+            message.toLowerCase().includes('תקין') ||
+            message.toLowerCase().includes('yes')) {
+            
+            const customer = conversation.data.tentativeCustomer;
+            this.memory.updateStage(phone, 'menu', customer, { tentativeCustomer: null });
+            this.memory.addMessage(phone, `אושר כלקוח: ${customer.name}`, 'system', customer);
+            
+            return {
+                response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        } else {
+            // הלקוח אמר לא - נסה זיהוי מחדש
+            this.memory.updateStage(phone, 'identifying', null, { tentativeCustomer: null });
+            
+            // נסה זיהוי לפי ההודעה החדשה
+            const newIdentification = findCustomerByName(message);
+            if (newIdentification) {
+                if (newIdentification.confidence === 'high') {
+                    const customer = newIdentification.customer;
+                    this.memory.updateStage(phone, 'menu', customer);
+                    return {
+                        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                        stage: 'menu',
+                        customer: customer
+                    };
+                } else {
+                    this.memory.updateStage(phone, 'confirming_identity', null, {
+                        tentativeCustomer: newIdentification.customer
+                    });
+                    return {
+                        response: `האם אתה ${newIdentification.customer.name} מחניון ${newIdentification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
+                        stage: 'confirming_identity',
+                        tentativeCustomer: newIdentification.customer
+                    };
+                }
+            }
+            
+            return {
+                response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n📞 039792365`,
+                stage: 'identifying'
+            };
+        }
+    }
+    
+    // בקשת זיהוי ראשונה
+    return {
+        response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n📞 039792365`,
+        stage: 'identifying'
+    };
+}
+
     async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles) {
         const msg = message.toLowerCase().trim();
         const currentStage = conversation ? conversation.stage : 'menu';
