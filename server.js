@@ -1146,9 +1146,18 @@ class ResponseHandler {
         // שלב 2: טיפול לפי שלב נוכחי
         return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles);
     }
-
-async handleCustomerIdentification(message, phone, conversation) {
     // נסיון זיהוי לפי שם חניון
+async handleCustomerIdentification(message, phone, conversation) {
+    // טיפול בלקוח לא מזוהה שלחץ "1"
+    if (message.trim() === '1') {
+        this.memory.updateStage(phone, 'guest_details', null);
+        return {
+            response: `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה מעט פרטים:\n\n📝 **אנא שלח הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה בקשה\n\n**דוגמה:**\nדרור פרינץ\n050-1234567\nDror@example.com\nחניון עזריאלי\nהיחידה לא עובדת\n\n📞 039792365`,
+            stage: 'guest_details'
+        };
+    }
+    
+    // שאר הקוד הקיים...
     const identification = findCustomerByName(message);
     
     if (identification) {
@@ -1218,24 +1227,28 @@ async handleCustomerIdentification(message, phone, conversation) {
                 }
             }
             
-            return {
-                response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n📞 039792365`,
-                stage: 'identifying'
-            };
+return {
+    response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "חניון רמת גן"\n• "נתבג"\n• "אינפיניטי"\n• "עזריאלי תל אביב"\n\n❓ **לא הצלחנו לזהות את הלקוח? לחץ 1 להמשיך**\n\n📞 039792365`,
+    stage: 'identifying'
+};
         }
     }
     
     // בקשת זיהוי ראשונה
-    return {
-        response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n📞 039792365`,
-        stage: 'identifying'
-    };
+// בקשת זיהוי ראשונה
+return {
+    response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "חניון רמת גן"\n• "נתבג" \n• "אינפיניטי"\n• "עזריאלי תל אביב"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
+    stage: 'identifying'
+};
 }
 
     async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles) {
         const msg = message.toLowerCase().trim();
         const currentStage = conversation ? conversation.stage : 'menu';
-        
+        // טיפול בלקוח אורח
+if (currentStage === 'guest_details') {
+    return await this.handleGuestDetails(message, phone);
+}
         // תפריט ראשי
         if (currentStage === 'menu' || !currentStage) {
             if (msg === '1' || msg.includes('תקלה')) {
@@ -1835,6 +1848,19 @@ response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הב�
         };
     }
 
+async handleGuestDetails(message, phone) {
+    const serviceNumber = await getNextServiceNumber();
+    this.memory.updateStage(phone, 'completed', null);
+    
+    return {
+        response: `✅ **פנייתך התקבלה בהצלחה!**\n\n📧 העברנו את פרטיך לצוות השירות\n⏰ נחזור אליך תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        serviceNumber: serviceNumber,
+        sendGuestEmail: true,
+        guestDetails: message
+    };
+}
+
 } // סגירת המחלקה ResponseHandler
 
 const responseHandler = new ResponseHandler(memory, customers);
@@ -2133,6 +2159,66 @@ case 'general_office':
         
     } catch (error) {
         log('ERROR', `❌ שגיאה בשליחת מייל ללקוח ${customer.name}:`, error.message);
+        return false;
+    }
+}
+
+// שליחת מייל ללקוח אורח
+async function sendGuestEmail(guestDetails, phone, serviceNumber) {
+    try {
+        const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
+        
+        const html = `
+            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
+                    
+                    <div style="background: linear-gradient(45deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">🆕 לקוח חדש/לא מזוהה</h1>
+                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
+                    </div>
+                    
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #ffc107;">
+                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הפנייה</h2>
+                        <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
+                        <p><strong>טלפון:</strong> ${phone}</p>
+                        <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
+                    </div>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">📝 פרטים שהתקבלו</h2>
+                        <div style="background: white; padding: 15px; border-radius: 5px; white-space: pre-line;">${guestDetails}</div>
+                    </div>
+                    
+                    <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                        <h3 style="margin-top: 0; color: #1976d2;">⚠️ פעולות נדרשות</h3>
+                        <ul>
+                            <li>לזהות את הלקוח במערכת</li>
+                            <li>להוסיף פרטים חסרים</li>
+                            <li>לטפל בפנייה</li>
+                            <li>ליצור קשר תוך 24 שעות</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: 'Report@sbparking.co.il',
+            to: 'service@sbcloud.co.il,office@sbcloud.co.il',
+            subject: subject,
+            html: html
+        };
+
+        await transporter.sendMail(mailOptions);
+        log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
+        return true;
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליחת מייל לקוח אורח:`, error.message);
         return false;
     }
 }
@@ -2484,6 +2570,11 @@ await sendCustomerConfirmationEmail(result.customer, 'technician', result.servic
                 attachments: result.attachments
             });
 await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumber, result.orderDetails);
+} else if (result.sendGuestEmail) {
+    log('INFO', `📧 שולח מייל לקוח אורח`);
+    await sendGuestEmail(result.guestDetails, phone, result.serviceNumber);
+}
+
 } else if (result.sendDamageEmail) {
     log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'damage', result.problemDescription, {
