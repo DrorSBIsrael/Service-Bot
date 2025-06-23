@@ -440,16 +440,16 @@ try {
     }
     
 customers = customersData.map(client => ({
-    id: client["מספר לקוח"] || client.id || client.customer_id || client["Customer ID"] || client.customerId || client.clientId || "N/A",
-    name: client["שם לקוח"] || client.name || client.customer_name || client["Customer Name"] || client.customerName || client.clientName,
-    site: client["שם החניון"] || client.site || client.parking_name || client["Site Name"] || client.siteName || client.location,
-    phone: client["טלפון"] || client.phone || client.phone1 || client.mobile || client["Phone"] || client.telephone,
-    phone1: client["טלפון1"] || client.phone1 || client["Phone1"],
-    phone2: client["טלפון2"] || client.phone2 || client["Phone2"], 
-    phone3: client["טלפון3"] || client.phone3 || client["Phone3"],
-    phone4: client["טלפון4"] || client.phone4 || client["Phone4"],
-    address: client["כתובת הלקוח"] || client.address || client.customer_address || client["Address"] || client.location,
-    email: client["מייל"] || client.email || client["Email"] || client.mail || client["E-mail"] || client.emailAddress
+    id: client["מס' לקוח"] || client["מספר לקוח"] || client.id || client.customer_id || "N/A",
+    name: client["שם לקוח"] || client.name || client.customer_name,
+    site: client["שם החניון"] || client.site || client.parking_name,
+    phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
+    phone1: client["טלפון1"] || client.phone1,
+    phone2: client["טלפון2"] || client.phone2, 
+    phone3: client["טלפון3"] || client.phone3,
+    phone4: client["טלפון4"] || client.phone4,
+    address: client["כתובת הלקוח"] || client.address || client.customer_address,
+    email: client["דואר אלקטרוני"] || client["מייל"] || client.email
 }));
     
 log('DEBUG', '🔍 בדיקת שדות לקוח ראשון:');
@@ -1873,27 +1873,36 @@ async function sendEmail(customer, type, details, extraData = {}) {
             .join('');
         
         let subject, emailType, bgColor;
-        if (type === 'technician') {
-            subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
-            emailType = '🚨 קריאת טכנאי דחופה';
-            bgColor = '#dc3545, #c82333';
-        } else if (type === 'order') {
-            subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
-            emailType = '💰 בקשת הצעת מחיר';
-            bgColor = '#ffc107, #e0a800';
-        } else if (type === 'training') {
-            subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
-            emailType = '📚 בקשת הדרכה';
-            bgColor = '#17a2b8, #138496';
-        } else if (type === 'general_office') {
-          subject = `🏢 פנייה למשרד כללי ${serviceNumber} - ${customer.name}`;
-          emailType = '🏢 פנייה למשרד כללי';
-          bgColor = '#6f42c1, #5a32a3';
-        } else {
-            subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
-            emailType = '📋 סיכום קריאת שירות';
-            bgColor = '#28a745, #20c997';
-        }
+        let recipients = ['service@SBcloud.co.il'];
+if (type === 'technician') {
+    subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
+    emailType = '🚨 קריאת טכנאי דחופה';
+    bgColor = '#dc3545, #c82333';
+    // טכנאי - רק ל-Service
+} else if (type === 'damage') {
+    subject = `📷 דיווח נזק ${serviceNumber} - ${customer.name} (${customer.site})`;
+    emailType = '📷 דיווח נזק';
+    bgColor = '#fd7e14, #e55a26';
+    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
+} else if (type === 'order') {
+    subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
+    emailType = '💰 בקשת הצעת מחיר';
+    bgColor = '#ffc107, #e0a800';
+    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
+} else if (type === 'training') {
+    subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
+    emailType = '📚 בקשת הדרכה';
+    bgColor = '#17a2b8, #138496';
+} else if (type === 'general_office') {
+    subject = `🏢 פנייה למשרד כללי ${serviceNumber} - ${customer.name}`;
+    emailType = '🏢 פנייה למשרד כללי';
+    bgColor = '#6f42c1, #5a32a3';
+    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
+} else {
+    subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+    emailType = '📋 סיכום קריאת שירות';
+    bgColor = '#28a745, #20c997';
+}
         
         // בניית סיכום השיחה
         let conversationSummary = '';
@@ -1956,8 +1965,12 @@ async function sendEmail(customer, type, details, extraData = {}) {
                     <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
                         <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
                         ${conversationSummary}
-                    </div>
-                    ` : ''}
+	<!-- 🔧 הוספת אינדיקציה שהמייל נשלח גם ל-Office -->
+	${recipients.length > 1 ? `
+	<div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
+	    <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
+	</div>
+	` : ''}
                     
                     <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
                         <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
@@ -1968,7 +1981,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
         
 const mailOptions = {
     from: 'Report@sbparking.co.il',
-    to: 'service@SBcloud.co.il',
+    to: recipients.join(', '), // שילוב כל הנמענים
     subject: subject,
     html: html
 };
@@ -1989,7 +2002,7 @@ if (extraData.attachments && extraData.attachments.length > 0) {
 }
 
         await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
+        log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''} - נמענים: ${recipients.join(', ')}`);
         
 // כתיבה ל-Google Sheets
         const serviceData = {
