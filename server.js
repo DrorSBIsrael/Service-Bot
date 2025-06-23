@@ -1230,7 +1230,7 @@ async handleCustomerIdentification(message, phone, conversation) {
             if (msg === '1' || msg.includes('תקלה')) {
                 this.memory.updateStage(phone, 'problem_description', customer);
                 return {
-                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n🤞המתן מספר שניות לתשובה🤞`,
+                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`,
                     stage: 'problem_description',
                     customer: customer
                 };
@@ -1260,12 +1260,22 @@ if (msg === '3' || msg.includes('מחיר')) {
 if (msg === '4' || msg.includes('הדרכה')) {
     this.memory.updateStage(phone, 'training_request', customer);
     return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n\n🤞המתן מספר שניות לתשובה🤞`,
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n\nהמתן מספר שניות לתשובה🤞`,
         stage: 'training_request',
         customer: customer
     };
 }
-            
+
+// משרד כללי
+if (msg === '5' || msg.includes('משרד')) {
+    this.memory.updateStage(phone, 'general_office_request', customer);
+    return {
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`,
+        stage: 'general_office_request',
+        customer: customer
+    };
+}
+
             // אם לא הבין - חזור לתפריט
             this.memory.updateStage(phone, 'menu', customer);
             return {
@@ -1296,7 +1306,11 @@ if (msg === '4' || msg.includes('הדרכה')) {
         if (currentStage === 'training_request') {
             return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-        
+        // טיפול בפניות משרד כללי
+        if (currentStage === 'general_office_request') {
+        return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
+        }
+
         // 🔧 NEW: משוב על הדרכה
         if (currentStage === 'waiting_training_feedback') {
             return await this.handleTrainingFeedback(message, phone, customer, conversation);
@@ -1721,13 +1735,96 @@ async handleFeedback(message, phone, customer, conversation) {
             };
         } else {
             return {
-                response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
+response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
                 stage: 'waiting_feedback',
                 customer: customer
             };
         }
     }
-} 
+
+    async handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles) {
+        const msg = message.toLowerCase().trim();
+        
+        // בדיקה אם הלקוח רוצה לחזור לתפריט
+        if (isMenuRequest(message)) {
+            this.memory.updateStage(phone, 'menu', customer);
+            return {
+                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        }
+        
+        // בדיקה אם הלקוח רוצה לסיים
+        if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
+            // חיפוש בקשה קודמת בשיחה
+            const conversation = this.memory.getConversation(phone, customer);
+            let requestDescription = '';
+            
+            if (conversation && conversation.messages) {
+                const requestMessages = conversation.messages.filter(msg => 
+                    msg.sender === 'customer' && 
+                    msg.message.length > 4 && 
+                    !msg.message.toLowerCase().includes('סיום') &&
+                    !msg.message.toLowerCase().includes('לסיים')
+                );
+                
+                if (requestMessages.length > 0) {
+                    requestDescription = requestMessages[requestMessages.length - 1].message;
+                }
+            }
+            
+            // אם לא נמצאה בקשה קודמת
+            if (!requestDescription) {
+                return {
+                    response: `📋 **אנא תאר את בקשתך**\n\nדוגמה: "עדכון פרטי התקשרות + סיום"\n\n📞 039792365`,
+                    stage: 'general_office_request',
+                    customer: customer
+                };
+            }
+            
+            // סיום הבקשה
+            const serviceNumber = await getNextServiceNumber();
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `✅ **פנייה למשרד התקבלה בהצלחה!**\n\n📋 **נושא הפנייה:** ${requestDescription}\n\n📧 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendGeneralOfficeEmail: true,
+                officeRequestDetails: requestDescription,
+                attachments: downloadedFiles
+            };
+        }
+
+        // אם יש קובץ חדש - הוסף אותו
+        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+            return {
+                response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או תאר את בקשתך\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "עדכון פרטי לקוח + סיום"\n\n📞 039792365`,
+                stage: 'general_office_request',
+                customer: customer
+            };
+        }
+        
+        // טיפול בהודעה רגילה
+        if (message && message.trim().length >= 5) {
+            return {
+                response: `📋 **נושא הפנייה נרשם:** "${message}"\n\n📎 **רוצה לצרף מסמכים?** (תמונות, PDF, Word, Excel)\n\nאו כתוב "סיום" כדי לשלוח את הפנייה\n\n📞 039792365`,
+                stage: 'general_office_request',
+                customer: customer
+            };
+        }
+        
+        // אם לא הבין מה הלקוח רוצה
+        return {
+            response: `🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + מסמכים\n\n📞 039792365`,
+            stage: 'general_office_request',
+            customer: customer
+        };
+    }
+
+} // סגירת המחלקה ResponseHandler
 
 const responseHandler = new ResponseHandler(memory, customers);
 
@@ -1749,9 +1846,6 @@ async function sendWhatsApp(phone, message) {
         throw error;
     }
 }
-
-
-
 
 // שליחת מייל משופרת
 async function sendEmail(customer, type, details, extraData = {}) {
@@ -1780,6 +1874,10 @@ async function sendEmail(customer, type, details, extraData = {}) {
             subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
             emailType = '📚 בקשת הדרכה';
             bgColor = '#17a2b8, #138496';
+        } else if (type === 'general_office') {
+          subject = `🏢 פנייה למשרד כללי ${serviceNumber} - ${customer.name}`;
+          emailType = '🏢 פנייה למשרד כללי';
+          bgColor = '#6f42c1, #5a32a3';
         } else {
             subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
             emailType = '📋 סיכום קריאת שירות';
@@ -1802,6 +1900,9 @@ async function sendEmail(customer, type, details, extraData = {}) {
         }
        if (extraData.trainingContent) {
             conversationSummary += `<div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin-top: 10px;"><h4>📚 חומר הדרכה מותאם:</h4><div style="white-space: pre-line;">${extraData.trainingContent.replace(/\n/g, '<br>')}</div></div>`;
+        }
+       if (extraData.officeRequestDetails) {
+            conversationSummary += `<p><strong>נושא הפנייה:</strong> ${extraData.officeRequestDetails}</p>`;
         }
         if (extraData.resolved !== undefined) {
             const status = extraData.resolved ? '✅ נפתר בהצלחה' : '❌ לא נפתר - נשלח טכנאי';
@@ -1883,13 +1984,12 @@ if (extraData.attachments && extraData.attachments.length > 0) {
         const serviceData = {
             serviceNumber: serviceNumber,
             timestamp: getIsraeliTime(),
-            referenceType: type === 'technician' ? 'problem' : type === 'order' ? 'order' : type === 'training' ? 'training' : 'problem',
+            referenceType: type === 'technician' ? 'problem' : type === 'damage' ? 'damage' : type === 'order' ? 'order' : type === 'training' ? 'training' : type === 'general_office' ? 'general_office' : 'problem',
             customerName: customer.name,
             customerSite: customer.site,
             problemDescription: extraData.problemDescription || extraData.orderDetails || extraData.trainingRequest || details,
             resolved: extraData.resolved !== undefined ? (extraData.resolved ? 'כן' : 'לא') : 'בטיפול'
         };
-        
         await writeToGoogleSheets(serviceData);
 
 } catch (error) {
@@ -2254,6 +2354,13 @@ if (tempFiles.length > 0) {
         serviceNumber: result.serviceNumber,
         trainingRequest: result.trainingRequest,
         trainingContent: result.trainingContent,
+        attachments: result.attachments
+    });
+} else if (result.sendGeneralOfficeEmail) {
+    log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
+    await sendEmail(result.customer, 'general_office', result.officeRequestDetails, {
+        serviceNumber: result.serviceNumber,
+        officeRequestDetails: result.officeRequestDetails,
         attachments: result.attachments
     });
 }
