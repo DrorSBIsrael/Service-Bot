@@ -2553,7 +2553,8 @@ if (tempFiles.length > 0) {
                 resolved: result.resolved,
                 attachments: result.attachments
             });
-await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
+            // מייל אישור ללקוח
+            await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
             log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
@@ -2569,38 +2570,36 @@ await sendCustomerConfirmationEmail(result.customer, 'technician', result.servic
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
-await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumber, result.orderDetails);
-} else if (result.sendGuestEmail) {
-    log('INFO', `📧 שולח מייל לקוח אורח`);
-    await sendGuestEmail(result.guestDetails, phone, result.serviceNumber);
-}
-
-} else if (result.sendDamageEmail) {
-    log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
-    await sendEmail(result.customer, 'damage', result.problemDescription, {
-        serviceNumber: result.serviceNumber,
-        problemDescription: result.problemDescription,
-        attachments: result.attachments
-    });
-await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
-} else if (result.sendTrainingEmail) {
-    log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
-    await sendEmail(result.customer, 'training', result.trainingRequest, {
-        serviceNumber: result.serviceNumber,
-        trainingRequest: result.trainingRequest,
-        trainingContent: result.trainingContent,
-        attachments: result.attachments
-    });
-await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
-} else if (result.sendGeneralOfficeEmail) {
-    log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
-    await sendEmail(result.customer, 'general_office', result.officeRequestDetails, {
-        serviceNumber: result.serviceNumber,
-        officeRequestDetails: result.officeRequestDetails,
-        attachments: result.attachments
-    });
-await sendCustomerConfirmationEmail(result.customer, 'general_office', result.serviceNumber, result.officeRequestDetails);
-}
+            await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumber, result.orderDetails);
+        } else if (result.sendGuestEmail) {
+            log('INFO', `📧 שולח מייל לקוח אורח`);
+            await sendGuestEmail(result.guestDetails, phone, result.serviceNumber);
+        } else if (result.sendDamageEmail) {
+            log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'damage', result.problemDescription, {
+                serviceNumber: result.serviceNumber,
+                problemDescription: result.problemDescription,
+                attachments: result.attachments
+            });
+            await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
+        } else if (result.sendTrainingEmail) {
+            log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'training', result.trainingRequest, {
+                serviceNumber: result.serviceNumber,
+                trainingRequest: result.trainingRequest,
+                trainingContent: result.trainingContent,
+                attachments: result.attachments
+            });
+            await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
+        } else if (result.sendGeneralOfficeEmail) {
+            log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'general_office', result.officeRequestDetails, {
+                serviceNumber: result.serviceNumber,
+                officeRequestDetails: result.officeRequestDetails,
+                attachments: result.attachments
+            });
+            await sendCustomerConfirmationEmail(result.customer, 'general_office', result.serviceNumber, result.officeRequestDetails);
+        }
 
         if (result.sendTrainingEmailImmediate) {
             log('INFO', `📧 שולח מייל הדרכה מיידי ללקוח ${result.customer.name}`);
