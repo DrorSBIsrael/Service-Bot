@@ -318,7 +318,7 @@ async function handleProblemWithAssistant(problemDescription, customer) {
             
             // עיצוב התגובה
             let formattedResponse = `🔧 **פתרון מותאם אישית מהמומחה שלנו:**\n\n${assistantResponse}`;
-            formattedResponse += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`;
             
             return { 
                 found: true, 
@@ -1230,7 +1230,7 @@ async handleCustomerIdentification(message, phone, conversation) {
             if (msg === '1' || msg.includes('תקלה')) {
                 this.memory.updateStage(phone, 'problem_description', customer);
                 return {
-                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
+                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\n🤞המתן מספר שניות לתשובה🤞`,
                     stage: 'problem_description',
                     customer: customer
                 };
@@ -1260,7 +1260,7 @@ if (msg === '3' || msg.includes('מחיר')) {
 if (msg === '4' || msg.includes('הדרכה')) {
     this.memory.updateStage(phone, 'training_request', customer);
     return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n• "המתן מספר שניות לתשובה"\n\n📞 039792365`,
+        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n\n🤞המתן מספר שניות לתשובה🤞`,
         stage: 'training_request',
         customer: customer
     };
