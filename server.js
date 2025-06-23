@@ -1873,36 +1873,27 @@ async function sendEmail(customer, type, details, extraData = {}) {
             .join('');
         
         let subject, emailType, bgColor;
-        let recipients = ['service@SBcloud.co.il'];
-if (type === 'technician') {
-    subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
-    emailType = '🚨 קריאת טכנאי דחופה';
-    bgColor = '#dc3545, #c82333';
-    // טכנאי - רק ל-Service
-} else if (type === 'damage') {
-    subject = `📷 דיווח נזק ${serviceNumber} - ${customer.name} (${customer.site})`;
-    emailType = '📷 דיווח נזק';
-    bgColor = '#fd7e14, #e55a26';
-    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
-} else if (type === 'order') {
-    subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
-    emailType = '💰 בקשת הצעת מחיר';
-    bgColor = '#ffc107, #e0a800';
-    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
-} else if (type === 'training') {
-    subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
-    emailType = '📚 בקשת הדרכה';
-    bgColor = '#17a2b8, #138496';
-} else if (type === 'general_office') {
-    subject = `🏢 פנייה למשרד כללי ${serviceNumber} - ${customer.name}`;
-    emailType = '🏢 פנייה למשרד כללי';
-    bgColor = '#6f42c1, #5a32a3';
-    recipients.push('office@sbcloud.co.il'); // ✅ הוספה
-} else {
-    subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
-    emailType = '📋 סיכום קריאת שירות';
-    bgColor = '#28a745, #20c997';
-}
+        if (type === 'technician') {
+            subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
+            emailType = '🚨 קריאת טכנאי דחופה';
+            bgColor = '#dc3545, #c82333';
+        } else if (type === 'order') {
+            subject = `💰 בקשת הצעת מחיר ${serviceNumber} - ${customer.name}`;
+            emailType = '💰 בקשת הצעת מחיר';
+            bgColor = '#ffc107, #e0a800';
+        } else if (type === 'training') {
+            subject = `📚 בקשת הדרכה ${serviceNumber} - ${customer.name}`;
+            emailType = '📚 בקשת הדרכה';
+            bgColor = '#17a2b8, #138496';
+        } else if (type === 'general_office') {
+          subject = `🏢 פנייה למשרד כללי ${serviceNumber} - ${customer.name}`;
+          emailType = '🏢 פנייה למשרד כללי';
+          bgColor = '#6f42c1, #5a32a3';
+        } else {
+            subject = `📋 סיכום קריאת שירות ${serviceNumber} - ${customer.name}`;
+            emailType = '📋 סיכום קריאת שירות';
+            bgColor = '#28a745, #20c997';
+        }
         
         // בניית סיכום השיחה
         let conversationSummary = '';
@@ -1937,7 +1928,7 @@ if (type === 'technician') {
                         <h1 style="margin: 0; font-size: 24px;">${emailType}</h1>
                         <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
                     </div>
-       
+                    
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
                         <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -1961,29 +1952,23 @@ if (type === 'technician') {
                         <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : type === 'order' ? 'בקשת הצעת מחיר' : type === 'training' ? 'בקשת הדרכה' : 'פתרון טלפוני'}</p>
                     </div>
                     
-// הקוד המתוקן - השתמש בזה:
-
-${conversationSummary ? `
-<div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
-    <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
-    ${conversationSummary}
-</div>
-` : ''}
-
-<!-- 🔧 הוספת אינדיקציה שהמייל נשלח גם ל-Office -->
-${recipients.length > 1 ? `
-<div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
-    <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
-</div>
-` : ''}
-
-<div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
-    <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
-</div>
+                    ${conversationSummary ? `
+                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
+                        ${conversationSummary}
+                    </div>
+                    ` : ''}
+                    
+                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    </div>
+                </div>
+            </div>
+        `;
         
 const mailOptions = {
     from: 'Report@sbparking.co.il',
-    to: recipients.join(', '), // שילוב כל הנמענים
+    to: 'service@SBcloud.co.il',
     subject: subject,
     html: html
 };
@@ -2004,7 +1989,7 @@ if (extraData.attachments && extraData.attachments.length > 0) {
 }
 
         await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''} - נמענים: ${recipients.join(', ')}`);
+        log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
         
 // כתיבה ל-Google Sheets
         const serviceData = {
