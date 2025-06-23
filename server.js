@@ -1937,7 +1937,7 @@ if (type === 'technician') {
                         <h1 style="margin: 0; font-size: 24px;">${emailType}</h1>
                         <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
                     </div>
-                    
+       
                     <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
                         <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -1966,11 +1966,11 @@ if (type === 'technician') {
                         <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
                         ${conversationSummary}
 	<!-- 🔧 הוספת אינדיקציה שהמייל נשלח גם ל-Office -->
-	${recipients.length > 1 ? `
-	<div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
-	    <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
-	</div>
-	` : ''}
+                    ${recipients.length > 1 ? `
+                    <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
+                        <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
+                    </div>
+                    ` : ''}
                     
                     <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
                         <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
