@@ -1966,9 +1966,32 @@ async function sendEmail(customer, type, details, extraData = {}) {
             </div>
         `;
         
+// קביעת כתובות מייל לפי סוג הקריאה
+let emailRecipients = [];
+switch(type) {
+    case 'technician':
+        emailRecipients = ['service@sbcloud.co.il', 'Dror@sbparking.co.il'];
+        break;
+    case 'order':
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+        break;
+    case 'damage':
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+        break;
+    case 'training':
+        emailRecipients = ['service@sbcloud.co.il'];
+        break;
+    case 'general_office':
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+        break;
+    default:
+        emailRecipients = ['service@sbcloud.co.il'];
+        break;
+}
+
 const mailOptions = {
     from: 'Report@sbparking.co.il',
-    to: 'service@SBcloud.co.il',
+    to: emailRecipients.join(','),
     subject: subject,
     html: html
 };
