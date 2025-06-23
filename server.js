@@ -439,21 +439,32 @@ try {
         log('DEBUG', 'דוגמה ללקוח ראשון:', JSON.stringify(firstCustomer, null, 2));
     }
     
-    customers = customersData.map(client => ({
-        id: client["מספר לקוח"] || client.id || client.customer_id,
-        name: client["שם לקוח"] || client.name || client.customer_name,
-        site: client["שם החניון"] || client.site || client.parking_name,
-        phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
-        phone1: client["טלפון1"] || client.phone1,
-        phone2: client["טלפון2"] || client.phone2, 
-        phone3: client["טלפון3"] || client.phone3,
-        phone4: client["טלפון4"] || client.phone4,
-        address: client["כתובת הלקוח"] || client.address || client.customer_address,
-        email: client["מייל"] || client.email
-    }));
+customers = customersData.map(client => ({
+    id: client["מספר לקוח"] || client.id || client.customer_id || client["Customer ID"] || client.customerId || client.clientId || "N/A",
+    name: client["שם לקוח"] || client.name || client.customer_name || client["Customer Name"] || client.customerName || client.clientName,
+    site: client["שם החניון"] || client.site || client.parking_name || client["Site Name"] || client.siteName || client.location,
+    phone: client["טלפון"] || client.phone || client.phone1 || client.mobile || client["Phone"] || client.telephone,
+    phone1: client["טלפון1"] || client.phone1 || client["Phone1"],
+    phone2: client["טלפון2"] || client.phone2 || client["Phone2"], 
+    phone3: client["טלפון3"] || client.phone3 || client["Phone3"],
+    phone4: client["טלפון4"] || client.phone4 || client["Phone4"],
+    address: client["כתובת הלקוח"] || client.address || client.customer_address || client["Address"] || client.location,
+    email: client["מייל"] || client.email || client["Email"] || client.mail || client["E-mail"] || client.emailAddress
+}));
     
-    log('INFO', `📊 נטענו ${customers.length} לקוחות`);
+log('DEBUG', '🔍 בדיקת שדות לקוח ראשון:');
+if (customersData.length > 0) {
+    const firstClient = customersData[0];
+    log('DEBUG', 'שדות זמינים בקובץ JSON:', Object.keys(firstClient));
+    log('DEBUG', 'דוגמה לנתונים מהקובץ:', JSON.stringify(firstClient, null, 2));
     
+    // הצגת הלקוח אחרי הניפוי
+    const mappedCustomer = customers[0];
+    log('DEBUG', 'לקוח אחרי מיפוי:', JSON.stringify(mappedCustomer, null, 2));
+}
+
+log('INFO', `📊 נטענו ${customers.length} לקוחות`);
+
     // הצגת כמה דוגמאות לדיבוג
     log('DEBUG', '👥 דוגמאות לקוחות:');
     customers.slice(0, 3).forEach((customer, index) => {
