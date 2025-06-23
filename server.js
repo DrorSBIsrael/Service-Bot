@@ -1961,23 +1961,25 @@ if (type === 'technician') {
                         <p><strong>סוג טיפול:</strong> ${type === 'technician' ? 'קריאת טכנאי' : type === 'order' ? 'בקשת הצעת מחיר' : type === 'training' ? 'בקשת הדרכה' : 'פתרון טלפוני'}</p>
                     </div>
                     
-                    ${conversationSummary ? `
-                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
-                        <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
-                        ${conversationSummary}
-	<!-- 🔧 הוספת אינדיקציה שהמייל נשלח גם ל-Office -->
-                    ${recipients.length > 1 ? `
-                    <div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
-                        <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
-                    </div>
-                    ` : ''}
-                    
-                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
-                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
-                    </div>
-                </div>
-            </div>
-        `;
+// הקוד המתוקן - השתמש בזה:
+
+${conversationSummary ? `
+<div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
+    <h2 style="color: #2c3e50; margin-top: 0;">💬 סיכום השיחה</h2>
+    ${conversationSummary}
+</div>
+` : ''}
+
+<!-- 🔧 הוספת אינדיקציה שהמייל נשלח גם ל-Office -->
+${recipients.length > 1 ? `
+<div style="background: #d4edda; padding: 10px; border-radius: 5px; margin-bottom: 20px; border-right: 4px solid #28a745;">
+    <p style="margin: 0; color: #155724; font-weight: bold;">📧 נשלח גם למשרד הכללי (Office@sbcloud.co.il)</p>
+</div>
+` : ''}
+
+<div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+    <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+</div>
         
 const mailOptions = {
     from: 'Report@sbparking.co.il',
