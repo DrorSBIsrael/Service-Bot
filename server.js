@@ -1146,7 +1146,7 @@ async handleCustomerIdentification(message, phone, conversation) {
             this.memory.createOrUpdateConversation(phone, customer, 'menu');
             this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
             return {
-                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
                 stage: 'menu',
                 customer: customer
             };
@@ -1176,7 +1176,7 @@ async handleCustomerIdentification(message, phone, conversation) {
             this.memory.addMessage(phone, `אושר כלקוח: ${customer.name}`, 'system', customer);
             
             return {
-                response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
                 stage: 'menu',
                 customer: customer
             };
@@ -1191,7 +1191,7 @@ async handleCustomerIdentification(message, phone, conversation) {
                     const customer = newIdentification.customer;
                     this.memory.updateStage(phone, 'menu', customer);
                     return {
-                        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
                         stage: 'menu',
                         customer: customer
                     };
@@ -1236,7 +1236,7 @@ async handleCustomerIdentification(message, phone, conversation) {
                 };
             }
             
-// נזק
+// דיווח נזק
 if (msg === '2' || msg.includes('נזק')) {
     this.memory.updateStage(phone, 'damage_photo', customer);
     return {
@@ -1269,7 +1269,7 @@ if (msg === '4' || msg.includes('הדרכה')) {
             // אם לא הבין - חזור לתפריט
             this.memory.updateStage(phone, 'menu', customer);
             return {
-                response: `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
                 stage: 'menu',
                 customer: customer
             };
@@ -1305,7 +1305,7 @@ if (msg === '4' || msg.includes('הדרכה')) {
         // ברירת מחדל - חזור לתפריט
         this.memory.updateStage(phone, 'menu', customer);
         return {
-            response: `לא הבנתי את הבקשה.\n\nחזרה לתפריט הראשי:\n\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `לא הבנתי את הבקשה.\n\nחזרה לתפריט הראשי:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
             customer: customer
         };
@@ -1392,7 +1392,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
     if (isMenuRequest(message)) {
         this.memory.updateStage(phone, 'menu', customer);
         return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
             customer: customer
         };
@@ -1505,7 +1505,7 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         if (isMenuRequest(message)) {
             this.memory.updateStage(phone, 'menu', customer);
             return {
-                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
                 stage: 'menu',
                 customer: customer
             };
@@ -1589,7 +1589,7 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
     if (isMenuRequest(message)) {
         this.memory.updateStage(phone, 'menu', customer);
         return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
             customer: customer
         };
@@ -1661,7 +1661,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
         this.memory.updateStage(phone, 'menu', customer);
         
         return {
-            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
             customer: customer,
             sendTrainingEmailFinal: true,
@@ -1672,7 +1672,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
         this.memory.updateStage(phone, 'menu', customer);
         
         return {
-            response: `📚 **אשלח הדרכה מפורטת למייל**\n\n🔄 **חזרה לתפריט:**\n1️⃣ תקלה\n2️⃣ נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n\n📞 039792365`,
+            response: `📚 **אשלח הדרכה מפורטת למייל**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
             customer: customer,
             sendTrainingEmailExpanded: true,
