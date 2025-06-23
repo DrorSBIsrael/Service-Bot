@@ -1970,7 +1970,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
 let emailRecipients = [];
 switch(type) {
     case 'technician':
-        emailRecipients = ['service@sbcloud.co.il', 'bchmn7@inter.net.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'SMS@sbparking.co.il'];
         break;
     case 'order':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
