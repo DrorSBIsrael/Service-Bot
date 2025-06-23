@@ -1970,7 +1970,7 @@ async function sendEmail(customer, type, details, extraData = {}) {
 let emailRecipients = [];
 switch(type) {
     case 'technician':
-        emailRecipients = ['service@sbcloud.co.il', 'Dror@sbparking.co.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'bchmn7@inter.net.il'];
         break;
     case 'order':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
@@ -2030,6 +2030,111 @@ if (extraData.attachments && extraData.attachments.length > 0) {
     log('ERROR', '❌ שגיאת מייל מפורטת:', error.message);
     log('ERROR', 'פרטים נוספים:', error);
 }
+}
+
+// שליחת מייל אישור ללקוח
+async function sendCustomerConfirmationEmail(customer, type, serviceNumber, details = '') {
+    try {
+        // בדיקה שיש כתובת מייל ללקוח
+        if (!customer.email || customer.email === 'לא רשום' || !customer.email.includes('@')) {
+            log('WARN', `⚠️ אין כתובת מייל תקינה ללקוח ${customer.name}`);
+            return false;
+        }
+
+        let subject, emailType, content;
+        
+        switch(type) {
+            case 'technician':
+                subject = `✅ קריאה ${serviceNumber} - התקבלה בהצלחה`;
+                emailType = '🔧 קריאת טכנאי';
+                content = `
+                    <p>קריאת השירות שלך נרשמה במערכת שלנו.</p>
+                    <p><strong>פרטי הקריאה:</strong> ${details}</p>
+                    <p>🕐 <strong>זמן טיפול צפוי:</strong> 2-4 שעות</p>
+                    <p>📞 הטכנאי יצור איתך קשר ישירות</p>
+                `;
+                break;
+            case 'order':
+                subject = `✅ הזמנה ${serviceNumber} - התקבלה בהצלחה`;
+                emailType = '💰 בקשת הצעת מחיר';
+                content = `
+                    <p>הזמנתך נרשמה במערכת שלנו.</p>
+                    <p><strong>פרטי ההזמנה:</strong> ${details}</p>
+                    <p>📧 נכין הצעת מחיר מפורטת ונשלח תוך 24 שעות</p>
+                `;
+                break;
+            case 'damage':
+                subject = `✅ דיווח נזק ${serviceNumber} - התקבל בהצלחה`;
+                emailType = '🚨 דיווח נזק';
+                content = `
+                    <p>דיווח הנזק שלך נרשם במערכת שלנו.</p>
+                    <p><strong>פרטי הנזק:</strong> ${details}</p>
+                    <p>🔍 הטכנאי שלנו יבדוק את הנזק ויצור קשר תוך 2-4 שעות</p>
+                `;
+                break;
+case 'training':
+    subject = `✅ בקשת הדרכה ${serviceNumber} - התקבלה בהצלחה`;
+    emailType = '📚 בקשת הדרכה';
+    content = `
+        <p>בקשת ההדרכה שלך נרשמה במערכת שלנו.</p>
+        <p><strong>נושא ההדרכה:</strong> ${details}</p>
+        <p>📖 נכין חומר הדרכה מפורט ונשלח תוך 24 שעות</p>
+    `;
+    break;
+    
+case 'general_office':
+    subject = `✅ פנייה ${serviceNumber} - התקבלה בהצלחה`;
+    emailType = '🏢 פנייה למשרד';
+    content = `
+        <p>פנייתך למשרד נרשמה במערכת שלנו.</p>
+        <p><strong>נושא הפנייה:</strong> ${details}</p>
+        <p>📞 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות</p>
+    `;
+    break;
+            default:
+                subject = `✅ פנייה ${serviceNumber} - התקבלה בהצלחה`;
+                emailType = '📋 פניית שירות';
+                content = `<p>פנייתך נרשמה במערכת שלנו ואנו נטפל בה בהקדם.</p>`;
+                break;
+        }
+
+        const html = `
+            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+                <div style="max-width: 600px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
+                    <div style="background: linear-gradient(45deg, #28a745, #20c997); color: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
+                        <h1 style="margin: 0;">${emailType}</h1>
+                        <p style="margin: 5px 0 0 0;">שיידט את בכמן</p>
+                    </div>
+                    <p>שלום ${customer.name},</p>
+                    <p>תודה שפנית אלינו!</p>
+                    ${content}
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 10px; margin: 20px 0;">
+                        <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
+                        <p><strong>חניון:</strong> ${customer.site}</p>
+                        <p><strong>תאריך:</strong> ${getIsraeliTime()}</p>
+                    </div>
+                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: 'Report@sbparking.co.il',
+            to: customer.email,
+            subject: subject,
+            html: html
+        };
+
+        await transporter.sendMail(mailOptions);
+        log('INFO', `📧 מייל אישור נשלח ללקוח: ${customer.name} (${customer.email})`);
+        return true;
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליחת מייל ללקוח ${customer.name}:`, error.message);
+        return false;
+    }
 }
 
 // קביעת סוג קובץ
@@ -2252,6 +2357,9 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     resolved: result.resolved,
                     attachments: result.attachments
                 });
+    // מייל אישור ללקוח
+    await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
+}
             } else if (result.sendSummaryEmail) {
                 log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
                 await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
@@ -2360,6 +2468,7 @@ if (tempFiles.length > 0) {
                 resolved: result.resolved,
                 attachments: result.attachments
             });
+await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
             log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
@@ -2375,6 +2484,7 @@ if (tempFiles.length > 0) {
                 orderDetails: result.orderDetails,
                 attachments: result.attachments
             });
+await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumber, result.orderDetails);
 } else if (result.sendDamageEmail) {
     log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'damage', result.problemDescription, {
@@ -2382,6 +2492,7 @@ if (tempFiles.length > 0) {
         problemDescription: result.problemDescription,
         attachments: result.attachments
     });
+await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
 } else if (result.sendTrainingEmail) {
     log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'training', result.trainingRequest, {
@@ -2390,6 +2501,7 @@ if (tempFiles.length > 0) {
         trainingContent: result.trainingContent,
         attachments: result.attachments
     });
+await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
 } else if (result.sendGeneralOfficeEmail) {
     log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'general_office', result.officeRequestDetails, {
@@ -2397,6 +2509,7 @@ if (tempFiles.length > 0) {
         officeRequestDetails: result.officeRequestDetails,
         attachments: result.attachments
     });
+await sendCustomerConfirmationEmail(result.customer, 'general_office', result.serviceNumber, result.officeRequestDetails);
 }
 
         if (result.sendTrainingEmailImmediate) {
