@@ -2359,7 +2359,6 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                 });
     // מייל אישור ללקוח
     await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
-}
             } else if (result.sendSummaryEmail) {
                 log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
                 await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
