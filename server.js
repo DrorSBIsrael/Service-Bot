@@ -1178,6 +1178,17 @@ class ResponseHandler {
                 
                 // שלח מייל אורח
                 await sendGuestEmail(message, phone, serviceNumber);
+                // רישום ב-Google Sheets
+                const serviceData = {
+                   serviceNumber: serviceNumber,
+                   timestamp: getIsraeliTime(),
+                   referenceType: 'guest',
+                   customerName: 'לקוח חדש',
+                   customerSite: 'לא מזוהה',
+                   problemDescription: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+                   resolved: 'התקבל'
+                };
+                await writeToGoogleSheets(serviceData);
                 
                 return {
                     response: `✅ **פנייתך התקבלה בהצלחה!**\n\n📧 המשרד יעבור על הפרטים ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
@@ -2181,27 +2192,50 @@ case 'general_office':
         return false;
     }
 }
-// שליחת מייל אורח
+// שליחת מייל אורח - גרסה משופרת
 async function sendGuestEmail(guestDetails, phone, serviceNumber) {
     try {
         const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
         
         const html = `
             <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
+                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                    
                     <div style="background: linear-gradient(45deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
                         <h1 style="margin: 0; font-size: 24px;">🆕 לקוח חדש</h1>
-                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן</p>
+                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן - מערכת בקרת חניה</p>
                     </div>
-                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הפנייה</h2>
-                        <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
-                        <p><strong>טלפון:</strong> ${phone}</p>
-                        <p><strong>תאריך:</strong> ${getIsraeliTime()}</p>
+                    
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #007bff;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי פנייה</h2>
+                        <p><strong>מספר טלפון:</strong> ${phone}</p>
+                        <p><strong>תאריך ושעה:</strong> ${getIsraeliTime()}</p>
+                        <p><strong>סוג פנייה:</strong> לקוח חדש</p>
                     </div>
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                        <h2>📝 פרטים שהתקבלו</h2>
-                        <div style="background: white; padding: 15px; border-radius: 5px;">${guestDetails}</div>
+                    
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #ffc107;">
+                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הקריאה</h2>
+                        <p><strong>מספר קריאה:</strong> <span style="background: #dc3545; color: white; padding: 5px 10px; border-radius: 5px; font-weight: bold;">${serviceNumber}</span></p>
+                        <p><strong>סטטוס:</strong> <span style="color: #28a745; font-weight: bold;">חדש - ממתין לטיפול</span></p>
+                    </div>
+                    
+                    <div style="background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 2px solid #e9ecef;">
+                        <h2 style="color: #2c3e50; margin-top: 0;">📝 פרטים שהתקבלו מהלקוח</h2>
+                        <div style="background: #f8f9fa; padding: 15px; border-radius: 5px; white-space: pre-line; font-family: monospace;">${guestDetails}</div>
+                    </div>
+                    
+                    <div style="background: #e8f5e8; padding: 15px; border-radius: 10px; margin-bottom: 20px; border-right: 4px solid #28a745;">
+                        <h3 style="margin-top: 0; color: #155724;">📞 פעולות נדרשות</h3>
+                        <ul style="margin: 0; padding-right: 20px;">
+                            <li>לבדוק את פרטי הלקוח</li>
+                            <li>לזהות את סוג הבקשה</li>
+                            <li>לחזור ללקוח תוך 24-48 שעות</li>
+                            <li>לעדכן במערכת הלקוחות במידת הצורך</li>
+                        </ul>
+                    </div>
+                    
+                    <div style="background: #17a2b8; color: white; padding: 15px; border-radius: 10px; text-align: center;">
+                        <p style="margin: 0;"><strong>📞 039792365 | 📧 Service@sbcloud.co.il</strong></p>
                     </div>
                 </div>
             </div>
@@ -2216,6 +2250,19 @@ async function sendGuestEmail(guestDetails, phone, serviceNumber) {
 
         await transporter.sendMail(mailOptions);
         log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
+        
+        // 🔧 כתיבה ל-Google Sheets
+        const serviceData = {
+            serviceNumber: serviceNumber,
+            timestamp: getIsraeliTime(),
+            referenceType: 'guest',
+            customerName: 'לקוח חדש',
+            customerSite: 'לא מזוהה',
+            problemDescription: guestDetails.substring(0, 100) + (guestDetails.length > 100 ? '...' : ''),
+            resolved: 'התקבל'
+        };
+        await writeToGoogleSheets(serviceData);
+        
         return true;
         
     } catch (error) {
