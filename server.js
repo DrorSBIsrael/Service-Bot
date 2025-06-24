@@ -98,11 +98,11 @@ async function writeToGoogleSheets(serviceData) {
         const row = [
             serviceData.serviceNumber,
             serviceData.timestamp,
-            serviceData.referenceType,
-            serviceData.customerName,
-            serviceData.customerSite,
-            serviceData.problemDescription,
-            serviceData.resolved
+            serviceData.referenceType || 'guest', // ברירת מחדל לאורח
+            serviceData.customerName || 'לקוח חדש',
+            serviceData.customerSite || 'לא מזוהה',
+            serviceData.problemDescription || 'פנייה כללית',
+            serviceData.resolved || 'התקבל'
         ];
 
         await sheets.spreadsheets.values.append({
@@ -1136,8 +1136,7 @@ class ResponseHandler {
         const msg = message.toLowerCase().trim();
         const conversation = this.memory.getConversation(phone, customer);
         
-        log('INFO', `🎯 מעבד הודעה מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}`);
-        
+        log('INFO', `🎯 מעבד הודעה: "${message}" מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}`);                
         // שלב 1: זיהוי לקוח אם לא קיים
         if (!customer) {
             return await this.handleCustomerIdentification(message, phone, conversation);
@@ -1147,150 +1146,136 @@ class ResponseHandler {
         return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles);
     }
 
-async handleCustomerIdentification(message, phone, conversation) {
-    // אם לקוח לחץ "1" - טיפול כאורח
-    if (message.trim() === '1') {
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', null);
+    async handleCustomerIdentification(message, phone, conversation) {
+        const msg = message.toLowerCase().trim();
         
-        // שלח מייל אורח
-        await sendGuestEmail(message, phone, serviceNumber);
+        log('DEBUG', `🔍 זיהוי לקוח - הודעה: "${message}"`);
+        log('DEBUG', `🔍 msg נקי: "${msg}"`);
         
-        return {
-            response: `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה פרטים:\n\n📝 **אנא כתוב הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n🆔 מספר קריאה: ${serviceNumber}
-
-// פונקציה חדשה לשליחת מייל אורח
-async function sendGuestEmail(guestDetails, phone, serviceNumber) {
-    try {
-        const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
-        
-        const html = `
-            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
-                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
-                    <div style="background: linear-gradient(45deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
-                        <h1 style="margin: 0; font-size: 24px;">🆕 לקוח חדש</h1>
-                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן</p>
-                    </div>
-                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
-                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הפנייה</h2>
-                        <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
-                        <p><strong>טלפון:</strong> ${phone}</p>
-                        <p><strong>תאריך:</strong> ${getIsraeliTime()}</p>
-                    </div>
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
-                        <h2>📝 פרטים שהתקבלו</h2>
-                        <div style="background: white; padding: 15px; border-radius: 5px;">${guestDetails}</div>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        const mailOptions = {
-            from: 'Report@sbparking.co.il',
-            to: 'service@sbcloud.co.il,office@sbcloud.co.il',
-            subject: subject,
-            html: html
-        };
-
-        await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
-        return true;
-        
-    } catch (error) {
-        log('ERROR', `❌ שגיאה בשליחת מייל לקוח אורח:`, error.message);
-        return false;
-    }
-}\n\n📞 039792365`,
-            stage: 'completed',
-            serviceNumber: serviceNumber,
-            sendGuestEmail: true,
-            guestDetails: message
-        };
-    }
-    
-    // נסיון זיהוי לפי שם חניון
-    const identification = findCustomerByName(message);
-    
-    if (identification) {
-        if (identification.confidence === 'high') {
-            const customer = identification.customer;
-            this.memory.createOrUpdateConversation(phone, customer, 'menu');
-            this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
-            return {
-                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                stage: 'menu',
-                customer: customer
-            };
-        } else {
-            // שמירת הלקוח הזמני בנתונים
-            this.memory.updateStage(phone, 'confirming_identity', null, {
-                tentativeCustomer: identification.customer
-            });
+        // 🔧 טיפול בלקוח אורח - בדיקה מפורטת
+        if (msg === '1' || msg === 'לקוח חדש' || msg === 'אינני לקוח' || msg === 'guest') {
+            log('INFO', '🆕 לקוח בחר אפשרות אורח');
+            
+            // מעבר לשלב איסוף פרטי אורח
+            this.memory.updateStage(phone, 'guest_details', null, { isGuest: true });
             
             return {
-                response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
-                stage: 'confirming_identity',
-                tentativeCustomer: identification.customer
+                response: `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה פרטים:\n\n📝 **אנא כתוב הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n📞 039792365`,
+                stage: 'guest_details'
             };
         }
-    }
-    
-    // אישור זהות
-    if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
-        if (message.toLowerCase().includes('כן') || 
-            message.toLowerCase().includes('נכון') || 
-            message.toLowerCase().includes('תקין') ||
-            message.toLowerCase().includes('yes')) {
+        
+        // בדיקה אם אנחנו בשלב איסוף פרטי אורח
+        if (conversation?.stage === 'guest_details' && conversation?.data?.isGuest) {
+            log('INFO', '🔄 בשלב איסוף פרטי אורח');
             
-            const customer = conversation.data.tentativeCustomer;
-            this.memory.updateStage(phone, 'menu', customer, { tentativeCustomer: null });
-            this.memory.addMessage(phone, `אושר כלקוח: ${customer.name}`, 'system', customer);
-            
-            return {
-                response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                stage: 'menu',
-                customer: customer
-            };
-        } else {
-            // הלקוח אמר לא - נסה זיהוי מחדש
-            this.memory.updateStage(phone, 'identifying', null, { tentativeCustomer: null });
-            
-            // נסה זיהוי לפי ההודעה החדשה
-            const newIdentification = findCustomerByName(message);
-            if (newIdentification) {
-                if (newIdentification.confidence === 'high') {
-                    const customer = newIdentification.customer;
-                    this.memory.updateStage(phone, 'menu', customer);
-                    return {
-                        response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                        stage: 'menu',
-                        customer: customer
-                    };
-                } else {
-                    this.memory.updateStage(phone, 'confirming_identity', null, {
-                        tentativeCustomer: newIdentification.customer
-                    });
-                    return {
-                        response: `האם אתה ${newIdentification.customer.name} מחניון ${newIdentification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n\n📞 039792365`,
-                        stage: 'confirming_identity',
-                        tentativeCustomer: newIdentification.customer
-                    };
-                }
+            // הלקוח שלח את הפרטים - סיים את הטיפול
+            if (message && message.trim().length > 20) {
+                log('INFO', '✅ פרטים מספיקים - סיום טיפול באורח');
+                
+                const serviceNumber = await getNextServiceNumber();
+                this.memory.updateStage(phone, 'completed', null);
+                
+                // שלח מייל אורח
+                await sendGuestEmail(message, phone, serviceNumber);
+                
+                return {
+                    response: `✅ **פנייתך התקבלה בהצלחה!**\n\n📧 המשרד יעבור על הפרטים ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    serviceNumber: serviceNumber
+                };
+            } else {
+                log('WARN', '⚠️ פרטים לא מספיקים');
+                return {
+                    response: `📝 **אנא שלח פרטים מפורטים יותר:**\n\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n📞 039792365`,
+                    stage: 'guest_details'
+                };
             }
-            
-            return {
-                response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
-                stage: 'identifying'
-            };
         }
+        
+        // נסיון זיהוי לפי שם חניון
+        const identification = findCustomerByName(message);
+        
+        if (identification) {
+            if (identification.confidence === 'high') {
+                const customer = identification.customer;
+                this.memory.createOrUpdateConversation(phone, customer, 'menu');
+                this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
+                return {
+                    response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                    stage: 'menu',
+                    customer: customer
+                };
+            } else {
+                // שמירת הלקוח הזמני בנתונים
+                this.memory.updateStage(phone, 'confirming_identity', null, {
+                    tentativeCustomer: identification.customer
+                });
+                
+                return {
+                    response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n❓ **אם אינך לקוח קיים - כתוב 1**\n\n📞 039792365`,
+                    stage: 'confirming_identity',
+                    tentativeCustomer: identification.customer
+                };
+            }
+        }
+        
+        // אישור זהות
+        if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
+            if (message.toLowerCase().includes('כן') || 
+                message.toLowerCase().includes('נכון') || 
+                message.toLowerCase().includes('תקין') ||
+                message.toLowerCase().includes('yes')) {
+                
+                const customer = conversation.data.tentativeCustomer;
+                this.memory.updateStage(phone, 'menu', customer, { tentativeCustomer: null });
+                this.memory.addMessage(phone, `אושר כלקוח: ${customer.name}`, 'system', customer);
+                
+                return {
+                    response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                    stage: 'menu',
+                    customer: customer
+                };
+            } else {
+                // הלקוח אמר לא - נסה זיהוי מחדש
+                this.memory.updateStage(phone, 'identifying', null, { tentativeCustomer: null });
+                
+                // נסה זיהוי לפי ההודעה החדשה
+                const newIdentification = findCustomerByName(message);
+                if (newIdentification) {
+                    if (newIdentification.confidence === 'high') {
+                        const customer = newIdentification.customer;
+                        this.memory.updateStage(phone, 'menu', customer);
+                        return {
+                            response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                            stage: 'menu',
+                            customer: customer
+                        };
+                    } else {
+                        this.memory.updateStage(phone, 'confirming_identity', null, {
+                            tentativeCustomer: newIdentification.customer
+                        });
+                        return {
+                            response: `האם אתה ${newIdentification.customer.name} מחניון ${newIdentification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n❓ **אם אינך לקוח קיים - כתוב 1**\n\n📞 039792365`,
+                            stage: 'confirming_identity',
+                            tentativeCustomer: newIdentification.customer
+                        };
+                    }
+                }
+                
+                return {
+                    response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
+                    stage: 'identifying'
+                };
+            }
+        }
+        
+        // בקשת זיהוי ראשונה
+        return {
+            response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
+            stage: 'identifying'
+        };
     }
-    
-    // בקשת זיהוי ראשונה
-    return {
-        response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
-        stage: 'identifying'
-    };
-}
 
     async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles) {
         const msg = message.toLowerCase().trim();
@@ -2196,8 +2181,7 @@ case 'general_office':
         return false;
     }
 }
-
-// פונקציה לשליחת מייל אורח
+// שליחת מייל אורח
 async function sendGuestEmail(guestDetails, phone, serviceNumber) {
     try {
         const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
