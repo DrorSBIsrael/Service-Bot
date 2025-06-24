@@ -1914,6 +1914,37 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
+// בדיקת שעות עבודה
+function isWorkingHours() {
+    const now = new Date();
+    const israelTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
+    
+    const hour = israelTime.getHours();
+    const day = israelTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    // בדיקת יום - 0=ראשון, 1=שני, 2=שלישי, 3=רביעי, 4=חמישי, 5=שישי, 6=שבת
+    const isFridayOrSaturday = (day === 5 || day === 6); // שישי או שבת
+    const isWorkingDay = (day >= 0 && day <= 4); // ראשון עד חמישי
+    
+    // שעות עבודה: 9:00-16:00
+    const isWorkingHour = (hour >= 9 && hour < 16);
+    
+    const result = {
+        hour: hour,
+        day: day,
+        dayName: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][day],
+        isFridayOrSaturday: isFridayOrSaturday,
+        isWorkingDay: isWorkingDay,
+        isWorkingHour: isWorkingHour,
+        isWorkingTime: isWorkingDay && isWorkingHour,
+        shouldSendSMS: !isWorkingDay || !isWorkingHour // שלח SMS אם לא בשעות עבודה
+    };
+    
+    log('DEBUG', `🕐 בדיקת שעות עבודה: ${result.dayName} ${hour}:00 - עבודה: ${result.isWorkingTime}, SMS: ${result.shouldSendSMS}`);
+    
+    return result;
+}
+
 // שליחת מייל משופרת
 async function sendEmail(customer, type, details, extraData = {}) {
     try {
@@ -2022,12 +2053,25 @@ async function sendEmail(customer, type, details, extraData = {}) {
             </div>
         `;
         
-// קביעת כתובות מייל לפי סוג הקריאה
+// קביעת כתובות מייל לפי סוג הקריאה ושעות עבודה
 let emailRecipients = [];
 switch(type) {
     case 'technician':
-        emailRecipients = ['service@sbcloud.co.il', 'SMS@sbparking.co.il'];
+        // בדיקת שעות עבודה לטכנאים
+        const workingHours = isWorkingHours();
+        
+        // תמיד שלח ל-service
+        emailRecipients = ['service@sbcloud.co.il'];
+        
+        // הוסף SMS רק מחוץ לשעות עבודה
+        if (workingHours.shouldSendSMS) {
+            emailRecipients.push('SMS@sbparking.co.il');
+            log('INFO', `📱 שולח גם ל-SMS - ${workingHours.dayName} ${workingHours.hour}:00 (מחוץ לשעות עבודה)`);
+        } else {
+            log('INFO', `💼 שעות עבודה - ${workingHours.dayName} ${workingHours.hour}:00 (רק service@sbcloud.co.il)`);
+        }
         break;
+        
     case 'order':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
@@ -2044,6 +2088,9 @@ switch(type) {
         emailRecipients = ['service@sbcloud.co.il'];
         break;
 }
+
+// הוספת לוג מפורט
+log('INFO', `📧 נמענים: ${emailRecipients.join(', ')}`);
 
 const mailOptions = {
     from: 'Report@sbparking.co.il',
