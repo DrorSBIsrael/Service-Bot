@@ -1148,6 +1148,66 @@ class ResponseHandler {
     }
 
 async handleCustomerIdentification(message, phone, conversation) {
+    // אם לקוח לחץ "1" - טיפול כאורח
+    if (message.trim() === '1') {
+        const serviceNumber = await getNextServiceNumber();
+        this.memory.updateStage(phone, 'completed', null);
+        
+        // שלח מייל אורח
+        await sendGuestEmail(message, phone, serviceNumber);
+        
+        return {
+            response: `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה פרטים:\n\n📝 **אנא כתוב הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n🆔 מספר קריאה: ${serviceNumber}
+
+// פונקציה חדשה לשליחת מייל אורח
+async function sendGuestEmail(guestDetails, phone, serviceNumber) {
+    try {
+        const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
+        
+        const html = `
+            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
+                    <div style="background: linear-gradient(45deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">🆕 לקוח חדש</h1>
+                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן</p>
+                    </div>
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הפנייה</h2>
+                        <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
+                        <p><strong>טלפון:</strong> ${phone}</p>
+                        <p><strong>תאריך:</strong> ${getIsraeliTime()}</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                        <h2>📝 פרטים שהתקבלו</h2>
+                        <div style="background: white; padding: 15px; border-radius: 5px;">${guestDetails}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: 'Report@sbparking.co.il',
+            to: 'service@sbcloud.co.il,office@sbcloud.co.il',
+            subject: subject,
+            html: html
+        };
+
+        await transporter.sendMail(mailOptions);
+        log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
+        return true;
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליחת מייל לקוח אורח:`, error.message);
+        return false;
+    }
+}\n\n📞 039792365`,
+            stage: 'completed',
+            serviceNumber: serviceNumber,
+            sendGuestEmail: true,
+            guestDetails: message
+        };
+    }
+    
     // נסיון זיהוי לפי שם חניון
     const identification = findCustomerByName(message);
     
@@ -1175,7 +1235,7 @@ async handleCustomerIdentification(message, phone, conversation) {
         }
     }
     
-    // אישור זהות - תיקון הקוד
+    // אישור זהות
     if (conversation?.stage === 'confirming_identity' && conversation.data?.tentativeCustomer) {
         if (message.toLowerCase().includes('כן') || 
             message.toLowerCase().includes('נכון') || 
@@ -1219,7 +1279,7 @@ async handleCustomerIdentification(message, phone, conversation) {
             }
             
             return {
-                response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n📞 039792365`,
+                response: `לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון הנכון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
                 stage: 'identifying'
             };
         }
@@ -1227,7 +1287,7 @@ async handleCustomerIdentification(message, phone, conversation) {
     
     // בקשת זיהוי ראשונה
     return {
-        response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n📞 039792365`,
+        response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
         stage: 'identifying'
     };
 }
@@ -2133,6 +2193,49 @@ case 'general_office':
         
     } catch (error) {
         log('ERROR', `❌ שגיאה בשליחת מייל ללקוח ${customer.name}:`, error.message);
+        return false;
+    }
+}
+
+// פונקציה לשליחת מייל אורח
+async function sendGuestEmail(guestDetails, phone, serviceNumber) {
+    try {
+        const subject = `🆕 פנייה מלקוח חדש ${serviceNumber} - טלפון: ${phone}`;
+        
+        const html = `
+            <div dir="rtl" style="font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px;">
+                <div style="max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px;">
+                    <div style="background: linear-gradient(45deg, #ff6b35, #f7931e); color: white; padding: 20px; border-radius: 10px; margin-bottom: 30px; text-align: center;">
+                        <h1 style="margin: 0; font-size: 24px;">🆕 לקוח חדש</h1>
+                        <p style="margin: 5px 0 0 0; font-size: 16px;">שיידט את בכמן</p>
+                    </div>
+                    <div style="background: #fff3cd; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+                        <h2 style="color: #856404; margin-top: 0;">📋 פרטי הפנייה</h2>
+                        <p><strong>מספר קריאה:</strong> ${serviceNumber}</p>
+                        <p><strong>טלפון:</strong> ${phone}</p>
+                        <p><strong>תאריך:</strong> ${getIsraeliTime()}</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px;">
+                        <h2>📝 פרטים שהתקבלו</h2>
+                        <div style="background: white; padding: 15px; border-radius: 5px;">${guestDetails}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        const mailOptions = {
+            from: 'Report@sbparking.co.il',
+            to: 'service@sbcloud.co.il,office@sbcloud.co.il',
+            subject: subject,
+            html: html
+        };
+
+        await transporter.sendMail(mailOptions);
+        log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
+        return true;
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליחת מייל לקוח אורח:`, error.message);
         return false;
     }
 }
