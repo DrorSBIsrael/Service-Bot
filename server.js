@@ -2179,6 +2179,51 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
+// מזהה קבוצת WhatsApp לתקלות דחופות
+const GROUP_CHAT_ID = 'כאן_תכניס_את_מזהה_הקבוצה'; // נמלא אותו אחר כך
+
+// שליחת WhatsApp לקבוצה
+async function sendWhatsAppToGroup(message) {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
+    
+    try {
+        const response = await axios.post(url, {
+            chatId: GROUP_CHAT_ID,
+            message: message
+        });
+        log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
+        return response.data;
+    } catch (error) {
+        log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
+        throw error;
+    }
+}
+
+// פונקציה זמנית למציאת מזהה הקבוצה
+async function findGroupId() {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
+    
+    try {
+        const response = await axios.get(url);
+        console.log('\n🔍 רשימת כל הקבוצות:');
+        
+        response.data.forEach((chat, index) => {
+            if (chat.id.includes('@g.us')) {
+                console.log(`${index + 1}. קבוצה: ${chat.name || 'ללא שם'}`);
+                console.log(`   מזהה: ${chat.id}`);
+                console.log(`   חברים: ${chat.participantsCount || 'לא ידוע'}`);
+                console.log('---');
+            }
+        });
+    } catch (error) {
+        console.error('❌ שגיאה בקבלת רשימת קבוצות:', error.message);
+    }
+}
+
 // בדיקת שעות עבודה
 function isWorkingHours() {
     const now = new Date();
@@ -2814,7 +2859,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
             }
         }
     }
-    
+
     // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
     if (conversation?.stage === 'problem_description') {
         const timestamp = Date.now();
