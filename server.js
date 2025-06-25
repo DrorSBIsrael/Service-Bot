@@ -795,7 +795,26 @@ async function handleAutoFinish(phone, customer, stage) {
         log('INFO', `🤖 מבצע סיום אוטומטי עבור ${customer ? customer.name : phone} בשלב ${stage}`);
         
         // בדיקה באיזה שלב אנחנו וביצוע סיום מתאים
-        if (stage === 'damage_photo') {
+        if (stage === 'waiting_feedback') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על הפתרון\n\n🔧 מעביר את הפנייה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365`);
+            
+            // שלח מייל טכנאי
+            const conversation = memory.getConversation(phone, customer);
+            if (conversation && conversation.data) {
+                const serviceNumber = await getNextServiceNumber();
+                await sendEmail(customer, 'technician', conversation.data.problemDescription, {
+                    serviceNumber: serviceNumber,
+                    problemDescription: conversation.data.problemDescription,
+                    solution: conversation.data.solution,
+                    resolved: false,
+                    attachments: conversation.data.attachments
+                });
+            }
+            
+        } else if (stage === 'waiting_training_feedback') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על ההדרכה\n\n📧 אשלח הדרכה מפורטת למייל\n\n📞 039792365`);
+            
+        } else if (stage === 'damage_photo') {
             await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלו קבצים נוספים\n\nכדי לדווח על נזק יש צורך לפחות ב:\n• תמונה/סרטון של הנזק\n• מספר היחידה\n\nאנא התחל מחדש ושלח קבצים עם מספר יחידה\n\n📞 039792365`);
             
         } else if (stage === 'order_request') {
@@ -1545,7 +1564,9 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
             threadId: solution.threadId || null,
             source: solution.source || 'database'
         });
-        
+        // התחל טיימר 90 שניות למשוב
+        autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
+
         let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
         
         // אם יש קבצים מצורפים - הוסף אישור
