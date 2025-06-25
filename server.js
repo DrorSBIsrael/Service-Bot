@@ -2203,22 +2203,26 @@ async function sendWhatsAppToGroup(message) {
 
 // פונקציה זמנית למציאת מזהה הקבוצה
 async function findGroupId() {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
-    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
-    
     try {
+        const instanceId = '7105253183';
+        const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
+        
         const response = await axios.get(url);
         console.log('\n🔍 רשימת כל הקבוצות:');
         
-        response.data.forEach((chat, index) => {
-            if (chat.id.includes('@g.us')) {
-                console.log(`${index + 1}. קבוצה: ${chat.name || 'ללא שם'}`);
-                console.log(`   מזהה: ${chat.id}`);
-                console.log(`   חברים: ${chat.participantsCount || 'לא ידוע'}`);
-                console.log('---');
-            }
-        });
+        if (response.data && Array.isArray(response.data)) {
+            response.data.forEach((chat, index) => {
+                if (chat.id && chat.id.includes('@g.us')) {
+                    console.log(`${index + 1}. קבוצה: ${chat.name || 'ללא שם'}`);
+                    console.log(`   מזהה: ${chat.id}`);
+                    console.log(`   חברים: ${chat.participantsCount || 'לא ידוע'}`);
+                    console.log('---');
+                }
+            });
+        } else {
+            console.log('❌ לא נמצאו קבוצות או שגיאה בתגובה');
+        }
     } catch (error) {
         console.error('❌ שגיאה בקבלת רשימת קבוצות:', error.message);
     }
@@ -3104,11 +3108,6 @@ app.listen(PORT, () => {
     log('INFO', '🎯 זיהוי לקוח: מדויק ומהיר');
     log('INFO', '📊 ניהול שלבים: מושלם');
     log('INFO', '✅ מערכת מעולה מוכנה!');
-    // 🔍 מציאת מזהה קבוצה - הפעל פעם אחת
-    setTimeout(() => {
-        log('INFO', '🔍 מחפש קבוצות WhatsApp...');
-        findGroupId();
-    }, 5000); // חכה 5 שניות שהשרת יתחבר
 });
 
 // 🔧 בדיקות מערכת - חדש!
