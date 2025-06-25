@@ -1745,18 +1745,6 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
     };
 }
     
-    // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה - תיקון הביטוי הרגולרי
-    const unitMatch = message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
-    if (unitMatch) {
-        const unit = unitMatch[1] || unitMatch[2] || unitMatch[3] || unitMatch[4];
-        console.log(`DEBUG: זוהה מספר יחידה: ${unit} מתוך הודעה: "${message}"`);
-        return {
-            response: `📝 **מספר יחידה נרשם: ${unit}**\n\nעכשיו שלח תמונות/סרטונים של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
-    
     // אם לא הבין מה הלקוח רוצה
     return {
         response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב "סיום"\n\n📞 039792365`,
