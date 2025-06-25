@@ -2384,6 +2384,14 @@ switch(type) {
             
             // 🔧 חדש: שליחה לקבוצת WhatsApp במקרה של תקלה מחוץ לשעות עבודה
             try {
+                let problemText = details;
+if (extraData.problemDescription) {
+    problemText = extraData.problemDescription;
+} else if (extraData.orderDetails) {
+    problemText = extraData.orderDetails;
+} else if (extraData.trainingRequest) {
+    problemText = extraData.trainingRequest;
+}
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
