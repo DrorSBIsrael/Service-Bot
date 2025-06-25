@@ -716,6 +716,114 @@ class MessageTracker {
 const messageTracker = new MessageTracker();
 const memory = new AdvancedMemory();
 
+// מחלקת טיימרים אוטומטיים
+class AutoFinishManager {
+    constructor() {
+        this.timers = new Map(); // טיימרים פעילים
+        this.TIMEOUT_DURATION = 90 * 1000; // 90 שניות במילישניות
+        log('INFO', '⏰ מנהל סיום אוטומטי הופעל');
+    }
+    
+    // התחלת טיימר חדש או איפוס קיים
+    startTimer(phone, customer, stage, callback) {
+        const key = this.createKey(phone);
+        
+        // אם יש טיימר קיים - בטל אותו
+        this.clearTimer(phone);
+        
+        log('INFO', `⏱️ התחלת טיימר 90 שניות עבור ${customer ? customer.name : phone} בשלב ${stage}`);
+        
+        const timer = setTimeout(() => {
+            log('INFO', `⏰ טיימר פג עבור ${customer ? customer.name : phone} - מפעיל סיום אוטומטי`);
+            this.timers.delete(key);
+            callback(phone, customer, stage);
+        }, this.TIMEOUT_DURATION);
+        
+        this.timers.set(key, {
+            timer: timer,
+            customer: customer,
+            stage: stage,
+            startTime: Date.now()
+        });
+    }
+    
+    // ביטול טיימר
+    clearTimer(phone) {
+        const key = this.createKey(phone);
+        const timerData = this.timers.get(key);
+        
+        if (timerData) {
+            clearTimeout(timerData.timer);
+            this.timers.delete(key);
+            
+            const elapsed = Math.round((Date.now() - timerData.startTime) / 1000);
+            log('INFO', `⏹️ טיימר בוטל עבור ${phone} (פעל ${elapsed} שניות)`);
+        }
+    }
+    
+    // יצירת מפתח
+    createKey(phone) {
+        return `timer_${phone.replace(/[^\d]/g, '')}`;
+    }
+    
+    // איפוס טיימר (הפעלה מחדש)
+    resetTimer(phone, customer, stage, callback) {
+        this.startTimer(phone, customer, stage, callback);
+    }
+    
+    // סטטיסטיקות
+    getActiveTimers() {
+        return this.timers.size;
+    }
+    
+    // ניקוי כל הטיימרים
+    clearAllTimers() {
+        this.timers.forEach((timerData, key) => {
+            clearTimeout(timerData.timer);
+        });
+        this.timers.clear();
+        log('INFO', '🧹 כל הטיימרים נוקו');
+    }
+}
+
+// יצירת מופע גלובלי
+const autoFinishManager = new AutoFinishManager();
+
+// פונקציה לטיפול בסיום אוטומטי
+async function handleAutoFinish(phone, customer, stage) {
+    try {
+        log('INFO', `🤖 מבצע סיום אוטומטי עבור ${customer ? customer.name : phone} בשלב ${stage}`);
+        
+        // בדיקה באיזה שלב אנחנו וביצוע סיום מתאים
+        if (stage === 'damage_photo') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלו קבצים נוספים\n\nכדי לדווח על נזק יש צורך לפחות ב:\n• תמונה/סרטון של הנזק\n• מספר היחידה\n\nאנא התחל מחדש ושלח קבצים עם מספר יחידה\n\n📞 039792365`);
+            
+        } else if (stage === 'order_request') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלה הזמנה מפורטת\n\nכדי להזמין יש לכתוב פרטי ההזמנה\n\nאנא התחל מחדש וכתוב מה ברצונך להזמין\n\n📞 039792365`);
+            
+        } else if (stage === 'training_request') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלה בקשת הדרכה מפורטת\n\nכדי לקבל הדרכה יש לציין את הנושא\n\nאנא התחל מחדש וכתוב על איזה נושא אתה זקוק להדרכה\n\n📞 039792365`);
+            
+        } else if (stage === 'general_office_request') {
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלה פנייה מפורטת\n\nכדי לפנות למשרד יש לכתוב את נושא הפנייה\n\nאנא התחל מחדש וכתוב את בקשתך\n\n📞 039792365`);
+            
+        } else {
+            // ברירת מחדל
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלה תגובה\n\nאנא התחל מחדש או צור קשר:\n📞 039792365`);
+        }
+        
+        // איפוס השיחה לתפריט הראשי
+        if (customer) {
+            memory.updateStage(phone, 'menu', customer);
+        } else {
+            memory.updateStage(phone, 'identifying', null);
+        }
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בסיום אוטומטי:', error.message);
+    }
+}
+
 // אתחול Google Sheets
 (async () => {
     const initialized = await initializeGoogleSheets();
@@ -1106,12 +1214,25 @@ async function findSolutionFallback(problemDescription) {
 // פונקציה חדשה לזיהוי מילות סיום - הוסף לפני ה-ResponseHandler:
 function isFinishingWord(message) {
     const msg = message.toLowerCase().trim();
+    
+    // רשימת מילות סיום מורחבת
     const finishingWords = [
         'סיום', 'לסיים', 'להגיש', 'לשלוח', 'סיימתי', 
-        'זהו', 'תם', 'הסתיים', 'בחלוק', 'finish', 'done', 'end'
+        'זהו', 'תם', 'הסתיים', 'בחלק', 'finish', 'done', 'end',
+        'תודה', 'תודה רבה', 'די', 'מספיק', 'הכל'
     ];
     
-    return finishingWords.some(word => msg === word || msg.includes(word));
+    // בדיקה אם המילה קיימת בהודעה (לא רק כמו שהיא)
+    const containsFinishingWord = finishingWords.some(word => 
+        msg.includes(word) || msg.startsWith(word) || msg.endsWith(word)
+    );
+    
+    if (containsFinishingWord) {
+        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
+        return true;
+    }
+    
+    return false;
 }
 
 // הוספת תמיכה במילים נוספות לחזרה לתפריט בכל שלב:
@@ -1137,6 +1258,8 @@ class ResponseHandler {
         const conversation = this.memory.getConversation(phone, customer);
         
         log('INFO', `🎯 מעבד הודעה: "${message}" מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}`);                
+        // ביטול טיימר אוטומטי אם קיים
+        autoFinishManager.clearTimer(phone);
         // שלב 1: זיהוי לקוח אם לא קיים
         if (!customer) {
             return await this.handleCustomerIdentification(message, phone, conversation);
@@ -1549,15 +1672,18 @@ if (pastUnitMatch) {
         };
     }
     
-    // אם יש קובץ חדש - הוסף אותו
-    if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-        // הודעת אישור על הקבלת הקובץ
-        return {
-            response: `✅ **${fileType} התקבל!**\n\nשלח עוד קבצים או כתוב את מספר היחידה\n\n📎 **אפשר לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום" + מספר היחידה\n\nדוגמה: "סיום יחידה 101"\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
+// אם יש קובץ חדש - הוסף אותו
+if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+    // התחל טיימר 90 שניות
+    autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+    
+    // הודעת אישור על הקבלת הקובץ
+    return {
+        response: `✅ **${fileType} התקבל!**\n\nשלח עוד קבצים או כתוב את מספר היחידה\n\n📎 **אפשר לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום" + מספר היחידה\n\nדוגמה: "סיום יחידה 101"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'damage_photo',
+        customer: customer
+    };
+}
     
     // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה - תיקון הביטוי הרגולרי
     const unitMatch = message.match(/(\d{1,3})|יחידה\s*(\d{1,3})|מחסום\s*(\d{1,3})|חמסון\s*(\d{1,3})/);
@@ -1635,14 +1761,17 @@ if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes
     };
 }
 
-        // אם יש קובץ חדש - הוסף אותו
-        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-            return {
-                response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n📞 039792365`,
-                stage: 'order_request',
-                customer: customer
-            };
-        }
+// אם יש קובץ חדש - הוסף אותו
+if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+    // התחל טיימר 90 שניות
+    autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+    
+    return {
+        response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'order_request',
+        customer: customer
+    };
+}
         
         // טיפול בהודעה רגילה
         if (message && message.trim().length >= 5) {
@@ -1865,14 +1994,17 @@ response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הב�
             };
         }
 
-        // אם יש קובץ חדש - הוסף אותו
-        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-            return {
-                response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או תאר את בקשתך\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "עדכון פרטי לקוח + סיום"\n\n📞 039792365`,
-                stage: 'general_office_request',
-                customer: customer
-            };
-        }
+// אם יש קובץ חדש - הוסף אותו
+if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+    // התחל טיימר 90 שניות
+    autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
+    
+    return {
+        response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או תאר את בקשתך\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "עדכון פרטי לקוח + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'general_office_request',
+        customer: customer
+    };
+}
         
         // טיפול בהודעה רגילה
         if (message && message.trim().length >= 5) {
