@@ -318,7 +318,7 @@ async function handleProblemWithAssistant(problemDescription, customer) {
             
             // עיצוב התגובה
             let formattedResponse = `🔧 **פתרון מותאם אישית מהמומחה שלנו:**\n\n${assistantResponse}`;
-            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן / לא לשליחת המייל`;
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`;
             
             return { 
                 found: true, 
@@ -796,7 +796,7 @@ async function handleAutoFinish(phone, customer, stage) {
         
         // בדיקה באיזה שלב אנחנו וביצוע סיום מתאים
         if (stage === 'waiting_feedback') {
-            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על הפתרון\n\n🔧 מעביר את הפנייה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n🟡 רשום כן / לא לשליחת המייל`);
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על הפתרון\n\n🔧 מעביר את הפנייה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365`);
             
             // שלח מייל טכנאי
             const conversation = memory.getConversation(phone, customer);
@@ -1070,7 +1070,7 @@ async function findSolution(problemDescription, customer) {
             log('ERROR', '❌ מסד התקלות ריק');
             return {
                 found: false,
-                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **דחוף:** 039792365'
+                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n📞 **דחוף:** 039792365'
             };
         }
 
@@ -1218,14 +1218,14 @@ async function findSolutionFallback(problemDescription) {
         log('INFO', '⚠️ גם fallback לא מצא פתרון מתאים');
         return {
             found: false,
-            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365'
+            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
         };
         
     } catch (error) {
         log('ERROR', '❌ שגיאה גם ב-fallback:', error.message);
         return {
             found: false,
-            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365'
+            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
         };
     }
 }
@@ -1696,7 +1696,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
         log('DEBUG', `שולח מייל עם ${allFiles.length} קבצים ליחידה ${unitNumber}`);
         
         return {
-            response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
@@ -1816,7 +1816,7 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
     // טיפול בהודעה רגילה
     if (message && message.trim().length >= 5) {
         return {
-            response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n🟡 רשום סיום לשליחת המייל`,
+            response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n📞 039792365`,
             stage: 'order_request',
             customer: customer
         };
@@ -1931,7 +1931,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
         };
     } else {
         return {
-            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n🟡 רשום כן / לא לשליחת המייל`,
+            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n📞 039792365`,
             stage: 'waiting_training_feedback',
             customer: customer
         };
@@ -1959,7 +1959,7 @@ async handleFeedback(message, phone, customer, conversation) {
             this.memory.updateStage(phone, 'completed', customer);
             
             return {
-                response: `🔧 **מבין שהפתרון לא עזר**\n\n📋 מעבירה את הפניה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365\n\n🆔 מספר קריאה: ${data.serviceNumber}`,
+                response: `🔧 **מבין שהפתרון לא עזר**\n\n📋 מעבירה את הפניה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n📞 039792365\n\n🆔 מספר קריאה: ${data.serviceNumber}`,
                 stage: 'completed',
                 customer: customer,
                 sendTechnicianEmail: true,
@@ -1971,7 +1971,7 @@ async handleFeedback(message, phone, customer, conversation) {
             };
         } else {
             return {
-response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן / לא לשליחת המייל`,
+response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n📞 039792365`,
                 stage: 'waiting_feedback',
                 customer: customer
             };
@@ -2049,7 +2049,7 @@ if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
         // טיפול בהודעה רגילה
         if (message && message.trim().length >= 5) {
             return {
-                response: `📋 **נושא הפנייה נרשם:** "${message}"\n\n📎 **רוצה לצרף מסמכים?** (תמונות, PDF, Word, Excel)\n\nאו כתוב "סיום" כדי לשלוח את הפנייה\n\n📞 🟡 רשום סיום לשליחת המייל
+                response: `📋 **נושא הפנייה נרשם:** "${message}"\n\n📎 **רוצה לצרף מסמכים?** (תמונות, PDF, Word, Excel)\n\nאו כתוב "סיום" כדי לשלוח את הפנייה\n\n📞 039792365`,
                 stage: 'general_office_request',
                 customer: customer
             };
@@ -2339,12 +2339,12 @@ async function sendCustomerConfirmationEmail(customer, type, serviceNumber, deta
                 `;
                 break;
             case 'damage':
-                subject = `✅ דיווח נזק ${serviceNumber} - התקבלה בהצלחה`;
+                subject = `✅ דיווח נזק ${serviceNumber} - התקבל בהצלחה`;
                 emailType = '🚨 דיווח נזק';
                 content = `
                     <p>דיווח הנזק שלך נרשם במערכת שלנו.</p>
                     <p><strong>פרטי הנזק:</strong> ${details}</p>
-                    <p>🔍 הטכנאי שלנו יבדוק את הנזק ויצור קשר תוך 2-4 שעות בשעות העבודה</p>
+                    <p>🔍 הטכנאי שלנו יבדוק את הנזק ויצור קשר תוך 2-4 שעות</p>
                 `;
                 break;
 case 'training':
@@ -2730,7 +2730,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     
     // בדיקה שלא חורגים מ-4 קבצים בסה"כ
     if (existingFiles.length >= 4) {
-        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
+        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n📞 039792365`);
         return res.status(200).json({ status: 'OK - file limit reached' });
     }
     
