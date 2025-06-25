@@ -3108,6 +3108,33 @@ app.listen(PORT, () => {
     log('INFO', '🎯 זיהוי לקוח: מדויק ומהיר');
     log('INFO', '📊 ניהול שלבים: מושלם');
     log('INFO', '✅ מערכת מעולה מוכנה!');
+// 🔍 מציאת קבוצות אחרי 5 שניות
+setTimeout(async () => {
+    try {
+        log('INFO', '🔍 מחפש קבוצות WhatsApp...');
+        const instanceId = '7105253183';
+        const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
+        
+        const response = await axios.get(url);
+        
+        if (response.data && Array.isArray(response.data)) {
+            log('INFO', '📱 נמצאו הקבוצות הבאות:');
+            response.data.forEach((chat, index) => {
+                if (chat.id && chat.id.includes('@g.us')) {
+                    console.log(`\n📱 קבוצה ${index + 1}: ${chat.name || 'ללא שם'}`);
+                    console.log(`🆔 מזהה: ${chat.id}`);
+                    console.log(`👥 חברים: ${chat.participantsCount || 'לא ידוע'}`);
+                    console.log('---');
+                }
+            });
+        } else {
+            log('WARN', '⚠️ לא נמצאו קבוצות או שגיאה בתגובה');
+        }
+    } catch (error) {
+        log('ERROR', '❌ שגיאה בחיפוש קבוצות:', error.message);
+    }
+}, 5000);
 });
 
 // 🔧 בדיקות מערכת - חדש!
