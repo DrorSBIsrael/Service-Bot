@@ -16,9 +16,13 @@ let sheetsAvailable = false;
 
 // אתחול Google Sheets
 async function initializeGoogleSheets() {
+// שורות דיבוג זמניות
+    console.log('🔍 DEBUG - SHEETS_ID:', process.env.GOOGLE_SHEETS_ID);
+    console.log('🔍 DEBUG - EMAIL:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+    console.log('🔍 DEBUG - PRIVATE_KEY exists:', !!process.env.GOOGLE_PRIVATE_KEY);
     try {
         if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || !process.env.GOOGLE_PRIVATE_KEY || !process.env.GOOGLE_SHEETS_ID) {
-            log('WARN', '⚠️ Google Sheets לא מוגדר');
+            log('WARN', '⚠️ Google Sheets לא מוגדר - פועל ללא תיעוד');
             return false;
         }
 
@@ -30,10 +34,13 @@ async function initializeGoogleSheets() {
             scopes: ['https://www.googleapis.com/auth/spreadsheets'],
         });
 
+        // בדיקת חיבור
         const authClient = await auth.getClient();
         google.options({ auth: authClient });
         
-        log('INFO', '📊 Google Sheets מחובר');
+log('INFO', '📊 Google Sheets מחובר בהצלחה');
+log('INFO', 'מזהה הטבלה:', process.env.GOOGLE_SHEETS_ID);
+log('INFO', 'Service Account:', process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
         sheetsAvailable = true;
         return true;
     } catch (error) {
@@ -633,6 +640,7 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
             message: message
         });
         conv.lastActivity = new Date();
+        log('DEBUG', `💬 הוספתי הודעה מ-${sender}: ${message.substring(0, 50)}`);
         return conv;
     }
     
@@ -1024,79 +1032,100 @@ function findCustomerByName(message) {
     return null;
 }
 
+// פתרון תקלות עם OpenAI - prompt משופר
 async function findSolution(problemDescription, customer) {
     try {
         log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
-            return await findSolutionFallback(problemDescription);
+            return {
+                found: false,
+                response: '🔧 **בעיה במאגר התקלות**\n\n📧 שלחתי מייל לטכנאי\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **דחוף:** 039792365'
+            };
         }
 
-        // בדיקה מהירה של API Key
-        if (!process.env.OPENAI_API_KEY?.startsWith('sk-')) {
-            log('WARN', '⚠️ OpenAI API Key לא תקין - עובר ל-fallback');
+        // בדיקה שיש API Key ושהוא נכון
+        if (!process.env.OPENAI_API_KEY || !process.env.OPENAI_API_KEY.startsWith('sk-')) {
+            log('WARN', '⚠️ OpenAI API Key לא מוגדר נכון - עובר ל-fallback');
             return await findSolutionFallback(problemDescription);
         }
         
         try {
-            // prompt קצר ומהיר יותר
+            // יצירת prompt משופר עבור OpenAI
             const scenariosText = serviceFailureDB.map((scenario, index) => 
-                `${index + 1}. ${scenario.תרחיש}`
+                `${index + 1}. ${scenario.תרחיש} - ${scenario.שלבים.substring(0, 50)}...`
             ).join('\n');
             
-            const prompt = `תיאור התקלה: "${problemDescription}"
-            
-תרחישים:
+            const prompt = `אתה מומחה טכני למערכות בקרת חניה. אנא קרא בעיון את תיאור התקלה ומצא את התרחיש המתאים ביותר.
+
+תיאור התקלה: "${problemDescription}"
+
+תרחישי פתרון זמינים:
 ${scenariosText}
 
-החזר רק מספר (1-${serviceFailureDB.length}) או 0 אם אין התאמה:`;
+כללי התאמה:
+- "לא עובד" או "לא דולק" = תרחיש 1 (יחידה לא דולקת)  
+- "מחסום לא עולה" או "לא נפתח" = תרחיש 2 (מחסום לא עולה)
+- "לא מדפיס" או "נייר" = תרחיש 3 (לא מדפיס כרטיסים)
+- "אשראי" או "תשלום" = תרחיש 4 (בעיות אשראי)
+- "מסך" או "תצוגה" = תרחיש 5 (מסך לא עובד)
 
-            log('DEBUG', '🤖 שולח ל-OpenAI...');
+אם יש התאמה ברורה - החזר את מספר התרחיש (1-${serviceFailureDB.length})
+אם אין התאמה ברורה - החזר 0
+רק מספר, בלי הסברים.
+
+מספר התרחיש:`;
+
+            log('DEBUG', '🤖 שולח בקשה ל-OpenAI עם prompt משופר...');
             
-            // קריאה מהירה יותר עם timeout קצר
+            // קריאה ל-OpenAI עם timeout
             const completion = await Promise.race([
                 openai.chat.completions.create({
                     model: "gpt-3.5-turbo",
                     messages: [{ role: "user", content: prompt }],
                     max_tokens: 5,
-                    temperature: 0
+                    temperature: 0.1
                 }),
                 new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('OpenAI timeout')), 5000) // 5 שניות במקום 10
+                    setTimeout(() => reject(new Error('OpenAI timeout')), 10000)
                 )
             ]);
             
             const aiResponse = completion.choices[0].message.content.trim();
             const scenarioNumber = parseInt(aiResponse);
             
-            log('INFO', `🤖 OpenAI: "${aiResponse}" -> תרחיש: ${scenarioNumber}`);
+            log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
             
+            // בדיקה אם נמצא תרחיש מתאים
             if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
                 const scenario = serviceFailureDB[scenarioNumber - 1];
                 
-                let solution = `🔧 **פתרון: ${scenario.תרחיש}**\n\n📋 **שלבים:**\n${scenario.שלבים}`;
+                let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
                 
                 if (scenario.הערות) {
-                    solution += `\n\n💡 **הערות:** ${scenario.הערות}`;
+                    solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
                 }
                 
                 solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
-                log('INFO', `✅ נמצא פתרון: ${scenario.תרחיש}`);
+                log('INFO', `✅ OpenAI מצא פתרון מתאים: ${scenario.תרחיש}`);
                 return { found: true, response: solution, scenario: scenario };
             } else {
-                log('INFO', '⚠️ OpenAI לא מצא פתרון - עובר ל-fallback');
+                log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
                 return await findSolutionFallback(problemDescription);
             }
             
         } catch (aiError) {
             log('ERROR', `❌ שגיאה ב-OpenAI: ${aiError.message}`);
+            
+            // fallback למערכת הישנה
+            log('INFO', '🔄 עובר לחיפוש ישן כ-fallback...');
             return await findSolutionFallback(problemDescription);
         }
         
     } catch (error) {
-        log('ERROR', `❌ שגיאה כללית: ${error.message}`);
+        log('ERROR', `❌ שגיאה כללית בחיפוש פתרון: ${error.message}`);
         return await findSolutionFallback(problemDescription);
     }
 }
@@ -1479,6 +1508,20 @@ if (msg === '5' || msg.includes('משרד')) {
 async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = await getNextServiceNumber();
     
+    // 📋 **תמיד** הצג את המסך "קיבלתי את התיאור" קודם
+    let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
+    
+    // אם יש קבצים מצורפים - הוסף אישור
+    if (downloadedFiles && downloadedFiles.length > 0) {
+        const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
+        responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+    }
+    
+    responseMessage += `\n\n🔄 **מעבד את התקלה...**\n⏳ המתן כמה שניות`;
+    
+    // שלח את ההודעה הראשונה
+    await sendWhatsApp(phone, responseMessage);
+    
     // שמירת פרטי התקלה בזיכרון
     this.memory.updateStage(phone, 'processing_problem', customer, {
         serviceNumber: serviceNumber,
@@ -1486,7 +1529,7 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
         attachments: downloadedFiles
     });
     
-    // מיד עבד את התקלה - בין אם יש קבצים או לא
+    // עכשיו עבד את התקלה
     let solution;
     if (process.env.OPENAI_ASSISTANT_ID) {
         log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
@@ -1506,47 +1549,35 @@ async handleProblemDescription(message, phone, customer, hasFile, downloadedFile
             threadId: solution.threadId || null,
             source: solution.source || 'database'
         });
+        
         // התחל טיימר 90 שניות למשוב
         autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
 
-        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
-        
-        // אם יש קבצים מצורפים - הוסף אישור
-        if (downloadedFiles && downloadedFiles.length > 0) {
-            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
-        }
-        
-        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+        // שלח את הפתרון כהודעה נפרדת
+        let solutionMessage = `${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
         
         return {
-            response: responseMessage,
+            response: solutionMessage,
             stage: 'waiting_feedback',
             customer: customer,
-            serviceNumber: serviceNumber
+            serviceNumber: serviceNumber,
+            sendSecondMessage: true // דגל שזו הודעה שנייה
         };
     } else {
         // לא נמצא פתרון - שלח טכנאי
         this.memory.updateStage(phone, 'completed', customer);
         
-        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
-        
-        // אם יש קבצים מצורפים - הוסף אישור
-        if (downloadedFiles && downloadedFiles.length > 0) {
-            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
-        }
-        
-        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+        let noSolutionMessage = `${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
         
         return {
-            response: responseMessage,
+            response: noSolutionMessage,
             stage: 'completed',
             customer: customer,
             serviceNumber: serviceNumber,
             sendTechnicianEmail: true,
             problemDescription: message,
-            attachments: downloadedFiles
+            attachments: downloadedFiles,
+            sendSecondMessage: true // דגל שזו הודעה שנייה
         };
     }
 }
@@ -2703,6 +2734,10 @@ app.post('/webhook/whatsapp', async (req, res) => {
         }
         
         const messageId = req.body.messageData?.id || req.body.messageData?.messageId || Date.now();
+        if (messageTracker.isProcessed(messageId)) {
+            log('INFO', '🔄 הודעה כבר עובדה - מדלג');
+            return res.status(200).json({ status: 'Already processed' });
+        }
         messageTracker.markProcessed(messageId);
         const messageData = req.body.messageData;
         const senderData = req.body.senderData;
@@ -2713,38 +2748,22 @@ app.post('/webhook/whatsapp', async (req, res) => {
         let hasFile = false;
         let fileType = '';
         let downloadedFiles = [];
-
-// עיבוד טקסט - גרסה מתוקנת
-if (messageData.textMessageData && messageData.textMessageData.textMessage) {
-    // הודעת טקסט רגילה
-    messageText = messageData.textMessageData.textMessage.trim();
-    log('DEBUG', `📝 טקסט רגיל: "${messageText}"`);
+        
+// עיבוד טקסט - הגרסה הסופית והנכונה
+if (messageData.textMessageData) {
+    messageText = messageData.textMessageData.textMessage;
 } else if (messageData.fileMessageData) {
-    // הודעה עם קובץ
     hasFile = true;
-    
-    // תיקון חשוב: בדיקה טובה יותר של caption
-    const caption = messageData.fileMessageData.caption;
-    if (caption && caption.trim() && caption.trim() !== '') {
-        messageText = caption.trim();
-        log('DEBUG', `📎 קובץ עם טקסט: "${messageText}"`);
-    } else {
-        messageText = messageData.fileMessageData.fileName || 'שלח קובץ';
-        log('DEBUG', `📎 קובץ ללא טקסט, שם: "${messageText}"`);
-    }
+    messageText = messageData.fileMessageData.caption || 'שלח קובץ';
     
     const fileName = messageData.fileMessageData.fileName || '';
     const mimeType = messageData.fileMessageData.mimeType || '';
     
-    fileType = getFileType(fileName, mimeType);
-    log('INFO', `📁 ${fileType}: ${fileName} - Caption מקורי: "${messageData.fileMessageData.caption}" - טקסט סופי: "${messageText}"`);
-} else {
-    // מקרה חירום - סוג הודעה לא מזוהה
-    messageText = 'הודעה לא מזוהה';
-    log('WARN', '⚠️ סוג הודעה לא מזוהה, messageData:', JSON.stringify(messageData, null, 2));
+    fileType = getFileType(fileName, mimeType); // 🔧 רק השורה הזו!
+    log('INFO', `📁 ${fileType}: ${fileName} - טקסט: "${messageText}"`);
 }
 
-log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
+      log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
         
 // זיהוי לקוח
 let customer = findCustomerByPhone(phone);
@@ -2762,14 +2781,17 @@ log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.s
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
     const conversation = memory.getConversation(phone, customer);
     
-    // התעלם מקבצים במצב waiting_feedback
+    // ❗️ אם אנחנו במצב waiting_feedback - התעלם מקבצים חדשים
     if (conversation?.stage === 'waiting_feedback') {
-        log('INFO', `⚠️ מתעלם מקובץ - כבר במצב המתנה למשוב`);
+        log('INFO', `⚠️ מתעלם מקובץ ${fileType} - כבר במצב המתנה למשוב`);
         return res.status(200).json({ status: 'OK - ignoring file after solution' });
     }
     
-    // תיקון: טיפול מיוחד בנזקים עם caption
+    // 🔧 תיקון חדש: טיפול מיוחד עבור דיווח נזקים
     if (conversation?.stage === 'damage_photo') {
+        // בדוק אם יש גם מספר יחידה בcaption
+        const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
+        
         const timestamp = Date.now();
         const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
         const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
@@ -2777,13 +2799,13 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
         if (filePath) {
             downloadedFiles.push(filePath);
-            log('INFO', `✅ ${fileType} הורד עם טקסט: "${messageText}"`);
+            log('INFO', `✅ ${fileType} הורד עבור נזק: ${fileName} - Caption: "${messageText}"`);
             
-            // אם יש מספר יחידה בטקסט - עבד מיד
-            const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
+            // אם יש גם מספר יחידה בcaption - עבד מיד
             if (unitMatch) {
-                log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד`);
+                log('INFO', `🎯 יש גם קובץ וגם מספר יחידה בcaption - מעבד מיד`);
                 
+                // עבד את הנזק מיד עם הקובץ והטקסט
                 const result = await responseHandler.generateResponse(
                     messageText, 
                     phone, 
@@ -2796,8 +2818,11 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                 await sendWhatsApp(phone, result.response);
                 memory.addMessage(phone, result.response, 'hadar', result.customer);
                 
-                // שליחת מיילים
+                log('INFO', `📤 נזק עובד עם קובץ ומספר יחידה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
+
+                // שליחת מיילים לפי הצורך
                 if (result.sendDamageEmail) {
+                    log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
                     await sendEmail(result.customer, 'damage', result.problemDescription, {
                         serviceNumber: result.serviceNumber,
                         problemDescription: result.problemDescription,
@@ -2805,7 +2830,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     });
                     await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
                 }
-                return res.status(200).json({ status: 'OK - damage processed' });
+                return res.status(200).json({ status: 'OK - damage processed with file and unit' });
             }
         }
     }
