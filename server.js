@@ -6,13 +6,25 @@ const fs = require('fs');
 const path = require('path');
 const app = express();
 const OpenAI = require('openai');
-// Google Sheets Integration
 const { google } = require('googleapis');
+const fileHandler = require('./FileHandler');
 
 // הגדרת Google Sheets
 const sheets = google.sheets('v4');
 let auth = null;
 let sheetsAvailable = false;
+
+// ✅ הוסף בדיקה שהFileHandler קיים
+if (fileHandler && typeof fileHandler.cleanOldFiles === 'function') {
+    // ניקוי קבצים אוטומטי כל 6 שעות
+    setInterval(() => {
+        fileHandler.cleanOldFiles(24); // מחק קבצים מעל 24 שעות
+    }, 6 * 60 * 60 * 1000);
+    
+    console.log('🧹 ניקוי קבצים אוטומטי הופעל');
+} else {
+    console.log('⚠️ FileHandler לא זמין - ניקוי אוטומטי לא הופעל');
+}
 
 // אתחול Google Sheets
 async function initializeGoogleSheets() {
@@ -386,38 +398,6 @@ async function handleTrainingWithAssistant(trainingRequest, customer) {
         
     } catch (error) {
         log('ERROR', '❌ שגיאה בהדרכה עם Assistant:', error.message);
-        return null;
-    }
-}
-
-// פונקציה להורדת קבצים מוואטסאפ
-async function downloadWhatsAppFile(fileUrl, fileName) {
-    try {
-        log('INFO', `📥 מוריד קובץ: ${fileName}`);
-        const response = await axios({
-            method: 'GET',
-            url: fileUrl,
-            responseType: 'stream'
-        });
-        
-        const uploadsDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        
-        const filePath = path.join(uploadsDir, fileName);
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-        
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                log('INFO', `✅ קובץ נשמר: ${filePath}`);
-                resolve(filePath);
-            });
-            writer.on('error', reject);
-        });
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בהורדת קובץ:', error.message);
         return null;
     }
 }
@@ -1021,35 +1001,6 @@ function findCustomerByPhone(phone) {
     log('WARN', `⚠️ לא נמצא לקוח עבור טלפון: ${phone} (נורמליזציות: ${incomingVariations.join(', ')})`);
     return null;
 }
-
-// גם הוסף פונקציה עזר לדיבוג - הוסף אחרי הפונקציה למעלה:
-
-function debugPhoneSearch(targetPhone) {
-    console.log(`\n🔍 DEBUG PHONE SEARCH: ${targetPhone}`);
-    const cleanPhone = targetPhone.replace(/[^\d]/g, '');
-    console.log(`📱 נוקה ל: ${cleanPhone}`);
-    
-    // הצג כמה לקוחות לדוגמה
-    const sampleCustomers = customers.slice(0, 5);
-    sampleCustomers.forEach(customer => {
-        console.log(`👤 ${customer.name}:`);
-        [customer.phone, customer.phone1, customer.phone2].forEach((phone, index) => {
-            if (phone) {
-                const cleanCustomerPhone = phone.replace(/[^\d]/g, '');
-                console.log(`   📞 phone${index || ''}: ${phone} -> ${cleanCustomerPhone}`);
-            }
-        });
-    });
-    
-    console.log(`\n🎯 מחפש התאמה עבור: ${targetPhone}`);
-    const result = findCustomerByPhone(targetPhone);
-    console.log(`📊 תוצאה: ${result ? result.name : 'לא נמצא'}\n`);
-    
-    return result;
-}
-
-// להוסיף לבדיקה - קרא לפונקציה הזו מה-webhook כדי לבדוק:
-// debugPhoneSearch('972543084210'); // הטלפון של יעקב פזרקן
 
 // זיהוי לקוח לפי שם חניון - מהקוד המקורי שעובד
 function findCustomerByName(message) {
@@ -2256,7 +2207,7 @@ async function sendWhatsApp(phone, message) {
 }
 
 // מזהה קבוצת WhatsApp לתקלות דחופות
-const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
+const GROUP_CHAT_ID = process.env.GROUP_CHAT_ID || '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
 
 // שליחת WhatsApp לקבוצה
 async function sendWhatsAppToGroup(message) {
@@ -2274,33 +2225,6 @@ async function sendWhatsAppToGroup(message) {
     } catch (error) {
         log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
         throw error;
-    }
-}
-
-// פונקציה זמנית למציאת מזהה הקבוצה
-async function findGroupId() {
-    try {
-        const instanceId = '7105253183';
-        const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
-        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
-        
-        const response = await axios.get(url);
-        console.log('\n🔍 רשימת כל הקבוצות:');
-        
-        if (response.data && Array.isArray(response.data)) {
-            response.data.forEach((chat, index) => {
-                if (chat.id && chat.id.includes('@g.us')) {
-                    console.log(`${index + 1}. קבוצה: ${chat.name || 'ללא שם'}`);
-                    console.log(`   מזהה: ${chat.id}`);
-                    console.log(`   חברים: ${chat.participantsCount || 'לא ידוע'}`);
-                    console.log('---');
-                }
-            });
-        } else {
-            console.log('❌ לא נמצאו קבוצות או שגיאה בתגובה');
-        }
-    } catch (error) {
-        console.error('❌ שגיאה בקבלת רשימת קבוצות:', error.message);
     }
 }
 
@@ -2733,94 +2657,6 @@ async function sendGuestEmail(guestDetails, phone, serviceNumber) {
     }
 }
 
-// קביעת סוג קובץ
-function getFileExtension(fileName, mimeType) {
-    // אם יש שם קובץ עם סיומת
-    if (fileName && fileName.includes('.')) {
-        const extension = fileName.substring(fileName.lastIndexOf('.'));
-        return extension;
-    }
-    
-    // אם אין שם קובץ, נקבע לפי mimeType
-    if (mimeType) {
-        if (mimeType.startsWith('image/')) {
-            if (mimeType.includes('jpeg')) return '.jpg';
-            if (mimeType.includes('png')) return '.png';
-            if (mimeType.includes('gif')) return '.gif';
-            if (mimeType.includes('webp')) return '.webp';
-            return '.jpg'; // ברירת מחדל לתמונות
-        } else if (mimeType.startsWith('video/')) {
-            if (mimeType.includes('mp4')) return '.mp4';
-            if (mimeType.includes('avi')) return '.avi';
-            if (mimeType.includes('quicktime')) return '.mov';
-            if (mimeType.includes('x-msvideo')) return '.avi';
-            return '.mp4'; // ברירת מחדל לסרטונים
-        } else if (mimeType.includes('pdf')) {
-            return '.pdf';
-        } else if (mimeType.includes('msword') || mimeType.includes('wordprocessingml')) {
-            return mimeType.includes('wordprocessingml') ? '.docx' : '.doc';
-        } else if (mimeType.includes('excel') || mimeType.includes('spreadsheetml')) {
-            return mimeType.includes('spreadsheetml') ? '.xlsx' : '.xls';
-        } else if (mimeType.includes('powerpoint') || mimeType.includes('presentationml')) {
-            return mimeType.includes('presentationml') ? '.pptx' : '.ppt';
-        } else if (mimeType.includes('text/plain')) {
-            return '.txt';
-        }
-    }
-    
-    return '.file'; // ברירת מחדל
-}
-
-// פונקציה לזיהוי סוג קובץ - הוסף אחרי getFileExtension
-function getFileType(fileName, mimeType) {
-    const extension = fileName ? fileName.toLowerCase() : '';
-    
-    // תמונות
-    if (mimeType?.startsWith('image/') || extension.match(/\.(jpg|jpeg|png|gif|bmp|webp|tiff)$/)) {
-        return 'תמונה';
-    }
-    
-    // סרטונים
-    if (mimeType?.startsWith('video/') || extension.match(/\.(mp4|avi|mov|wmv|mkv|flv|webm|3gp)$/)) {
-        return 'סרטון';
-    }
-    
-    // מסמכי PDF
-    if (mimeType?.includes('pdf') || extension.includes('.pdf')) {
-        return 'PDF';
-    }
-    
-    // מסמכי Word
-    if (mimeType?.includes('msword') || mimeType?.includes('wordprocessingml') || 
-        extension.match(/\.(doc|docx)$/)) {
-        return 'מסמך Word';
-    }
-    
-    // מסמכי Excel
-    if (mimeType?.includes('excel') || mimeType?.includes('spreadsheetml') || 
-        extension.match(/\.(xls|xlsx)$/)) {
-        return 'קובץ Excel';
-    }
-    
-    // מסמכי PowerPoint
-    if (mimeType?.includes('powerpoint') || mimeType?.includes('presentationml') || 
-        extension.match(/\.(ppt|pptx)$/)) {
-        return 'מצגת PowerPoint';
-    }
-    
-    // קבצי טקסט
-    if (mimeType?.includes('text/') || extension.match(/\.(txt|rtf)$/)) {
-        return 'קובץ טקסט';
-    }
-    
-    // קבצי אודיו
-    if (mimeType?.startsWith('audio/') || extension.match(/\.(mp3|wav|ogg|m4a|aac)$/)) {
-        return 'קובץ אודיו';
-    }
-    
-    return 'קובץ';
-}
-
 // עמוד בית
 app.get('/', (req, res) => {
     const stats = memory.getStats();
@@ -2922,14 +2758,16 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         // בדוק אם יש גם מספר יחידה בcaption
         const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
         
-        const timestamp = Date.now();
-        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-        const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
+        const fileResult = await fileHandler.processWhatsAppFile({
+            fileName: messageData.fileMessageData.fileName || '',
+            mimeType: messageData.fileMessageData.mimeType || '',
+            downloadUrl: messageData.fileMessageData.downloadUrl
+        }, customer?.id);
         
-        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-        if (filePath) {
-            downloadedFiles.push(filePath);
-            log('INFO', `✅ ${fileType} הורד עבור נזק: ${fileName} - Caption: "${messageText}"`);
+        if (fileResult) {
+            downloadedFiles.push(fileResult.path);
+            const fileType = fileResult.type; // הגדר את fileType כאן
+            log('INFO', `✅ ${fileResult.type} הורד עבור נזק: ${fileResult.uniqueName} - Caption: "${messageText}"`);
             
             // אם יש גם מספר יחידה בcaption - עבד מיד
             if (unitMatch) {
@@ -2967,14 +2805,16 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
 
     // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
     if (conversation?.stage === 'problem_description') {
-        const timestamp = Date.now();
-        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-        const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
+        const fileResult = await fileHandler.processWhatsAppFile({
+            fileName: messageData.fileMessageData.fileName || '',
+            mimeType: messageData.fileMessageData.mimeType || '',
+            downloadUrl: messageData.fileMessageData.downloadUrl
+        }, customer?.id);
         
-        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-        if (filePath) {
-            downloadedFiles.push(filePath);
-            log('INFO', `✅ ${fileType} הורד עבור תקלה: ${fileName}`);
+        if (fileResult) {
+            downloadedFiles.push(fileResult.path);
+            const fileType = fileResult.type; // הגדר את fileType כאן
+            log('INFO', `✅ ${fileResult.type} הורד עבור תקלה: ${fileResult.uniqueName}`);
             
             // עבד את התקלה מיד עם הקובץ
             const result = await responseHandler.generateResponse(
@@ -3024,15 +2864,16 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
         return res.status(200).json({ status: 'OK - file limit reached' });
     }
+    const fileResult = await fileHandler.processWhatsAppFile({
+        fileName: messageData.fileMessageData.fileName || '',
+        mimeType: messageData.fileMessageData.mimeType || '',
+        downloadUrl: messageData.fileMessageData.downloadUrl
+    }, customer?.id);
     
-    const timestamp = Date.now();
-    const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-    const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
-    
-    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-    if (filePath) {
-        downloadedFiles.push(filePath);
-        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
+    if (fileResult) {
+        downloadedFiles.push(fileResult.path);
+        const fileType = fileResult.type; // הגדר את fileType כאן
+        log('INFO', `✅ ${fileResult.type} הורד: ${fileResult.uniqueName}`);
         
         // שמירת הקובץ בזיכרון הזמני של השיחה
         const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
@@ -3241,6 +3082,20 @@ function checkGoogleSheetsConfig() {
     }
 }
 
+function checkFileHandlerConfig() {
+    console.log('🔍 בדיקת FileHandler:');
+    console.log('FileHandler טעון:', !!fileHandler);
+    
+    if (fileHandler) {
+        console.log('✅ פונקציות זמינות:', Object.getOwnPropertyNames(Object.getPrototypeOf(fileHandler)));
+        console.log('📁 FileHandler מוכן לפעולה!');
+    } else {
+        console.log('❌ FileHandler לא נטען');
+    }
+}
+
+checkOpenAIConfig();
 checkGoogleSheetsConfig();
+checkFileHandlerConfig();
 
 module.exports = app;
