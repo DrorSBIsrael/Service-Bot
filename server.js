@@ -230,17 +230,24 @@ async function runAssistant(threadId, assistantId, instructions = "") {
     try {
         const run = await openai.beta.threads.runs.create(threadId, {
             assistant_id: assistantId,
-            instructions: instructions
+            instructions: instructions,
+            // 🔧 הוספת פרמטרים למהירות
+            model: "gpt-4o-mini", // מודל מהיר יותר אם זמין
+            max_completion_tokens: 1000, // הגבלת אורך התשובה
+            temperature: 0.3 // יותר עקבי, פחות יצירתי
         });
         
         log('INFO', `🤖 מפעיל Assistant: ${run.id}`);
         
-        // המתנה לסיום
+        // המתנה עם timeout מהיר יותר
         let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+        let attempts = 0;
+        const maxAttempts = 15; // 15 שניות מקסימום
         
-        while (runStatus.status === 'queued' || runStatus.status === 'in_progress') {
+        while ((runStatus.status === 'queued' || runStatus.status === 'in_progress') && attempts < maxAttempts) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
+            attempts++;
         }
         
         if (runStatus.status === 'completed') {
@@ -254,7 +261,7 @@ async function runAssistant(threadId, assistantId, instructions = "") {
             }
         }
         
-        log('WARN', `⚠️ Assistant לא השלים בהצלחה: ${runStatus.status}`);
+        log('WARN', `⚠️ Assistant לא השלים בזמן או נכשל: ${runStatus.status}`);
         return null;
         
     } catch (error) {
@@ -266,52 +273,73 @@ async function runAssistant(threadId, assistantId, instructions = "") {
 // פונקציה מיוחדת לטיפול בתקלות עם Assistant
 async function handleProblemWithAssistant(problemDescription, customer) {
     try {
-        log('INFO', '🔧 מעבד תקלה עם OpenAI Assistant...');
+        log('INFO', '🔧 מעבד תקלה עם OpenAI Assistant מותאם...');
         
-        // יצירת thread חדש
         const threadId = await createThread();
         if (!threadId) {
             log('WARN', '⚠️ נכשל ביצירת thread - עובר לשיטה הרגילה');
             return await findSolution(problemDescription, customer);
         }
         
-        // בניית הודעה מפורטת עם קשר לקבצי החניה
+        // 🔧 Prompt משופר וממוקד
         const contextMessage = `
-שלום! אני עוזר טכני למערכות בקרת חניה של חברת שיידט את בכמן.
+SYSTEM: אתה טכנאי מומחה למערכות בקרת חניה של שיידט את בכמן.
 
-פרטי הלקוח:
+CUSTOMER INFO:
 - שם: ${customer.name}
 - חניון: ${customer.site}
 - כתובת: ${customer.address}
 
-תיאור התקלה שדווחה:
+PROBLEM REPORTED:
 "${problemDescription}"
 
-אנא חפש במדריכי ההפעלה שלך פתרון מתאים לתקלה זו ותן הוראות צעד אחר צעד. 
-השתמש במידע מהקבצים המצורפים במערכת (מדריכי הפעלה של מערכות החניה).
-התמקד בפתרונות מעשיים שהלקוח יכול לבצע בעצמו.
+INSTRUCTIONS:
+1. חפש במדריכי ההפעלה המצורפים פתרון ספציפי לתקלה זו
+2. אם לא נמצא פתרון מדויק, השתמש בידע הכללי על מערכות חניה
+3. תן הוראות צעד אחר צעד, ברורות ומעשיות
+4. התמקד בפתרונות שהלקוח יכול לבצע בעצמו
+5. אם צריך טכנאי - ציין זאת במפורש
+6. השתמש באימוג'י לבהירות
+7. תשובה קצרה ועניינית - מקסימום 300 מילים
+
+FORMAT:
+🔧 **פתרון לתקלה: [שם התקלה]**
+
+📋 **שלבי הפתרון:**
+1. [שלב ראשון]
+2. [שלב שני]
+3. [שלב שלישי]
+
+💡 **הערות חשובות:**
+[הערות בטיחות או טיפים]
+
+⚠️ **אם לא עוזר:**
+[מתי לקרוא לטכנאי]
 `;
 
-        // שליחת ההודעה ל-Assistant
         const messageAdded = await addMessageToThread(threadId, contextMessage);
         if (!messageAdded) {
             log('WARN', '⚠️ נכשל בהוספת הודעה - עובר לשיטה הרגילה');
             return await findSolution(problemDescription, customer);
         }
         
-        // הפעלת Assistant עם אינסטרוקציות מותאמות לחברה
+        // 🔧 הפעלת Assistant עם הוראות מותאמות
         const assistantResponse = await runAssistant(
             threadId, 
             process.env.OPENAI_ASSISTANT_ID,
-            "אתה מומחה למערכות בקרת חניה של חברת שיידט את בכמן. השתמש במדריכי ההפעלה במערכת כדי לתת פתרון מדויק ומפורט בעברית. השתמש באימוג'י לבהירות."
+            `אתה טכנאי מומחה למערכות בקרת חניה של שיידט את בכמן. 
+            השתמש רק במידע מהמדריכים המצורפים. 
+            תן פתרון מעשי וקצר בעברית עם אימוג'י. 
+            מקסימום 300 מילים.
+            פורמט: 🔧 פתרון → 📋 שלבים → 💡 הערות → ⚠️ אם לא עוזר`
         );
         
         if (assistantResponse) {
             log('INFO', '✅ Assistant נתן פתרון מותאם אישית');
             
-            // עיצוב התגובה
-            let formattedResponse = `🔧 **פתרון מותאם אישית מהמומחה שלנו:**\n\n${assistantResponse}`;
-            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן/לא לשליחת מייל`;
+            // עיצוב התגובה עם הוראות ברורות
+            let formattedResponse = `${assistantResponse}`;
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה`;
             
             return { 
                 found: true, 
@@ -329,31 +357,54 @@ async function handleProblemWithAssistant(problemDescription, customer) {
         return await findSolution(problemDescription, customer);
     }
 }
-
 // פונקציה מיוחדת לטיפול בהדרכה עם Assistant
 async function handleTrainingWithAssistant(trainingRequest, customer) {
     try {
         log('INFO', '📚 מעבד בקשת הדרכה עם OpenAI Assistant...');
         
         const threadId = await createThread();
-        if (!threadId) {
-            return null;
-        }
+        if (!threadId) return null;
         
+        // 🔧 Prompt מותאם להדרכה
         const contextMessage = `
-שלום! אני מבקש הדרכה למערכת בקרת החניה של שיידט את בכמן.
+SYSTEM: אתה מדריך מומחה למערכות בקרת חניה של שיידט את בכמן.
 
-פרטי הלקוח:
+CUSTOMER INFO:
 - שם: ${customer.name}
 - חניון: ${customer.site}
 - כתובת: ${customer.address}
 
-נושא ההדרכה:
+TRAINING REQUEST:
 "${trainingRequest}"
 
-אנא חפש במדריכי ההפעלה והחומרים שלך והכן חומר הדרכה מפורט ומותאם לנושא זה.
-השתמש במידע מהקבצים המצורפים במערכת (מדריכי הפעלה של מערכות החניה).
-כלול הסברים צעד אחר צעד, טיפים חשובים ודברים שחשוב להימנע מהם.
+INSTRUCTIONS:
+1. חפש במדריכי ההפעלה חומר הדרכה רלוונטי
+2. הכן הדרכה מפורטת ומותאמת לנושא הספציפי
+3. כלול הסברים צעד אחר צעד
+4. הוסף טיפים חשובים ודברים להימנע מהם
+5. השתמש באימוג'י ובמבנה ברור
+6. תשובה מפורטת - 400-600 מילים
+
+FORMAT:
+📚 **הדרכה: [נושא ההדרכה]**
+
+🎯 **מטרה:**
+[מה נלמד]
+
+📋 **שלבים מפורטים:**
+1. [שלב ראשון עם הסבר]
+2. [שלב שני עם הסבר]
+...
+
+💡 **טיפים חשובים:**
+- [טיפ 1]
+- [טיפ 2]
+
+⚠️ **זהירות - אל תעשה:**
+- [מה להימנע]
+
+🔧 **בעיות נפוצות ופתרונות:**
+- בעיה: פתרון
 `;
 
         const messageAdded = await addMessageToThread(threadId, contextMessage);
@@ -362,7 +413,11 @@ async function handleTrainingWithAssistant(trainingRequest, customer) {
         const assistantResponse = await runAssistant(
             threadId, 
             process.env.OPENAI_ASSISTANT_ID,
-            "אתה מדריך מומחה למערכות בקרת חניה של חברת שיידט את בכמן. השתמש במדריכי ההפעלה במערכת להכנת חומר הדרכה מפורט, ברור ומעשי בעברית. השתמש באימוג'י ובמבנה ברור."
+            `אתה מדריך מומחה למערכות בקרת חניה של שיידט את בכמן. 
+            השתמש במדריכי ההפעלה במערכת להכנת הדרכה מפורטת וברורה בעברית. 
+            כלול שלבים מפורטים, טיפים, והזהרות.
+            400-600 מילים.
+            פורמט: 📚 הדרכה → 🎯 מטרה → 📋 שלבים → 💡 טיפים → ⚠️ זהירות → 🔧 בעיות נפוצות`
         );
         
         if (assistantResponse) {
@@ -379,38 +434,6 @@ async function handleTrainingWithAssistant(trainingRequest, customer) {
         
     } catch (error) {
         log('ERROR', '❌ שגיאה בהדרכה עם Assistant:', error.message);
-        return null;
-    }
-}
-
-// פונקציה להורדת קבצים מוואטסאפ
-async function downloadWhatsAppFile(fileUrl, fileName) {
-    try {
-        log('INFO', `📥 מוריד קובץ: ${fileName}`);
-        const response = await axios({
-            method: 'GET',
-            url: fileUrl,
-            responseType: 'stream'
-        });
-        
-        const uploadsDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        
-        const filePath = path.join(uploadsDir, fileName);
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-        
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                log('INFO', `✅ קובץ נשמר: ${filePath}`);
-                resolve(filePath);
-            });
-            writer.on('error', reject);
-        });
-    } catch (error) {
-        log('ERROR', '❌ שגיאה בהורדת קובץ:', error.message);
         return null;
     }
 }
@@ -489,6 +512,22 @@ try {
     
     log('INFO', `📋 מסד תקלות נטען: ${serviceFailureDB.length} תרחישים`);
     
+    log('INFO', '🔍 בדיקת תוכן קובץ התרחישים:');
+    if (serviceFailureDB.length > 0) {
+        serviceFailureDB.forEach((scenario, index) => {
+            log('DEBUG', `${index + 1}. "${scenario.תרחיש}" - יש פתרון: ${scenario.שלבים ? 'כן' : 'לא'} - יש הערות: ${scenario.הערות ? 'כן' : 'לא'}`);
+        });
+        
+        const validScenarios = serviceFailureDB.filter(s => s.תרחיש && s.שלבים);
+        const invalidScenarios = serviceFailureDB.filter(s => !s.תרחיש || !s.שלבים);
+        
+        log('INFO', `📊 תרחישים תקינים: ${validScenarios.length}/${serviceFailureDB.length}`);
+        if (invalidScenarios.length > 0) {
+            log('WARN', `⚠️ תרחישים לא תקינים: ${invalidScenarios.length}`);
+        }
+    } else {
+        log('ERROR', '❌ קובץ התרחישים ריק או לא נטען!');
+    }
     // בדיקה מפורטת של התוכן
     serviceFailureDB.forEach((scenario, index) => {
         log('DEBUG', `תרחיש ${index + 1}: "${scenario.תרחיש || 'לא הוגדר'}"`);
@@ -1026,78 +1065,159 @@ function findCustomerByName(message) {
 
 async function findSolution(problemDescription, customer) {
     try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI...');
+        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI משופר...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
-            return await findSolutionFallback(problemDescription);
+            return await findSolutionFallbackSmart(problemDescription);
         }
 
-        // בדיקה מהירה של API Key
         if (!process.env.OPENAI_API_KEY?.startsWith('sk-')) {
             log('WARN', '⚠️ OpenAI API Key לא תקין - עובר ל-fallback');
-            return await findSolutionFallback(problemDescription);
+            return await findSolutionFallbackSmart(problemDescription);
         }
         
         try {
-            // prompt קצר ומהיר יותר
-            const scenariosText = serviceFailureDB.map((scenario, index) => 
-                `${index + 1}. ${scenario.תרחיש}`
-            ).join('\n');
+            // 🔧 prompt משופר עם התרחישים המלאים מהקובץ שלך
+            const fullScenarios = serviceFailureDB.map((scenario, index) => 
+                `${index + 1}. תרחיש: "${scenario.תרחיש}"
+   פתרון: ${scenario.שלבים}
+   הערות: ${scenario.הערות || 'אין'}`
+            ).join('\n\n');
             
-            const prompt = `תיאור התקלה: "${problemDescription}"
-            
-תרחישים:
-${scenariosText}
+            const prompt = `אתה טכנאי מומחה למערכות בקרת חניה של שיידט את בכמן.
 
-החזר רק מספר (1-${serviceFailureDB.length}) או 0 אם אין התאמה:`;
+תיאור הבעיה: "${problemDescription}"
 
-            log('DEBUG', '🤖 שולח ל-OpenAI...');
+תרחישי פתרון זמינים:
+${fullScenarios}
+
+הוראות:
+1. חפש את התרחיש המתאים ביותר לבעיה המתוארת
+2. השתמש במילות מפתח: "לא דולקת"=תרחיש 1, "לא פעילה"=תרחיש 2, "לא מוציאה קבלות"=תרחיש 3
+3. אם נמצא תרחיש מתאים (דמיון 70%+) - החזר את מספר התרחיש (1-${serviceFailureDB.length})
+4. אם אין תרחיש מתאים - החזר 0
+
+החזר רק מספר אחד (0-${serviceFailureDB.length}):`;
+
+            log('DEBUG', '🤖 שולח ל-OpenAI prompt משופר...');
             
-            // קריאה מהירה יותר עם timeout קצר
             const completion = await Promise.race([
                 openai.chat.completions.create({
                     model: "gpt-3.5-turbo",
                     messages: [{ role: "user", content: prompt }],
-                    max_tokens: 5,
-                    temperature: 0
+                    max_tokens: 10,
+                    temperature: 0.1
                 }),
                 new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('OpenAI timeout')), 5000) // 5 שניות במקום 10
+                    setTimeout(() => reject(new Error('OpenAI timeout')), 6000) // 6 שניות
                 )
             ]);
             
             const aiResponse = completion.choices[0].message.content.trim();
             const scenarioNumber = parseInt(aiResponse);
             
-            log('INFO', `🤖 OpenAI: "${aiResponse}" -> תרחיש: ${scenarioNumber}`);
+            log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
             
             if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
                 const scenario = serviceFailureDB[scenarioNumber - 1];
                 
-                let solution = `🔧 **פתרון: ${scenario.תרחיש}**\n\n📋 **שלבים:**\n${scenario.שלבים}`;
+                let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
                 
-                if (scenario.הערות) {
-                    solution += `\n\n💡 **הערות:** ${scenario.הערות}`;
+                if (scenario.הערות && scenario.הערות.trim() !== '') {
+                    solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
                 }
                 
                 solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
                 
-                log('INFO', `✅ נמצא פתרון: ${scenario.תרחיש}`);
+                log('INFO', `✅ OpenAI מצא פתרון מתאים: ${scenario.תרחיש}`);
                 return { found: true, response: solution, scenario: scenario };
             } else {
-                log('INFO', '⚠️ OpenAI לא מצא פתרון - עובר ל-fallback');
-                return await findSolutionFallback(problemDescription);
+                log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
+                return await findSolutionFallbackSmart(problemDescription);
             }
             
         } catch (aiError) {
             log('ERROR', `❌ שגיאה ב-OpenAI: ${aiError.message}`);
-            return await findSolutionFallback(problemDescription);
+            return await findSolutionFallbackSmart(problemDescription);
         }
         
     } catch (error) {
-        log('ERROR', `❌ שגיאה כללית: ${error.message}`);
-        return await findSolutionFallback(problemDescription);
+        log('ERROR', `❌ שגיאה כללית בחיפוש פתרון: ${error.message}`);
+        return await findSolutionFallbackSmart(problemDescription);
+    }
+}
+
+async function findSolutionFallbackSmart(problemDescription) {
+    try {
+        log('INFO', '🔄 מפעיל מערכת fallback חכמה משופרת...');
+        
+        const problem = problemDescription.toLowerCase();
+        
+        // מיפוי מדויק לפי הקובץ שלך
+        const keywordMapping = [
+            {
+                scenario: 'היחידה לא דולקת',
+                keywords: ['לא דולקת', 'לא עובד', 'כבוי', 'מת', 'חשמל', 'לא מגיב', 'נתיך', 'לא פועל'],
+                scenarioIndex: 0
+            },
+            {
+                scenario: 'היחידה לא פעילה למרות שהיא דולקת',
+                keywords: ['לא פעילה', 'דולקת אבל לא עובד', 'לא מגיב למכונית', 'תקשורת'],
+                scenarioIndex: 1
+            },
+            {
+                scenario: 'היחידה לא מוציאה קבלות ביציאה',
+                keywords: ['לא מוציאה קבלות', 'קבלה', 'נייר', 'מדפיס', 'ביציאה', 'לא מדפיס'],
+                scenarioIndex: 2
+            }
+        ];
+        
+        let bestMatch = null;
+        let bestScore = 0;
+        
+        for (const mapping of keywordMapping) {
+            let score = 0;
+            
+            for (const keyword of mapping.keywords) {
+                if (problem.includes(keyword)) {
+                    score += keyword.length * 3;
+                    log('DEBUG', `✅ נמצאה מילת מפתח: "${keyword}" עבור ${mapping.scenario}`);
+                }
+            }
+            
+            if (score > bestScore && score >= 9) {
+                bestScore = score;
+                bestMatch = serviceFailureDB[mapping.scenarioIndex];
+                log('DEBUG', `🎯 נמצא תרחיש: ${bestMatch.תרחיש} (ציון: ${score})`);
+            }
+        }
+        
+        if (bestMatch) {
+            let solution = `🔧 **פתרון: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
+            
+            if (bestMatch.הערות && bestMatch.הערות.trim() !== '') {
+                solution += `\n\n💡 **הערות חשובות:**\n${bestMatch.הערות}`;
+            }
+            
+            solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            
+            log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
+            return { found: true, response: solution, scenario: bestMatch };
+        }
+        
+        log('INFO', '⚠️ גם fallback חכם לא מצא פתרון מתאים');
+        return {
+            found: false,
+            response: '🔧 **לא נמצא פתרון מתאים במדריך**\n\n📧 שלחתי את התקלה לטכנאי מומחה\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **דחוף:** 039792365'
+        };
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאה גם ב-fallback חכם:', error.message);
+        return {
+            found: false,
+            response: '🔧 **שגיאה במערכת**\n\n📧 שלחתי לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
+        };
     }
 }
 
