@@ -318,7 +318,7 @@ async function handleProblemWithAssistant(problemDescription, customer) {
             
             // עיצוב התגובה
             let formattedResponse = `🔧 **פתרון מותאם אישית מהמומחה שלנו:**\n\n${assistantResponse}`;
-            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן / לא לשליחת המייל`;
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן/לא לשליחת מייל`;
             
             return { 
                 found: true, 
@@ -427,11 +427,94 @@ let customers = [];
 let serviceFailureDB = [];
 let trainingDB = {};
 
+// פונקציה לתיקון נתוני לקוחות
+function fixCustomersData(customersArray) {
+    const fixedCustomers = [];
+    const seenIds = new Set();
+    
+    customersArray.forEach((client, index) => {
+        try {
+            // תיקון מספר לקוח
+            let customerId = client.id || `TEMP_${index}`;
+            
+            // טיפול ברשומות כפולות
+            if (seenIds.has(customerId)) {
+                const originalId = customerId;
+                customerId = `${customerId}_B`;
+                log('WARN', `⚠️ מספר לקוח כפול ${originalId} - שינוי ל-${customerId} (${client.name})`);
+            }
+            seenIds.add(customerId);
+            
+            // פונקציה לתיקון טלפון בודד
+            function fixPhone(phoneValue) {
+                if (!phoneValue) return '';
+                
+                let phone = phoneValue.toString().trim();
+                phone = phone.replace(/[-\s]/g, '');
+                
+                if (/^\d{9}$/.test(phone)) {
+                    phone = '0' + phone;
+                    log('DEBUG', `🔧 תוקן טלפון: ${phoneValue} → ${phone}`);
+                }
+                else if (/^\d{8}$/.test(phone) && phone.startsWith('5')) {
+                    phone = '05' + phone;
+                    log('DEBUG', `🔧 תוקן טלפון: ${phoneValue} → ${phone}`);
+                }
+                else if (/^5\d{8}$/.test(phone)) {
+                    phone = '0' + phone;
+                    log('DEBUG', `🔧 תוקן טלפון: ${phoneValue} → ${phone}`);
+                }
+                
+                return phone;
+            }
+            
+            // תיקון מייל
+            let email = client.email || '';
+            if (email && email.trim()) {
+                email = email.trim();
+                if (!email.includes('@') || email === 'electra parking management') {
+                    const oldEmail = email;
+                    email = '';
+                    log('WARN', `⚠️ מייל לא תקין נמחק: "${oldEmail}" ללקוח ${client.name}`);
+                }
+            }
+            
+            // בניית רשומת לקוח מתוקנת
+            const fixedCustomer = {
+                id: customerId,
+                name: client.name || 'לא מוגדר',
+                site: client.site || 'לא מוגדר',
+                phone: fixPhone(client.phone),
+                phone1: fixPhone(client.phone1),
+                phone2: fixPhone(client.phone2),
+                phone3: fixPhone(client.phone3),
+                phone4: fixPhone(client.phone4),
+                address: client.address || '',
+                email: email
+            };
+            
+            fixedCustomers.push(fixedCustomer);
+            
+        } catch (error) {
+            log('ERROR', `❌ שגיאה בתיקון לקוח ${index}:`, error.message);
+        }
+    });
+    
+    const fixedPhonesCount = fixedCustomers.reduce((count, customer) => {
+        return count + [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
+            .filter(phone => phone && phone.length > 0).length;
+    }, 0);
+    
+    log('INFO', `🔧 תוקנו ${fixedCustomers.length} לקוחות`);
+    log('INFO', `📞 סה"כ ${fixedPhonesCount} מספרי טלפון תקינים`);
+    
+    return fixedCustomers;
+}
+
 // טעינת לקוחות עם דיבוג משופר
 try {
     const customersData = JSON.parse(fs.readFileSync('./clients.json', 'utf8'));
     
-    // בדיקת המבנה של הקובץ
     log('DEBUG', '🔍 בדיקת מבנה קובץ לקוחות:');
     if (customersData.length > 0) {
         const firstCustomer = customersData[0];
@@ -439,36 +522,29 @@ try {
         log('DEBUG', 'דוגמה ללקוח ראשון:', JSON.stringify(firstCustomer, null, 2));
     }
     
-customers = customersData.map(client => ({
-    id: client["מס' לקוח"] || client["מספר לקוח"] || client.id || client.customer_id || "N/A",
-    name: client["שם לקוח"] || client.name || client.customer_name,
-    site: client["שם החניון"] || client.site || client.parking_name,
-    phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
-    phone1: client["טלפון1"] || client.phone1,
-    phone2: client["טלפון2"] || client.phone2, 
-    phone3: client["טלפון3"] || client.phone3,
-    phone4: client["טלפון4"] || client.phone4,
-    address: client["כתובת הלקוח"] || client.address || client.customer_address,
-    email: client["דואר אלקטרוני"] || client["מייל"] || client.email
-}));
-    
-log('DEBUG', '🔍 בדיקת שדות לקוח ראשון:');
-if (customersData.length > 0) {
-    const firstClient = customersData[0];
-    log('DEBUG', 'שדות זמינים בקובץ JSON:', Object.keys(firstClient));
-    log('DEBUG', 'דוגמה לנתונים מהקובץ:', JSON.stringify(firstClient, null, 2));
-    
-    // הצגת הלקוח אחרי הניפוי
-    const mappedCustomer = customers[0];
-    log('DEBUG', 'לקוח אחרי מיפוי:', JSON.stringify(mappedCustomer, null, 2));
-}
+    // מיפוי ראשוני
+    const rawCustomers = customersData.map(client => ({
+        id: client["מס' לקוח"] || client["מספר לקוח"] || client.id || client.customer_id || "N/A",
+        name: client["שם לקוח"] || client.name || client.customer_name,
+        site: client["שם החניון"] || client.site || client.parking_name,
+        phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
+        phone1: client["טלפון1"] || client.phone1,
+        phone2: client["טלפון2"] || client.phone2, 
+        phone3: client["טלפון3"] || client.phone3,
+        phone4: client["טלפון4"] || client.phone4,
+        address: client["כתובת הלקוח"] || client.address || client.customer_address,
+        email: client["דואר אלקטרוני"] || client["מייל"] || client.email
+    }));
 
-log('INFO', `📊 נטענו ${customers.length} לקוחות`);
+    // תיקון הנתונים
+    customers = fixCustomersData(rawCustomers);
+    
+    log('INFO', `📊 נטענו ותוקנו ${customers.length} לקוחות`);
 
-    // הצגת כמה דוגמאות לדיבוג
-    log('DEBUG', '👥 דוגמאות לקוחות:');
+    // הצגת דוגמאות
+    log('DEBUG', '👥 דוגמאות לקוחות מתוקנים:');
     customers.slice(0, 3).forEach((customer, index) => {
-        log('DEBUG', `${index + 1}. ${customer.name} - טלפון: ${customer.phone}`);
+        log('DEBUG', `${index + 1}. ${customer.name} - ID: ${customer.id} - טלפון: ${customer.phone}`);
     });
     
 } catch (error) {
@@ -796,7 +872,7 @@ async function handleAutoFinish(phone, customer, stage) {
         
         // בדיקה באיזה שלב אנחנו וביצוע סיום מתאים
         if (stage === 'waiting_feedback') {
-            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על הפתרון\n\n🔧 מעביר את הפנייה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n🟡 רשום כן / לא לשליחת המייל`);
+            await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n❌ לא התקבל משוב על הפתרון\n\n🔧מעביר את הפנייה לטכנאי \n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה `);
             
             // שלח מייל טכנאי
             const conversation = memory.getConversation(phone, customer);
@@ -1970,7 +2046,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
         };
     } else {
         return {
-            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n🟡 רשום כן / לא לשליחת המייל`,
+            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n🟡 רשום כן/לא לשליחת מייל`,
             stage: 'waiting_training_feedback',
             customer: customer
         };
@@ -2010,7 +2086,7 @@ async handleFeedback(message, phone, customer, conversation) {
             };
         } else {
             return {
-response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן / לא לשליחת המייל`,
+response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן/לא לשליחת מייל`,
                 stage: 'waiting_feedback',
                 customer: customer
             };
