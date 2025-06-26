@@ -2782,6 +2782,11 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         log('INFO', `⚠️ מתעלם מקובץ - כבר במצב המתנה למשוב`);
         return res.status(200).json({ status: 'OK - ignoring file after solution' });
     }
+    if (conversation?.stage === 'completed') {
+        log('INFO', `⚠️ מתעלם מקובץ - הדיווח כבר הושלם`);
+        await sendWhatsApp(phone, `✅ **הדיווח הקודם הושלם בהצלחה**\n\nאם ברצונך לדווח על נזק נוסף:\n🔄 כתוב "תפריט" ובחר "2" שוב\n\n📞 039792365`);
+        return res.status(200).json({ status: 'OK - report already completed' });
+    }
     
     // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
     if (conversation?.stage === 'problem_description') {
