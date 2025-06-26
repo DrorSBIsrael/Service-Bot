@@ -946,35 +946,6 @@ function findCustomerByPhone(phone) {
     return null;
 }
 
-// גם הוסף פונקציה עזר לדיבוג - הוסף אחרי הפונקציה למעלה:
-
-function debugPhoneSearch(targetPhone) {
-    console.log(`\n🔍 DEBUG PHONE SEARCH: ${targetPhone}`);
-    const cleanPhone = targetPhone.replace(/[^\d]/g, '');
-    console.log(`📱 נוקה ל: ${cleanPhone}`);
-    
-    // הצג כמה לקוחות לדוגמה
-    const sampleCustomers = customers.slice(0, 5);
-    sampleCustomers.forEach(customer => {
-        console.log(`👤 ${customer.name}:`);
-        [customer.phone, customer.phone1, customer.phone2].forEach((phone, index) => {
-            if (phone) {
-                const cleanCustomerPhone = phone.replace(/[^\d]/g, '');
-                console.log(`   📞 phone${index || ''}: ${phone} -> ${cleanCustomerPhone}`);
-            }
-        });
-    });
-    
-    console.log(`\n🎯 מחפש התאמה עבור: ${targetPhone}`);
-    const result = findCustomerByPhone(targetPhone);
-    console.log(`📊 תוצאה: ${result ? result.name : 'לא נמצא'}\n`);
-    
-    return result;
-}
-
-// להוסיף לבדיקה - קרא לפונקציה הזו מה-webhook כדי לבדוק:
-// debugPhoneSearch('972543084210'); // הטלפון של יעקב פזרקן
-
 // זיהוי לקוח לפי שם חניון - מהקוד המקורי שעובד
 function findCustomerByName(message) {
     const msg = message.toLowerCase().trim();
@@ -2198,33 +2169,6 @@ async function sendWhatsAppToGroup(message) {
     } catch (error) {
         log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
         throw error;
-    }
-}
-
-// פונקציה זמנית למציאת מזהה הקבוצה
-async function findGroupId() {
-    try {
-        const instanceId = '7105253183';
-        const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
-        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/getChats/${token}`;
-        
-        const response = await axios.get(url);
-        console.log('\n🔍 רשימת כל הקבוצות:');
-        
-        if (response.data && Array.isArray(response.data)) {
-            response.data.forEach((chat, index) => {
-                if (chat.id && chat.id.includes('@g.us')) {
-                    console.log(`${index + 1}. קבוצה: ${chat.name || 'ללא שם'}`);
-                    console.log(`   מזהה: ${chat.id}`);
-                    console.log(`   חברים: ${chat.participantsCount || 'לא ידוע'}`);
-                    console.log('---');
-                }
-            });
-        } else {
-            console.log('❌ לא נמצאו קבוצות או שגיאה בתגובה');
-        }
-    } catch (error) {
-        console.error('❌ שגיאה בקבלת רשימת קבוצות:', error.message);
     }
 }
 
