@@ -2876,7 +2876,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         log('INFO', `✅ ${fileResult.type} הורד: ${fileResult.uniqueName}`);
         
         // שמירת הקובץ בזיכרון הזמני של השיחה
-        const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
+        const updatedFiles = [...existingFiles, { path: fileResult.path, type: fileResult.type, name: fileResult.uniqueName }];
         memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
             ...conversation?.data, 
             tempFiles: updatedFiles 
