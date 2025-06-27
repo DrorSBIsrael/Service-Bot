@@ -1316,92 +1316,225 @@ function isFinishingWord(message) {
     return false;
 }
 
-// הוספת תמיכה במילים נוספות לחזרה לתפריט בכל שלב:
-function isMenuRequest(message) {
-    const msg = message.toLowerCase().trim();
-    const menuWords = [
-        'תפריט', 'תפריט ראשי', 'חזרה', 'התחלה מחדש', 
-        'ביטול', 'לבטל', 'menu', 'main', 'cancel', 'restart'
-    ];
-    
-    return menuWords.some(word => msg === word || msg.includes(word));
-}
-
-// 🔧 לוגיקת תגובות מרכזית ומשופרת
+// 🔧 תיקון מעבד הודעות ברמה 10 - החלפה מלאה של ResponseHandler
 class ResponseHandler {
     constructor(memory, customers) {
         this.memory = memory;
         this.customers = customers;
     }
     
+    // 🔧 פונקציה מרכזית משופרת עם טיפול נכון בברכות ומידע ראשוני
     async generateResponse(message, phone, customer = null, hasFile = false, fileType = '', downloadedFiles = []) {
-        // 🔧 חדש: טיפול בברכות ושימור מידע
-        const { greeting, content } = extractGreetingAndContent(message);
-        const greetingResponse = greeting ? createGreetingResponse(greeting) : 'שלום';
-        const msg = content.toLowerCase().trim();
+        // שלב 1: עיבוד ברכות ותוכן
+        const { greeting, content } = this.extractGreetingAndContent(message);
+        const greetingResponse = greeting ? this.createGreetingResponse(greeting) : '';
+        
+        // שלב 2: עיבוד מידע ראשוני
+        let initialInfo = null;
+        if (content && content.length > 10 && (!customer || !this.memory.getConversation(phone, customer))) {
+            initialInfo = this.extractInitialInfo(content);
+            log('DEBUG', `📋 מידע ראשוני: ${JSON.stringify(initialInfo)}`);
+        }
+        
         const conversation = this.memory.getConversation(phone, customer);
         
-        // שימור מידע מההודעה הראשונה אם זה לקוח חדש
-        let initialInfo = null;
-        if (content && content.length > 5 && (!conversation || conversation.stage === 'identifying')) {
-            initialInfo = extractInitialInfo(content);
-            if (initialInfo && (initialInfo.hasProblem || initialInfo.hasUnitNumber)) {
-                log('INFO', `📋 שמרתי מידע ראשוני: ${JSON.stringify(initialInfo)}`);
+        log('INFO', `🎯 מעבד: "${message}" ${greeting ? `[ברכה: "${greeting}"]` : ''} - שלב: ${conversation ? conversation.stage : 'אין'}`);
+        
+        // ביטול טיימר אוטומטי
+        autoFinishManager.clearTimer(phone);
+        
+        // שלב 3: זיהוי לקוח או טיפול לפי שלב
+        if (!customer) {
+            return await this.handleCustomerIdentification(message, phone, conversation, greetingResponse, content, initialInfo);
+        }
+        
+        return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles, greetingResponse);
+    }
+
+    // 🔧 זיהוי ברכות - כעת בתוך המחלקה
+    extractGreetingAndContent(message) {
+        const greetings = [
+            'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
+            'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
+            'good morning', 'good evening', 'hello', 'hi'
+        ];
+        
+        const msg = message.trim();
+        let greeting = '';
+        let content = msg;
+        
+        for (const greet of greetings) {
+            const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
+            if (pattern.test(msg)) {
+                greeting = greet;
+                content = msg.replace(pattern, '').trim();
+                log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
+                break;
             }
         }
         
-        log('INFO', `🎯 מעבד הודעה: "${message}" מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}${greeting ? ` - ברכה: "${greeting}"` : ''}`);        // ביטול טיימר אוטומטי אם קיים
-        autoFinishManager.clearTimer(phone);
-        // שלב 1: זיהוי לקוח אם לא קיים
-        if (!customer) {
-            return await this.handleCustomerIdentification(message, phone, conversation, greeting, content, initialInfo);
-        }
-        
-        // שלב 2: טיפול לפי שלב נוכחי
-        return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles);
+        return { greeting, content: content || msg };
     }
 
-    async handleCustomerIdentification(message, phone, conversation, greeting = null, content = null, initialInfo = null) {
+    // 🔧 יצירת ברכת תשובה מתאימה - כעת בתוך המחלקה
+    createGreetingResponse(greeting) {
+        const timeOfDay = new Date().toLocaleString('he-IL', { 
+            timeZone: 'Asia/Jerusalem',
+            hour: 'numeric'
+        });
+        const hour = parseInt(timeOfDay);
+        
+        const greetingMap = {
+            'בוקר טוב': 'בוקר טוב',
+            'ערב טוב': 'ערב טוב', 
+            'לילה טוב': 'לילה טוב',
+            'צהריים טובים': 'צהריים טובים',
+            'שלום': 'שלום',
+            'שלום לך': 'שלום',
+            'היי': 'היי',
+            'הלו': 'שלום',
+            'אהלן': 'אהלן',
+            'מה שלום': 'שלום',
+            'good morning': 'בוקר טוב',
+            'good evening': 'ערב טוב',
+            'hello': 'שלום',
+            'hi': 'היי'
+        };
+        
+        let response = greetingMap[greeting.toLowerCase()] || 'שלום';
+        
+        // התאמה לפי שעה אם זה ברכה כללית
+        if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
+            if (hour >= 6 && hour < 12) response = 'בוקר טוב';
+            else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
+            else if (hour >= 17 && hour < 22) response = 'ערב טוב';
+            else response = 'שלום';
+        }
+        
+        return response;
+    }
+
+    // 🔧 שימור מידע מההודעה הראשונה - כעת בתוך המחלקה
+    extractInitialInfo(content) {
+        if (!content || content.length < 10) return null;
+        
+        const info = {
+            hasProblem: false,
+            hasUnitNumber: false,
+            hasOrder: false,
+            hasDamage: false,
+            problemKeywords: [],
+            unitInfo: null,
+            fullContent: content
+        };
+        
+        // זיהוי מילות מפתח לבעיות
+        const problemKeywords = [
+            'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
+            'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום', 'קולט'
+        ];
+        
+        const orderKeywords = ['הזמנה', 'להזמין', 'מחיר', 'הצעה', 'לקנות', 'כרטיסים', 'נייר'];
+        const damageKeywords = ['נזק', 'שבור', 'נשבר', 'פגום', 'פגע', 'תאונה'];
+        
+        // בדיקת בעיות
+        for (const keyword of problemKeywords) {
+            if (content.toLowerCase().includes(keyword)) {
+                info.hasProblem = true;
+                info.problemKeywords.push(keyword);
+            }
+        }
+        
+        // בדיקת הזמנות
+        info.hasOrder = orderKeywords.some(keyword => content.toLowerCase().includes(keyword));
+        
+        // בדיקת נזקים
+        info.hasDamage = damageKeywords.some(keyword => content.toLowerCase().includes(keyword));
+        
+        // בדיקת מספר יחידה
+        const unitCheck = this.validateUnitNumber(content);
+        if (unitCheck.found) {
+            info.hasUnitNumber = true;
+            info.unitInfo = unitCheck;
+        }
+        
+        log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, הזמנה=${info.hasOrder}, נזק=${info.hasDamage}`);
+        
+        return info;
+    }
+
+    // 🔧 ולידציה של מספר יחידה - כעת בתוך המחלקה
+    validateUnitNumber(message) {
+        const patterns = [
+            /יחידה\s*(\d{1,4})/gi,
+            /מחסום\s*(\d{1,4})/gi,
+            /מספר\s*(\d{1,4})/gi,
+            /\b(\d{1,4})\b/g
+        ];
+        
+        let foundNumbers = [];
+        
+        for (const pattern of patterns) {
+            let match;
+            while ((match = pattern.exec(message)) !== null) {
+                const num = match[1];
+                if (num.length <= 4) {
+                    foundNumbers.push({
+                        number: num,
+                        isValid: num.length === 3,
+                        formatted: num.padStart(3, '0')
+                    });
+                }
+            }
+        }
+        
+        if (foundNumbers.length === 0) {
+            return { found: false, isValid: false, number: null, formatted: null };
+        }
+        
+        const firstNumber = foundNumbers[0];
+        
+        log('DEBUG', `🔢 מספר יחידה: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
+        
+        return {
+            found: true,
+            isValid: firstNumber.isValid,
+            number: firstNumber.number,
+            formatted: firstNumber.formatted
+        };
+    }
+
+    // 🔧 טיפול בזיהוי לקוח עם ברכות ומידע ראשוני
+    async handleCustomerIdentification(message, phone, conversation, greetingResponse = '', content = null, initialInfo = null) {
         const msg = message.toLowerCase().trim();
         
         log('DEBUG', `🔍 זיהוי לקוח - הודעה: "${message}"`);
-        log('DEBUG', `🔍 msg נקי: "${msg}"`);
         
-        // 🔧 טיפול בלקוח אורח - בדיקה מפורטת
+        // אפשרות אורח
         if (msg === '1' || msg === 'לקוח חדש' || msg === 'אינני לקוח' || msg === 'guest') {
-            log('INFO', '🆕 לקוח בחר אפשרות אורח');
-            
-            // מעבר לשלב איסוף פרטי אורח
             this.memory.updateStage(phone, 'guest_details', null, { isGuest: true });
             
-            return {
-                response: `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה פרטים:\n\n📝 **אנא כתוב הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n📞 039792365`,
-                stage: 'guest_details'
-            };
+            let response = greetingResponse ? `${greetingResponse}! ` : '';
+            response += `👋 **ברוכים הבאים ללקוחות חדשים!**\n\nכדי לטפל בפנייתך אני צריכה פרטים:\n\n📝 **אנא כתוב הודעה אחת עם:**\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n📞 039792365`;
+            
+            return { response, stage: 'guest_details' };
         }
         
-        // בדיקה אם אנחנו בשלב איסוף פרטי אורח
+        // טיפול באיסוף פרטי אורח
         if (conversation?.stage === 'guest_details' && conversation?.data?.isGuest) {
-            log('INFO', '🔄 בשלב איסוף פרטי אורח');
-            
-            // הלקוח שלח את הפרטים - סיים את הטיפול
             if (message && message.trim().length > 20) {
-                log('INFO', '✅ פרטים מספיקים - סיום טיפול באורח');
-                
                 const serviceNumber = await getNextServiceNumber();
                 this.memory.updateStage(phone, 'completed', null);
                 
-                // שלח מייל אורח
                 await sendGuestEmail(message, phone, serviceNumber);
-                // רישום ב-Google Sheets
                 const serviceData = {
-                   serviceNumber: serviceNumber,
-                   timestamp: getIsraeliTime(),
-                   referenceType: 'guest',
-                   customerName: 'לקוח חדש',
-                   customerSite: 'לא מזוהה',
-                   problemDescription: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
-                   resolved: 'התקבל'
+                    serviceNumber: serviceNumber,
+                    timestamp: getIsraeliTime(),
+                    referenceType: 'guest',
+                    customerName: 'לקוח חדש',
+                    customerSite: 'לא מזוהה',
+                    problemDescription: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+                    resolved: 'התקבל'
                 };
                 await writeToGoogleSheets(serviceData);
                 
@@ -1411,9 +1544,8 @@ class ResponseHandler {
                     serviceNumber: serviceNumber
                 };
             } else {
-                log('WARN', '⚠️ פרטים לא מספיקים');
                 return {
-                    response: `📝 **אנא שלח פרטים מפורטים יותר:**\n\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n**דוגמה:**\nדרור פרינץ\n0545484210\nDror@sbparking.co.il\nחניון עזריאלי\nמבקש הצעת מחיר\n\n📞 039792365`,
+                    response: `📝 **אנא שלח פרטים מפורטים יותר:**\n\n• שמך המלא\n• מספר טלפון\n• כתובת מייל\n• שם החניון/אתר\n• תיאור הבעיה או הבקשה\n\n📞 039792365`,
                     stage: 'guest_details'
                 };
             }
@@ -1426,23 +1558,39 @@ class ResponseHandler {
             if (identification.confidence === 'high') {
                 const customer = identification.customer;
                 this.memory.createOrUpdateConversation(phone, customer, 'menu');
-                this.memory.addMessage(phone, `זוהה כלקוח: ${customer.name}`, 'system', customer);
-                return {
-                    response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nזיהיתי אותך!\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                    stage: 'menu',
-                    customer: customer
-                };
+                
+                // שמירת מידע ראשוני אם קיים
+                if (initialInfo && (initialInfo.hasProblem || initialInfo.hasOrder || initialInfo.hasDamage)) {
+                    this.memory.updateStage(phone, 'menu', customer, { initialInfo: initialInfo });
+                }
+                
+                let response = greetingResponse ? `${greetingResponse} ` : 'שלום ';
+                response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\nזיהיתי אותך!`;
+                
+                // אם יש מידע ראשוני - הצע ישירות
+                if (initialInfo) {
+                    if (initialInfo.hasProblem) {
+                        response += `\n\n🔧 **זיהיתי שיש לך תקלה!**\nהאם תרצה לדווח על התקלה? (כן/לא)`;
+                    } else if (initialInfo.hasOrder) {
+                        response += `\n\n💰 **זיהיתי בקשה להזמנה!**\nהאם תרצה להזמין משהו? (כן/לא)`;
+                    } else if (initialInfo.hasDamage) {
+                        response += `\n\n🚨 **זיהיתי דיווח נזק!**\nהאם תרצה לדווח על נזק? (כן/לא)`;
+                    }
+                }
+                
+                response += `\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
+                
+                return { response, stage: 'menu', customer: customer };
             } else {
-                // שמירת הלקוח הזמני בנתונים
                 this.memory.updateStage(phone, 'confirming_identity', null, {
-                    tentativeCustomer: identification.customer
+                    tentativeCustomer: identification.customer,
+                    initialInfo: initialInfo
                 });
                 
-                return {
-                    response: `שלום! 👋 - אני הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n❓ **אם אינך לקוח קיים - כתוב 1**\n\n📞 039792365`,
-                    stage: 'confirming_identity',
-                    tentativeCustomer: identification.customer
-                };
+                let response = greetingResponse ? `${greetingResponse}! ` : 'שלום! ';
+                response += `👋 - אני הדר, הבוט של שיידט\n\nהאם אתה ${identification.customer.name} מחניון ${identification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n❓ **אם אינך לקוח קיים - כתוב 1**\n\n📞 039792365`;
+                
+                return { response, stage: 'confirming_identity', tentativeCustomer: identification.customer };
             }
         }
         
@@ -1454,39 +1602,41 @@ class ResponseHandler {
                 message.toLowerCase().includes('yes')) {
                 
                 const customer = conversation.data.tentativeCustomer;
-                this.memory.updateStage(phone, 'menu', customer, { tentativeCustomer: null });
-                this.memory.addMessage(phone, `אושר כלקוח: ${customer.name}`, 'system', customer);
+                const savedInitialInfo = conversation.data.initialInfo;
                 
-                return {
-                    response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                    stage: 'menu',
-                    customer: customer
-                };
+                this.memory.updateStage(phone, 'menu', customer, { 
+                    initialInfo: savedInitialInfo,
+                    tentativeCustomer: null 
+                });
+                
+                let response = `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋`;
+                
+                // אם יש מידע ראשוני שמור - הצע ישירות
+                if (savedInitialInfo) {
+                    if (savedInitialInfo.hasProblem) {
+                        response += `\n\n🔧 **זיהיתי שיש לך תקלה!**\nהאם תרצה לדווח על התקלה? (כן/לא)`;
+                    } else if (savedInitialInfo.hasOrder) {
+                        response += `\n\n💰 **זיהיתי בקשה להזמנה!**\nהאם תרצה להזמין משהו? (כן/לא)`;
+                    } else if (savedInitialInfo.hasDamage) {
+                        response += `\n\n🚨 **זיהיתי דיווח נזק!**\nהאם תרצה לדווח על נזק? (כן/לא)`;
+                    }
+                }
+                
+                response += `\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
+                
+                return { response, stage: 'menu', customer: customer };
             } else {
-                // הלקוח אמר לא - נסה זיהוי מחדש
+                // נסה זיהוי מחדש
                 this.memory.updateStage(phone, 'identifying', null, { tentativeCustomer: null });
                 
-                // נסה זיהוי לפי ההודעה החדשה
                 const newIdentification = findCustomerByName(message);
-                if (newIdentification) {
-                    if (newIdentification.confidence === 'high') {
-                        const customer = newIdentification.customer;
-                        this.memory.updateStage(phone, 'menu', customer);
-                        return {
-                            response: `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                            stage: 'menu',
-                            customer: customer
-                        };
-                    } else {
-                        this.memory.updateStage(phone, 'confirming_identity', null, {
-                            tentativeCustomer: newIdentification.customer
-                        });
-                        return {
-                            response: `האם אתה ${newIdentification.customer.name} מחניון ${newIdentification.customer.site}?\n\n✅ כתוב "כן" לאישור\n❌ או כתוב שם החניון הנכון\n❓ **אם אינך לקוח קיים - כתוב 1**\n\n📞 039792365`,
-                            stage: 'confirming_identity',
-                            tentativeCustomer: newIdentification.customer
-                        };
-                    }
+                if (newIdentification && newIdentification.confidence === 'high') {
+                    const customer = newIdentification.customer;
+                    this.memory.updateStage(phone, 'menu', customer);
+                    
+                    let response = `מעולה! שלום ${customer.name} מחניון ${customer.site} 👋\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
+                    
+                    return { response, stage: 'menu', customer: customer };
                 }
                 
                 return {
@@ -1496,285 +1646,117 @@ class ResponseHandler {
             }
         }
         
-        
-// 🔧 חדש: פונקציות עזר לברכות ומספר יחידה
-
-// זיהוי ברכות בתחילת הודעה
-function extractGreetingAndContent(message) {
-    const greetings = [
-        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
-        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
-        'good morning', 'good evening', 'hello', 'hi'
-    ];
-    
-    const msg = message.trim();
-    let greeting = '';
-    let content = msg;
-    
-    for (const greet of greetings) {
-        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
-        if (pattern.test(msg)) {
-            greeting = greet;
-            content = msg.replace(pattern, '').trim();
-            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
-            break;
-        }
-    }
-    
-    return { greeting, content: content || msg };
-}
-
-// יצירת ברכת תשובה מתאימה
-function createGreetingResponse(greeting) {
-    const timeOfDay = new Date().toLocaleString('he-IL', { 
-        timeZone: 'Asia/Jerusalem',
-        hour: 'numeric'
-    });
-    const hour = parseInt(timeOfDay);
-    
-    const greetingMap = {
-        'בוקר טוב': 'בוקר טוב',
-        'ערב טוב': 'ערב טוב', 
-        'לילה טוב': 'לילה טוב',
-        'צהריים טובים': 'צהריים טובים',
-        'שלום': 'שלום',
-        'שלום לך': 'שלום',
-        'היי': 'היי',
-        'הלו': 'שלום',
-        'אהלן': 'אהלן',
-        'מה שלום': 'שלום',
-        'good morning': 'בוקר טוב',
-        'good evening': 'ערב טוב',
-        'hello': 'שלום',
-        'hi': 'היי'
-    };
-    
-    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
-    
-    // התאמה לפי שעה אם זה ברכה כללית
-    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
-        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
-        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
-        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
-        else response = 'שלום';
-    }
-    
-    return response;
-}
-
-// ולידציה מדויקת של מספר יחידה (3 ספרות)
-function validateUnitNumber(message) {
-    // חיפוש מספר יחידה במספר תבניות
-    const patterns = [
-        /יחידה\s*(\d{1,4})/gi,
-        /מחסום\s*(\d{1,4})/gi,
-        /מספר\s*(\d{1,4})/gi,
-        /\b(\d{1,4})\b/g
-    ];
-    
-    let foundNumbers = [];
-    
-    for (const pattern of patterns) {
-        let match;
-        while ((match = pattern.exec(message)) !== null) {
-            const num = match[1];
-            if (num.length <= 4) { // מקסימום 4 ספרות
-                foundNumbers.push({
-                    number: num,
-                    isValid: num.length === 3,
-                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
-                });
-            }
-        }
-    }
-    
-    if (foundNumbers.length === 0) {
-        return { found: false, isValid: false, number: null, formatted: null };
-    }
-    
-    // בחר את המספר הראשון שנמצא
-    const firstNumber = foundNumbers[0];
-    
-    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
-    
-    return {
-        found: true,
-        isValid: firstNumber.isValid,
-        number: firstNumber.number,
-        formatted: firstNumber.formatted
-    };
-}
-
-// שימור מידע מההודעה הראשונה
-function extractInitialInfo(content) {
-    if (!content || content.length < 5) return null;
-    
-    const info = {
-        hasProblem: false,
-        hasUnitNumber: false,
-        problemKeywords: [],
-        unitInfo: null,
-        fullContent: content
-    };
-    
-    // זיהוי מילות מפתח לבעיות
-    const problemKeywords = [
-        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
-        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
-    ];
-    
-    for (const keyword of problemKeywords) {
-        if (content.toLowerCase().includes(keyword)) {
-            info.hasProblem = true;
-            info.problemKeywords.push(keyword);
-        }
-    }
-    
-    // בדיקת מספר יחידה
-    const unitCheck = validateUnitNumber(content);
-    if (unitCheck.found) {
-        info.hasUnitNumber = true;
-        info.unitInfo = unitCheck;
-    }
-    
-    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
-    
-    return info;
-}
+        // ברירת מחדל
+        return {
+            response: `${greetingResponse ? greetingResponse + '! ' : ''}לא זיהיתי את החניון.\n\nאנא כתוב את שם החניון:\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר"\n• "אינפיניטי"\n• "עזריאלי"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
+            stage: 'identifying'
+        };
     }
 
-    async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles) {
+    // 🔧 טיפול לפי שלב עם ברכות
+    async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles, greetingResponse = '') {
         const msg = message.toLowerCase().trim();
         const currentStage = conversation ? conversation.stage : 'menu';
         
-// תפריט ראשי
-if (currentStage === 'menu' || !currentStage) {
-    if (msg === '1' || msg.includes('תקלה')) {
-        // 🔧 חדש: בדיקה אם יש מידע ראשוני שמור
-        const savedInfo = conversation?.data?.initialInfo;
-        
-        if (savedInfo && savedInfo.hasProblem) {
-            // יש מידע שמור - השתמש בו
-            this.memory.updateStage(phone, 'problem_description_with_info', customer, {
-                savedProblemInfo: savedInfo
-            });
+        // תפריט ראשי
+        if (currentStage === 'menu' || !currentStage) {
+            const savedInfo = conversation?.data?.initialInfo;
             
-            let confirmMsg = `שלום ${customer.name} 👋\n\n🔧 **זיהיתי בעיה:**\n"${savedInfo.fullContent}"`;
-            
-            if (savedInfo.hasUnitNumber && savedInfo.unitInfo.isValid) {
-                confirmMsg += `\n\n✅ יחידה ${savedInfo.unitInfo.formatted} - מספר תקין`;
-                confirmMsg += `\n\nהאם זה נכון או שיש תקלה אחרת?`;
-                confirmMsg += `\n\n✅ כתוב "נכון" לאישור\n❌ או תאר תקלה אחרת\n\nהמתן מספר שניות לתשובה🤞`;
-            } else if (savedInfo.hasUnitNumber && !savedInfo.unitInfo.isValid) {
-                confirmMsg += `\n\n⚠️ מספר יחידה לא מדויק: ${savedInfo.unitInfo.number}`;
-                confirmMsg += `\n\nאנא ציין מספר יחידה תקין (3 ספרות):\nדוגמאות: 007, 101, 205, 350`;
-                confirmMsg += `\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
-            } else {
-                confirmMsg += `\n\n❓ באיזה יחידה הבעיה? (מספר 3 ספרות)`;
-                confirmMsg += `\nדוגמאות: 101, 205, 350`;
-                confirmMsg += `\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
+            // בדיקה אם הלקוח ענה על הצעה שזוהתה מראש
+            if (savedInfo && (msg.includes('כן') || msg.includes('נכון'))) {
+                if (savedInfo.hasProblem) {
+                    return await this.handleInitialProblem(savedInfo, phone, customer, greetingResponse);
+                } else if (savedInfo.hasOrder) {
+                    return await this.handleInitialOrder(savedInfo, phone, customer, greetingResponse);
+                } else if (savedInfo.hasDamage) {
+                    return await this.handleInitialDamage(savedInfo, phone, customer, greetingResponse);
+                }
+            } else if (savedInfo && (msg.includes('לא') || msg.includes('לא נכון'))) {
+                // נקה את המידע הראשוני ותציג תפריט רגיל
+                this.memory.updateStage(phone, 'menu', customer, { initialInfo: null });
             }
             
-            return {
-                response: confirmMsg,
-                stage: 'problem_description_with_info',
-                customer: customer
-            };
-        } else {
-            // אין מידע שמור - תהליך רגיל
-            this.memory.updateStage(phone, 'problem_description', customer);
-            return {
-                response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`,
-                stage: 'problem_description',
-                customer: customer
-            };
-        }
-    }
+            // טיפול בבחירות תפריט
+            if (msg === '1' || msg.includes('תקלה')) {
+                this.memory.updateStage(phone, 'problem_description', customer);
+                
+                let response = greetingResponse ? `${greetingResponse} ` : '';
+                response += `${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
+                
+                return { response, stage: 'problem_description', customer: customer };
+            }
             
-// דיווח נזק
-if (msg === '2' || msg.includes('נזק')) {
-    this.memory.updateStage(phone, 'damage_photo', customer);
-    return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`,
-        stage: 'damage_photo',
-        customer: customer
-    };
-}
-
-// הצעת מחיר
-if (msg === '3' || msg.includes('מחיר')) {
-    this.memory.updateStage(phone, 'order_request', customer);
-    return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
-        stage: 'order_request',
-        customer: customer
-    };
-}
-
-// הדרכה
-if (msg === '4' || msg.includes('הדרכה')) {
-    this.memory.updateStage(phone, 'training_request', customer);
-    return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות" \n\nהמתן מספר שניות לתשובה🤞`,
-        stage: 'training_request',
-        customer: customer
-    };
-}
-
-// משרד כללי
-if (msg === '5' || msg.includes('משרד')) {
-    this.memory.updateStage(phone, 'general_office_request', customer);
-    return {
-        response: `שלום ${customer.name} 👋 - אני הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`,
-        stage: 'general_office_request',
-        customer: customer
-    };
-}
-
-            // אם לא הבין - חזור לתפריט
+            if (msg === '2' || msg.includes('נזק')) {
+                this.memory.updateStage(phone, 'damage_photo', customer);
+                
+                let response = greetingResponse ? `${greetingResponse} ` : '';
+                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`;
+                
+                return { response, stage: 'damage_photo', customer: customer };
+            }
+            
+            if (msg === '3' || msg.includes('מחיר')) {
+                this.memory.updateStage(phone, 'order_request', customer);
+                
+                let response = greetingResponse ? `${greetingResponse} ` : '';
+                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`;
+                
+                return { response, stage: 'order_request', customer: customer };
+            }
+            
+            if (msg === '4' || msg.includes('הדרכה')) {
+                this.memory.updateStage(phone, 'training_request', customer);
+                
+                let response = greetingResponse ? `${greetingResponse} ` : '';
+                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\nהמתן מספר שניות לתשובה🤞`;
+                
+                return { response, stage: 'training_request', customer: customer };
+            }
+            
+            if (msg === '5' || msg.includes('משרד')) {
+                this.memory.updateStage(phone, 'general_office_request', customer);
+                
+                let response = greetingResponse ? `${greetingResponse} ` : '';
+                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`;
+                
+                return { response, stage: 'general_office_request', customer: customer };
+            }
+            
+            // ברירת מחדל - תפריט רגיל עם ברכה
             this.memory.updateStage(phone, 'menu', customer);
-            return {
-                response: `שלום ${customer.name} מחניון ${customer.site} 👋 - אני הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                stage: 'menu',
-                customer: customer
-            };
+            
+            let response = greetingResponse ? `${greetingResponse} ` : 'שלום ';
+            response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
+            
+            return { response, stage: 'menu', customer: customer };
         }
         
-        // טיפול בתקלות
+        // שאר השלבים נשארים כמו שהם (רק עם הוספת ברכות במקומות המתאימים)
         if (currentStage === 'problem_description') {
             return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
         }
         
-        // 🔧 חדש: טיפול בתקלות עם מידע ראשוני
-        if (currentStage === 'problem_description_with_info') {
-            return await this.handleProblemDescriptionWithInfo(message, phone, customer, hasFile, downloadedFiles);
-    }
-        // 🔧 חדש: טיפול בשלב בקשת מספר יחידה
-        if (currentStage === 'asking_unit_number') {
-        return await this.handleAskingUnitNumber(message, phone, customer, hasFile, downloadedFiles);
-    }
-        // טיפול בנזק
         if (currentStage === 'damage_photo') {
             return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
         }
-
-        // טיפול בהזמנות
+        
         if (currentStage === 'order_request') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
+        
         if (currentStage === 'waiting_feedback') {
-    return await this.handleFeedback(message, phone, customer, conversation);
+            return await this.handleFeedback(message, phone, customer, conversation);
         }
-        // טיפול בהדרכה
+        
         if (currentStage === 'training_request') {
             return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-        // טיפול בפניות משרד כללי
+        
         if (currentStage === 'general_office_request') {
-        return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
+            return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-
-        // 🔧 NEW: משוב על הדרכה
+        
+        // 🔧 תיקון משוב הדרכה - ללא שאלה כפולה
         if (currentStage === 'waiting_training_feedback') {
             return await this.handleTrainingFeedback(message, phone, customer, conversation);
         }
@@ -1788,494 +1770,284 @@ if (msg === '5' || msg.includes('משרד')) {
         };
     }
 
-async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
-    const serviceNumber = await getNextServiceNumber();
-    
-    // שמירת פרטי התקלה בזיכרון
-    this.memory.updateStage(phone, 'processing_problem', customer, {
-        serviceNumber: serviceNumber,
-        problemDescription: message,
-        attachments: downloadedFiles
-    });
-    
-    // מיד עבד את התקלה - בין אם יש קבצים או לא
-    let solution;
-    if (process.env.OPENAI_ASSISTANT_ID) {
-        log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
-        solution = await handleProblemWithAssistant(message, customer);
-    } else {
-        log('INFO', '🔧 Assistant לא זמין - משתמש בשיטה הרגילה');
-        solution = await findSolution(message, customer);
-    }
-    
-    if (solution.found) {
-        // נמצא פתרון - המתן למשוב
-        this.memory.updateStage(phone, 'waiting_feedback', customer, {
-            serviceNumber: serviceNumber,
-            problemDescription: message,
-            solution: solution.response,
-            attachments: downloadedFiles,
-            threadId: solution.threadId || null,
-            source: solution.source || 'database'
+    // 🔧 פונקציות עזר לטיפול במידע ראשוני
+    async handleInitialProblem(savedInfo, phone, customer, greetingResponse) {
+        this.memory.updateStage(phone, 'problem_description_with_info', customer, {
+            savedProblemInfo: savedInfo
         });
-        // התחל טיימר 90 שניות למשוב
-        autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
-
-        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
         
-        // אם יש קבצים מצורפים - הוסף אישור
-        if (downloadedFiles && downloadedFiles.length > 0) {
-            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+        let response = greetingResponse ? `${greetingResponse} ` : '';
+        response += `${customer.name} 👋\n\n🔧 **מצוין! בואו נטפל בתקלה:**\n"${savedInfo.fullContent}"`;
+        
+        if (savedInfo.hasUnitNumber && savedInfo.unitInfo.isValid) {
+            response += `\n\n✅ יחידה ${savedInfo.unitInfo.formatted} - מספר תקין\n\nהאם זה נכון או שיש תקלה אחרת?\n\n✅ כתוב "נכון" לאישור\n❌ או תאר תקלה אחרת\n\nהמתן מספר שניות לתשובה🤞`;
+        } else if (savedInfo.hasUnitNumber && !savedInfo.unitInfo.isValid) {
+            response += `\n\n⚠️ מספר יחידה לא מדויק: ${savedInfo.unitInfo.number}\n\nאנא ציין מספר יחידה תקין (3 ספרות):\nדוגמאות: 007, 101, 205, 350\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
+        } else {
+            response += `\n\n❓ באיזה יחידה הבעיה? (מספר 3 ספרות)\nדוגמאות: 101, 205, 350\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
         }
         
-        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
-        
         return {
-            response: responseMessage,
-            stage: 'waiting_feedback',
-            customer: customer,
-            serviceNumber: serviceNumber
-        };
-    } else {
-        // לא נמצא פתרון - שלח טכנאי
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
-        
-        // אם יש קבצים מצורפים - הוסף אישור
-        if (downloadedFiles && downloadedFiles.length > 0) {
-            const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-            responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
-        }
-        
-        responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
-        
-        return {
-            response: responseMessage,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendTechnicianEmail: true,
-            problemDescription: message,
-            attachments: downloadedFiles
-        };
-    }
-}
-
-async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
-    const msg = message.toLowerCase().trim();
-    const conversation = this.memory.getConversation(phone, customer);
-    
-    // בדיקה אם הלקוח רוצה לחזור לתפריט
-    if (isMenuRequest(message)) {
-        this.memory.updateStage(phone, 'menu', customer);
-        autoFinishManager.clearTimer(phone);
-        return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
+            response: response,
+            stage: 'problem_description_with_info',
             customer: customer
         };
     }
-    
-    // זיהוי מספר יחידה בהודעה הנוכחית
-    let unitNumber = null;
-    const unitMatch = message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
-    if (unitMatch) {
-        unitNumber = unitMatch[1];
-        log('DEBUG', `🎯 זוהה מספר יחידה: ${unitNumber} מתוך הודעה: "${message}"`);
+
+    async handleInitialOrder(savedInfo, phone, customer, greetingResponse) {
+        this.memory.updateStage(phone, 'order_request', customer, { initialInfo: savedInfo });
+        
+        let response = greetingResponse ? `${greetingResponse} ` : '';
+        response += `${customer.name} 👋\n\n💰 **מצוין! בואו נטפל בהזמנה:**\n"${savedInfo.fullContent}"\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\n📞 039792365`;
+        
+        return {
+            response: response,
+            stage: 'order_request',
+            customer: customer
+        };
     }
+
+    async handleInitialDamage(savedInfo, phone, customer, greetingResponse) {
+        this.memory.updateStage(phone, 'damage_photo', customer, { initialInfo: savedInfo });
+        
+        let response = greetingResponse ? `${greetingResponse} ` : '';
+        response += `${customer.name} 👋\n\n🚨 **מצוין! בואו נטפל בדיווח הנזק:**\n"${savedInfo.fullContent}"\n\nאנא שלח תמונות/סרטונים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n\n📞 039792365`;
+        
+        return {
+            response: response,
+            stage: 'damage_photo',
+            customer: customer
+        };
+    }
+
+    // 🔧 שאר הפונקציות נשארות כמו שהן - רק עם תיקון במשוב הדרכה
     
-    // אם לא נמצא, חפש בהודעות קודמות
-    if (!unitNumber && conversation && conversation.messages) {
-        for (let i = conversation.messages.length - 1; i >= 0; i--) {
-            const pastMessage = conversation.messages[i];
-            if (pastMessage.sender === 'customer') {
-                const pastUnitMatch = pastMessage.message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
-                if (pastUnitMatch) {
-                    unitNumber = pastUnitMatch[1];
-                    log('DEBUG', `נמצא מספר יחידה בהודעה קודמת: ${unitNumber}`);
-                    break;
+    async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
+        const serviceNumber = await getNextServiceNumber();
+        
+        this.memory.updateStage(phone, 'processing_problem', customer, {
+            serviceNumber: serviceNumber,
+            problemDescription: message,
+            attachments: downloadedFiles
+        });
+        
+        let solution;
+        if (process.env.OPENAI_ASSISTANT_ID) {
+            log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
+            solution = await handleProblemWithAssistant(message, customer);
+        } else {
+            log('INFO', '🔧 Assistant לא זמין - משתמש בשיטה הרגילה');
+            solution = await findSolution(message, customer);
+        }
+        
+        if (solution.found) {
+            this.memory.updateStage(phone, 'waiting_feedback', customer, {
+                serviceNumber: serviceNumber,
+                problemDescription: message,
+                solution: solution.response,
+                attachments: downloadedFiles,
+                threadId: solution.threadId || null,
+                source: solution.source || 'database'
+            });
+            
+            autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
+
+            let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
+            
+            if (downloadedFiles && downloadedFiles.length > 0) {
+                const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
+                responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+            }
+            
+            responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+            
+            return {
+                response: responseMessage,
+                stage: 'waiting_feedback',
+                customer: customer,
+                serviceNumber: serviceNumber
+            };
+        } else {
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
+            
+            if (downloadedFiles && downloadedFiles.length > 0) {
+                const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
+                responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+            }
+            
+            responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+            
+            return {
+                response: responseMessage,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendTechnicianEmail: true,
+                problemDescription: message,
+                attachments: downloadedFiles
+            };
+        }
+    }
+
+    async handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles) {
+        const msg = message.toLowerCase().trim();
+        const conversation = this.memory.getConversation(phone, customer);
+        
+        if (this.isMenuRequest(message)) {
+            this.memory.updateStage(phone, 'menu', customer);
+            autoFinishManager.clearTimer(phone);
+            return {
+                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        }
+        
+        let unitNumber = null;
+        const unitMatch = message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
+        if (unitMatch) {
+            unitNumber = unitMatch[1];
+            log('DEBUG', `🎯 זוהה מספר יחידה: ${unitNumber} מתוך הודעה: "${message}"`);
+        }
+        
+        if (!unitNumber && conversation && conversation.messages) {
+            for (let i = conversation.messages.length - 1; i >= 0; i--) {
+                const pastMessage = conversation.messages[i];
+                if (pastMessage.sender === 'customer') {
+                    const pastUnitMatch = pastMessage.message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
+                    if (pastUnitMatch) {
+                        unitNumber = pastUnitMatch[1];
+                        log('DEBUG', `נמצא מספר יחידה בהודעה קודמת: ${unitNumber}`);
+                        break;
+                    }
                 }
             }
         }
-    }
-    
-    // קבלת כל הקבצים
-    const tempFiles = conversation?.data?.tempFiles || [];
-    const allFiles = [...(downloadedFiles || []), ...tempFiles.map(f => f.path)];
-    
-    log('DEBUG', `בדיקת סיום - קבצים: ${allFiles.length}, מספר יחידה: ${unitNumber}, יש קובץ חדש: ${hasFile}`);
-    
-    // סיום אוטומטי אם יש גם קובץ וגם מספר יחידה
-    if ((hasFile || allFiles.length > 0) && unitNumber) {
-        log('INFO', '✅ יש גם קובץ וגם מספר יחידה - מסיים אוטומטית');
         
-        autoFinishManager.clearTimer(phone);
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
+        const tempFiles = conversation?.data?.tempFiles || [];
+        const allFiles = [...(downloadedFiles || []), ...tempFiles.map(f => f.path)];
         
-        const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
-        
-        return {
-            response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendDamageEmail: true,
-            problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
-            attachments: allFiles
-        };
-    }
-    
-    // בדיקה אם הלקוח רוצה לסיים ידנית
-    const hasFinishingWord = isFinishingWord(message);
-    if (hasFinishingWord) {
-        log('INFO', '✅ זוהתה מילת סיום - בודק תנאים להשלמה');
-        
-        // בדיקה שיש קבצים
-        if (!allFiles || allFiles.length === 0) {
-            autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-            return {
-                response: `📷 **לא ניתן לסיים - חסרים קבצים**\n\nכדי לדווח על נזק אני צריכה לפחות:\n• תמונה/סרטון אחד של הנזק\n• מספר היחידה\n\nאנא שלח תמונות/סרטונים עם מספר היחידה\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-                stage: 'damage_photo',
-                customer: customer
-            };
-        }
-        
-        // בדיקה שיש מספר יחידה
-        if (!unitNumber) {
-            autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-            return {
-                response: `📷 **אנא כתוב מספר היחידה**\n\nקיבלתי ${allFiles.length} קבצים ✅\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "202" או "מחסום 150"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-                stage: 'damage_photo',
-                customer: customer
-            };
-        }
-        
-        // אם הכל בסדר - סיום
-        autoFinishManager.clearTimer(phone);
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
-        
-        return {
-            response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendDamageEmail: true,
-            problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
-            attachments: allFiles
-        };
-    }
-    
-    // אם יש קובץ חדש - הוסף אותו לזמניים
-    if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-        const updatedFiles = [...tempFiles, { 
-            path: downloadedFiles[0], 
-            type: fileType, 
-            name: `file_${Date.now()}` 
-        }];
-        
-        this.memory.updateStage(phone, 'damage_photo', customer, { 
-            ...conversation?.data, 
-            tempFiles: updatedFiles 
-        });
-        
-        // אם יש גם מספר יחידה בהודעה - סיים אוטומטית
-        if (unitNumber) {
-            log('INFO', '✅ קובץ חדש + מספר יחידה באותה הודעה - מסיים אוטומטית');
+        if ((hasFile || allFiles.length > 0) && unitNumber) {
+            log('INFO', '✅ יש גם קובץ וגם מספר יחידה - מסיים אוטומטית');
             
             autoFinishManager.clearTimer(phone);
             const serviceNumber = await getNextServiceNumber();
             this.memory.updateStage(phone, 'completed', customer);
             
-            const allFilesNow = [...downloadedFiles, ...tempFiles.map(f => f.path)];
+            const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
             
             return {
-                response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${fileType}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
                 stage: 'completed',
                 customer: customer,
                 serviceNumber: serviceNumber,
                 sendDamageEmail: true,
                 problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
-                attachments: allFilesNow
+                attachments: allFiles
             };
         }
         
-        // אם אין מספר יחידה - בקש אותו
-        autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-        
-        return {
-            response: `✅ **${fileType} התקבל!**\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב מספר היחידה + "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
-    
-    // אם אין קובץ אבל יש טקסט - בדוק אם יש מספר יחידה
-    if (unitNumber) {
-        log('DEBUG', `זוהה מספר יחידה: ${unitNumber} מתוך הודעה: "${message}"`);
-        
-        autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-        
-        return {
-            response: `📝 **מספר יחידה נרשם: ${unitNumber}**\n\nעכשיו שלח תמונות/סרטונים של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-            stage: 'damage_photo',
-            customer: customer
-        };
-    }
-    
-    // אם לא הבין מה הלקוח רוצה
-    autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-    
-    return {
-        response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-        stage: 'damage_photo',
-        customer: customer
-    };
-}
-
-async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
-    const msg = message.toLowerCase().trim();
-    
-    // בדיקה אם הלקוח רוצה לחזור לתפריט
-    if (isMenuRequest(message)) {
-        this.memory.updateStage(phone, 'menu', customer);
-        return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer
-        };
-    }
-    
-    // בדיקה אם הלקוח רוצה לסיים
-    if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-        // חיפוש הזמנה קודמת בשיחה
-        const conversation = this.memory.getConversation(phone, customer);
-        let orderDescription = '';
-        
-        if (conversation && conversation.messages) {
-            const orderMessages = conversation.messages.filter(msg => 
-                msg.sender === 'customer' && 
-                msg.message.length > 4 && 
-                !msg.message.toLowerCase().includes('סיום') &&
-                !msg.message.toLowerCase().includes('לסיים')
-            );
-            
-            if (orderMessages.length > 0) {
-                orderDescription = orderMessages[orderMessages.length - 1].message;
+        const hasFinishingWord = this.isFinishingWord(message);
+        if (hasFinishingWord) {
+            if (!allFiles || allFiles.length === 0) {
+                autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+                return {
+                    response: `📷 **לא ניתן לסיים - חסרים קבצים**\n\nכדי לדווח על נזק אני צריכה לפחות:\n• תמונה/סרטון אחד של הנזק\n• מספר היחידה\n\nאנא שלח תמונות/סרטונים עם מספר היחידה\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                    stage: 'damage_photo',
+                    customer: customer
+                };
             }
+            
+            if (!unitNumber) {
+                autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+                return {
+                    response: `📷 **אנא כתוב מספר היחידה**\n\nקיבלתי ${allFiles.length} קבצים ✅\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "202" או "מחסום 150"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                    stage: 'damage_photo',
+                    customer: customer
+                };
+            }
+            
+            autoFinishManager.clearTimer(phone);
+            const serviceNumber = await getNextServiceNumber();
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
+            
+            return {
+                response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendDamageEmail: true,
+                problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
+                attachments: allFiles
+            };
         }
         
-        // אם לא נמצאה הזמנה קודמת
-        if (!orderDescription) {
+        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+            const updatedFiles = [...tempFiles, { 
+                path: downloadedFiles[0], 
+                type: fileType, 
+                name: `file_${Date.now()}` 
+            }];
+            
+            this.memory.updateStage(phone, 'damage_photo', customer, { 
+                ...conversation?.data, 
+                tempFiles: updatedFiles 
+            });
+            
+            if (unitNumber) {
+                autoFinishManager.clearTimer(phone);
+                const serviceNumber = await getNextServiceNumber();
+                this.memory.updateStage(phone, 'completed', customer);
+                
+                const allFilesNow = [...downloadedFiles, ...tempFiles.map(f => f.path)];
+                
+                return {
+                    response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${fileType}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    customer: customer,
+                    serviceNumber: serviceNumber,
+                    sendDamageEmail: true,
+                    problemDescription: `נזק ביחידה ${unitNumber} - ${message}`,
+                    attachments: allFilesNow
+                };
+            }
+            
+            autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+            
             return {
-                response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
-                stage: 'order_request',
+                response: `✅ **${fileType} התקבל!**\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב מספר היחידה + "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'damage_photo',
                 customer: customer
             };
         }
         
-        // סיום ההזמנה
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        return {
-            response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendOrderEmail: true,
-            orderDetails: orderDescription,
-            attachments: downloadedFiles
-        };
-    }
-
-    // אם יש קובץ חדש - הוסף אותו
-    if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-        // התחל טיימר 90 שניות
-        autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
-        
-        return {
-            response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-            stage: 'order_request',
-            customer: customer
-        };
-    }
-    
-    // טיפול בהודעה רגילה
-    if (message && message.trim().length >= 5) {
-        return {
-            response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n🟡 רשום סיום לשליחת המייל`,
-            stage: 'order_request',
-            customer: customer
-        };
-    }
-    
-    // אם לא הבין מה הלקוח רוצה
-    return {
-        response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
-        stage: 'order_request',
-        customer: customer
-    };
-} 
-
-// תחליף את הפונקציה handleTrainingRequest ב-ResponseHandler:
-
-async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
-    const serviceNumber = await getNextServiceNumber();
-    
-    // בדיקה אם הלקוח רוצה לחזור לתפריט
-    if (isMenuRequest(message)) {
-        this.memory.updateStage(phone, 'menu', customer);
-        return {
-            response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer
-        };
-    }
-    
-    // ניסיון יצירת חומר הדרכה עם Assistant
-    let trainingContent = null;
-    if (process.env.OPENAI_ASSISTANT_ID) {
-        log('INFO', '📚 מנסה הדרכה עם OpenAI Assistant...');
-        trainingContent = await handleTrainingWithAssistant(message, customer);
-    }
-    
-    if (trainingContent && trainingContent.success) {
-        // נוצר חומר הדרכה מותאם - המתן למשוב כמו בתקלות
-        this.memory.updateStage(phone, 'waiting_training_feedback', customer, {
-            serviceNumber: serviceNumber,
-            trainingRequest: message,
-            trainingContent: trainingContent.content,
-            attachments: downloadedFiles
-        });
-        
-        // שליחת החומר ישירות בWhatsApp (עד 4096 תווים)
-        let immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${trainingContent.content}`;
-        
-        // אם החומר ארוך מדי, קצר אותו ושלח גם למייל
-        let needsEmail = false;
-        if (immediateResponse.length > 4000) {
-            const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
-            immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${shortContent}`;
-            needsEmail = true;
-        }
-        
-        immediateResponse += `\n\n❓ **האם ההדרכה ברורה?** (כן/לא)`;
-        immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
-        
-        return {
-            response: immediateResponse,
-            stage: 'waiting_training_feedback',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendTrainingEmailImmediate: needsEmail, // שלח מייל מיד אם החומר ארוך
-            trainingRequest: message,
-            trainingContent: trainingContent.content,
-            attachments: downloadedFiles
-        };
-
-    } else {
-        // Assistant לא זמין או נכשל - שיטה רגילה עם מייל
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        return {
-            response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n❓ **כדי לחזור לתפריט הראשי** - כתוב "תפריט"\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendTrainingEmail: true,
-            trainingRequest: message,
-            attachments: downloadedFiles
-        };
-    }
-}
-
-// הוסף פונקציה חדשה לטיפול במשוב הדרכה:
-async handleTrainingFeedback(message, phone, customer, conversation) {
-    const msg = message.toLowerCase().trim();
-    const data = conversation.data;
-    
-    if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה')) {
-        this.memory.updateStage(phone, 'menu', customer);
-        
-        return {
-            response: `🎉 **מעולה! ההדרכה הייתה ברורה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer,
-            sendTrainingEmailFinal: true,
-            serviceNumber: data.serviceNumber,
-            resolved: true
-        };
-    } else if (msg.includes('לא')) {
-        this.memory.updateStage(phone, 'menu', customer);
-        
-        return {
-            response: `📚 **אשלח הדרכה מפורטת למייל**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer,
-            sendTrainingEmailExpanded: true,
-            serviceNumber: data.serviceNumber,
-            resolved: false
-        };
-    } else {
-        return {
-            response: `❓ **האם ההדרכה ברורה?** (כן/לא)\n\n🟡 רשום כן/לא לשליחת מייל`,
-            stage: 'waiting_training_feedback',
-            customer: customer
-        };
-    }
-}
-
-async handleFeedback(message, phone, customer, conversation) {
-        const msg = message.toLowerCase().trim();
-        const data = conversation.data;
-        
-        if (msg.includes('כן') || msg.includes('נפתר') || msg.includes('תודה') || (msg.includes('עזר') && !msg.includes('לא עזר'))) {
-            this.memory.updateStage(phone, 'completed', customer);
+        if (unitNumber) {
+            autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
             
             return {
-                response: `🎉 **מעולה! הבעיה נפתרה!**\n\nשמח לשמוע שהפתרון עזר!\n\nיום טוב! 😊\n\n📞 039792365`,
-                stage: 'completed',
-                customer: customer,
-                sendSummaryEmail: true,
-                serviceNumber: data.serviceNumber,
-                problemDescription: data.problemDescription,
-                solution: data.solution,
-                resolved: true
-            };
-        } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא עובד')) {
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `🔧 **מבין שהפתרון לא עזר**\n\n📋 מעבירה את הפניה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365\n\n🆔 מספר קריאה: ${data.serviceNumber}`,
-                stage: 'completed',
-                customer: customer,
-                sendTechnicianEmail: true,
-                serviceNumber: data.serviceNumber,
-                problemDescription: data.problemDescription,
-                solution: data.solution,
-                resolved: false,
-                attachments: data.attachments
-            };
-        } else {
-            return {
-response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n\n🟡 רשום כן/לא לשליחת מייל`,
-                stage: 'waiting_feedback',
+                response: `📝 **מספר יחידה נרשם: ${unitNumber}**\n\nעכשיו שלח תמונות/סרטונים של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\n✏️ **לסיום:** כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'damage_photo',
                 customer: customer
             };
         }
+        
+        autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+        
+        return {
+            response: `📷 **דיווח נזק - הנחיות**\n\nאני צריכה:\n• תמונות/סרטונים של הנזק\n• מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            stage: 'damage_photo',
+            customer: customer
+        };
     }
 
-    async handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles) {
+    async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         const msg = message.toLowerCase().trim();
         
-        // בדיקה אם הלקוח רוצה לחזור לתפריט
-        if (isMenuRequest(message)) {
+        if (this.isMenuRequest(message)) {
             this.memory.updateStage(phone, 'menu', customer);
             return {
                 response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
@@ -2284,324 +2056,172 @@ response: `❓ **האם הפתרון עזר?**\n\n✅ כתוב "כן" אם הב�
             };
         }
         
-        // בדיקה אם הלקוח רוצה לסיים
         if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-            // חיפוש בקשה קודמת בשיחה
             const conversation = this.memory.getConversation(phone, customer);
-            let requestDescription = '';
+            let orderDescription = '';
             
             if (conversation && conversation.messages) {
-                const requestMessages = conversation.messages.filter(msg => 
+                const orderMessages = conversation.messages.filter(msg => 
                     msg.sender === 'customer' && 
                     msg.message.length > 4 && 
                     !msg.message.toLowerCase().includes('סיום') &&
                     !msg.message.toLowerCase().includes('לסיים')
                 );
                 
-                if (requestMessages.length > 0) {
-                    requestDescription = requestMessages[requestMessages.length - 1].message;
+                if (orderMessages.length > 0) {
+                    orderDescription = orderMessages[orderMessages.length - 1].message;
                 }
             }
             
-            // אם לא נמצאה בקשה קודמת
-            if (!requestDescription) {
+            if (!orderDescription) {
                 return {
-                    response: `📋 **אנא תאר את בקשתך**\n\nדוגמה: "עדכון פרטי התקשרות + סיום"\n\n📞 039792365`,
-                    stage: 'general_office_request',
+                    response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
+                    stage: 'order_request',
                     customer: customer
                 };
             }
             
-            // סיום הבקשה
             const serviceNumber = await getNextServiceNumber();
             this.memory.updateStage(phone, 'completed', customer);
             
             return {
-                response: `✅ **פנייה למשרד התקבלה בהצלחה!**\n\n📋 **נושא הפנייה:** ${requestDescription}\n\n📧 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
                 stage: 'completed',
                 customer: customer,
                 serviceNumber: serviceNumber,
-                sendGeneralOfficeEmail: true,
-                officeRequestDetails: requestDescription,
+                sendOrderEmail: true,
+                orderDetails: orderDescription,
                 attachments: downloadedFiles
             };
         }
 
-// אם יש קובץ חדש - הוסף אותו
-if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-    // התחל טיימר 90 שניות
-    autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
-    
-    return {
-        response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או תאר את בקשתך\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "עדכון פרטי לקוח + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-        stage: 'general_office_request',
-        customer: customer
-    };
-}
+        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+            autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+            
+            return {
+                response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
         
-        // טיפול בהודעה רגילה
         if (message && message.trim().length >= 5) {
             return {
-                response: `📋 **נושא הפנייה נרשם:** "${message}"\n\n📎 **רוצה לצרף מסמכים?** (תמונות, PDF, Word, Excel)\n\nאו כתוב "סיום" כדי לשלוח את הפנייה\n\n📞 039792365`,
-                stage: 'general_office_request',
+                response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n🟡 רשום סיום לשליחת המייל`,
+                stage: 'order_request',
                 customer: customer
             };
         }
         
-        // אם לא הבין מה הלקוח רוצה
         return {
-            response: `🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + מסמכים\n\n🟡 רשום כן / לא לשליחת המייל`,
-            stage: 'general_office_request',
+            response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
+            stage: 'order_request',
             customer: customer
         };
     }
-// 🔧 חדש: טיפול בתקלות עם מידע ראשוני
-async handleProblemDescriptionWithInfo(message, phone, customer, hasFile, downloadedFiles) {
-    const msg = message.toLowerCase().trim();
-    const conversation = this.memory.getConversation(phone, customer);
-    const savedInfo = conversation?.data?.savedProblemInfo;
-    
-    // בדיקה אם הלקוח אישר את הבעיה השמורה
-    if (msg.includes('נכון') || msg.includes('כן') || msg.includes('בסדר')) {
-        // לקוח אישר - עבד עם המידע השמור
-        const problemDescription = savedInfo.fullContent;
-        return await this.processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, savedInfo);
-    }
-    
-    // בדיקה אם זה מספר יחידה חדש
-    const unitCheck = validateUnitNumber(message);
-    if (unitCheck.found) {
-        if (unitCheck.isValid) {
-            // מספר יחידה תקין - עבד עם הבעיה השמורה + המספר החדש
-            const updatedProblem = `${savedInfo.fullContent.replace(/יחידה?\s*\d*/gi, '')} יחידה ${unitCheck.formatted}`.trim();
-            const updatedInfo = { ...savedInfo, unitInfo: unitCheck, hasUnitNumber: true };
-            return await this.processProblemWithValidation(updatedProblem, phone, customer, hasFile, downloadedFiles, updatedInfo);
-        } else {
-            // מספר יחידה לא תקין - בקש שוב
+
+    async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
+        const serviceNumber = await getNextServiceNumber();
+        
+        if (this.isMenuRequest(message)) {
+            this.memory.updateStage(phone, 'menu', customer);
             return {
-                response: "מספר יחידה לא תקין. אנא ציין מספר יחידה של 3 ספרות: 007, 101, 205, 350. או כתוב 'ללא יחידה' אם אין מספר ספציפי.",
-                stage: 'problem_description_with_info',
+                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
+        }
+        
+        let trainingContent = null;
+        if (process.env.OPENAI_ASSISTANT_ID) {
+            log('INFO', '📚 מנסה הדרכה עם OpenAI Assistant...');
+            trainingContent = await handleTrainingWithAssistant(message, customer);
+        }
+        
+        if (trainingContent && trainingContent.success) {
+            this.memory.updateStage(phone, 'waiting_training_feedback', customer, {
+                serviceNumber: serviceNumber,
+                trainingRequest: message,
+                trainingContent: trainingContent.content,
+                attachments: downloadedFiles
+            });
+            
+            let immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${trainingContent.content}`;
+            
+            let needsEmail = false;
+            if (immediateResponse.length > 4000) {
+                const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
+                immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${shortContent}`;
+                needsEmail = true;
+            }
+            
+            // 🔧 תיקון: ללא שאלה כפולה - רק הדרכה ומשוב
+            immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
+            immediateResponse += `\n\n❓ **האם ההדרכה עזרה לך?** (כן/לא)`;
+            
+            return {
+                response: immediateResponse,
+                stage: 'waiting_training_feedback',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendTrainingEmailImmediate: needsEmail,
+                trainingRequest: message,
+                trainingContent: trainingContent.content,
+                attachments: downloadedFiles
+            };
+
+        } else {
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n❓ **כדי לחזור לתפריט הראשי** - כתוב "תפריט"\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendTrainingEmail: true,
+                trainingRequest: message,
+                attachments: downloadedFiles
+            };
+        }
+    }
+
+    // 🔧 תיקון משוב הדרכה - ללא שאלה כפולה
+    async handleTrainingFeedback(message, phone, customer, conversation) {
+        const msg = message.toLowerCase().trim();
+        const data = conversation.data;
+        
+        if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה') || msg.includes('עזר')) {
+            this.memory.updateStage(phone, 'menu', customer);
+            
+            return {
+                response: `🎉 **מעולה! שמח שההדרכה עזרה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer,
+                sendTrainingEmailFinal: true,
+                serviceNumber: data.serviceNumber,
+                resolved: true
+            };
+        } else if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('לא ברור')) {
+            this.memory.updateStage(phone, 'menu', customer);
+            
+            return {
+                response: `📚 **אשלח הדרכה מפורטת למייל**\n\n⏰ תוך 24 שעות תקבל חומר הדרכה מורחב\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer,
+                sendTrainingEmailExpanded: true,
+                serviceNumber: data.serviceNumber,
+                resolved: false
+            };
+        } else {
+            // 🔧 אם לא הבין - הסבר בפשטות
+            return {
+                response: `❓ **האם ההדרכה עזרה לך?**\n\n✅ כתוב "כן" אם זה עזר\n❌ כתוב "לא" אם צריך הדרכה מורחבת\n\n📞 039792365`,
+                stage: 'waiting_training_feedback',
                 customer: customer
             };
         }
     }
-    
-    // בדיקה אם הלקוח כתב "ללא יחידה"
-    if (msg.includes('ללא יחידה') || msg.includes('אין יחידה') || msg.includes('בלי יחידה')) {
-        const problemDescription = savedInfo.fullContent + " (ללא מספר יחידה ספציפי)";
-        const updatedInfo = { ...savedInfo, hasUnitNumber: false, unitInfo: null };
-        return await this.processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, updatedInfo);
-    }
-    
-    // אחרת - זו בעיה חדשה לגמרי
-    return await this.processProblemWithValidation(message, phone, customer, hasFile, downloadedFiles, null);
-}
-
-// 🔧 פונקציה מרכזית לעיבוד תקלות עם ולידציה
-async processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, savedInfo = null) {
-    // בדיקת מספר יחידה בתיאור הסופי
-    const finalUnitCheck = validateUnitNumber(problemDescription);
-    
-    if (!finalUnitCheck.found || !finalUnitCheck.isValid) {
-        // אין מספר יחידה תקין - שאל פעם אחת
-        this.memory.updateStage(phone, 'asking_unit_number', customer, {
-            problemDescription: problemDescription,
-            savedInfo: savedInfo,
-            hasFile: hasFile,
-            downloadedFiles: downloadedFiles,
-            askedOnce: false
-        });
-        
-        return {
-            response: "קיבלתי את התיאור. באיזה יחידה הבעיה? (מספר 3 ספרות) דוגמאות: 007, 101, 205, 350. או כתוב 'ללא יחידה' כדי להמשיך בלי מספר.",
-            stage: 'asking_unit_number',
-            customer: customer
-        };
-    }
-    
-    // יש מספר יחידה תקין - המשך לעיבוד רגיל
-    return await this.handleProblemDescription(problemDescription, phone, customer, hasFile, downloadedFiles);
-}
-// 🔧 טיפול בשלב בקשת מספר יחידה
-async handleAskingUnitNumber(message, phone, customer, hasFile, downloadedFiles) {
-    const conversation = this.memory.getConversation(phone, customer);
-    const data = conversation?.data;
-    const msg = message.toLowerCase().trim();
-    
-    // בדיקת מספר יחידה
-    const unitCheck = validateUnitNumber(message);
-    
-    if (unitCheck.found && unitCheck.isValid) {
-        // מספר יחידה תקין - המשך עם הבעיה המלאה
-        const problemWithUnit = `${data.problemDescription} - יחידה ${unitCheck.formatted}`;
-        return await this.handleProblemDescription(problemWithUnit, phone, customer, data.hasFile, data.downloadedFiles);
-    } else if (msg.includes('ללא יחידה') || msg.includes('אין יחידה') || msg.includes('בלי יחידה')) {
-        // הלקוח אמר שאין מספר יחידה - המשך בלי
-        const problemWithNote = `${data.problemDescription} (לקוח ציין שאין מספר יחידה ספציפי)`;
-        return await this.handleProblemDescription(problemWithNote, phone, customer, data.hasFile, data.downloadedFiles);
-    } else if (!data.askedOnce) {
-        // עדיין לא שאלנו פעם אחת - נסה שוב
-        this.memory.updateStage(phone, 'asking_unit_number', customer, {
-            ...data,
-            askedOnce: true
-        });
-        
-        return {
-            response: "לא זיהיתי מספר יחידה תקין. אנא ציין מספר של 3 ספרות (למשל: 007, 101, 205) או כתוב 'ללא יחידה' כדי להמשיך.",
-            stage: 'asking_unit_number',
-            customer: customer
-        };
-    } else {
-        // כבר שאלנו פעם אחת - המשך בלי מספר יחידה
-        const problemFinal = `${data.problemDescription} (מספר יחידה לא צוין)`;
-        return await this.handleProblemDescription(problemFinal, phone, customer, data.hasFile, data.downloadedFiles);
-    }
-}
-} // סגירת המחלקה ResponseHandler
-
-// זיהוי ברכות בתחילת הודעה
-function extractGreetingAndContent(message) {
-    const greetings = [
-        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
-        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
-        'good morning', 'good evening', 'hello', 'hi'
-    ];
-    
-    const msg = message.trim();
-    let greeting = '';
-    let content = msg;
-    
-    for (const greet of greetings) {
-        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
-        if (pattern.test(msg)) {
-            greeting = greet;
-            content = msg.replace(pattern, '').trim();
-            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
-            break;
-        }
-    }
-    
-    return { greeting, content: content || msg };
-}
-
-// יצירת ברכת תשובה מתאימה
-function createGreetingResponse(greeting) {
-    const timeOfDay = new Date().toLocaleString('he-IL', { 
-        timeZone: 'Asia/Jerusalem',
-        hour: 'numeric'
-    });
-    const hour = parseInt(timeOfDay);
-    
-    const greetingMap = {
-        'בוקר טוב': 'בוקר טוב',
-        'ערב טוב': 'ערב טוב', 
-        'לילה טוב': 'לילה טוב',
-        'צהריים טובים': 'צהריים טובים',
-        'שלום': 'שלום',
-        'שלום לך': 'שלום',
-        'היי': 'היי',
-        'הלו': 'שלום',
-        'אהלן': 'אהלן',
-        'מה שלום': 'שלום',
-        'good morning': 'בוקר טוב',
-        'good evening': 'ערב טוב',
-        'hello': 'שלום',
-        'hi': 'היי'
-    };
-    
-    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
-    
-    // התאמה לפי שעה אם זה ברכה כללית
-    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
-        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
-        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
-        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
-        else response = 'שלום';
-    }
-    
-    return response;
-}
-
-// ולידציה מדויקת של מספר יחידה (3 ספרות)
-function validateUnitNumber(message) {
-    // חיפוש מספר יחידה במספר תבניות
-    const patterns = [
-        /יחידה\s*(\d{1,4})/gi,
-        /מחסום\s*(\d{1,4})/gi,
-        /מספר\s*(\d{1,4})/gi,
-        /\b(\d{1,4})\b/g
-    ];
-    
-    let foundNumbers = [];
-    
-    for (const pattern of patterns) {
-        let match;
-        while ((match = pattern.exec(message)) !== null) {
-            const num = match[1];
-            if (num.length <= 4) { // מקסימום 4 ספרות
-                foundNumbers.push({
-                    number: num,
-                    isValid: num.length === 3,
-                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
-                });
-            }
-        }
-    }
-    
-    if (foundNumbers.length === 0) {
-        return { found: false, isValid: false, number: null, formatted: null };
-    }
-    
-    // בחר את המספר הראשון שנמצא
-    const firstNumber = foundNumbers[0];
-    
-    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
-    
-    return {
-        found: true,
-        isValid: firstNumber.isValid,
-        number: firstNumber.number,
-        formatted: firstNumber.formatted
-    };
-}
-
-// שימור מידע מההודעה הראשונה
-function extractInitialInfo(content) {
-    if (!content || content.length < 5) return null;
-    
-    const info = {
-        hasProblem: false,
-        hasUnitNumber: false,
-        problemKeywords: [],
-        unitInfo: null,
-        fullContent: content
-    };
-    
-    // זיהוי מילות מפתח לבעיות
-    const problemKeywords = [
-        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
-        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
-    ];
-    
-    for (const keyword of problemKeywords) {
-        if (content.toLowerCase().includes(keyword)) {
-            info.hasProblem = true;
-            info.problemKeywords.push(keyword);
-        }
-    }
-    
-    // בדיקת מספר יחידה
-    const unitCheck = validateUnitNumber(content);
-    if (unitCheck.found) {
-        info.hasUnitNumber = true;
-        info.unitInfo = unitCheck;
-    }
-    
-    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
-    
-    return info;
-}
-
+} // <-- הוסף את השורה הזו!
 // פונקציות עזר משופרות
 function extractUnitNumber(message, conversation = null) {
     const patterns = [
@@ -2636,24 +2256,6 @@ function extractUnitNumber(message, conversation = null) {
     }
     
     return null;
-}
-
-// שיפור מילות סיום
-function isFinishingWord(message) {
-    const msg = message.toLowerCase().trim();
-    
-    const finishingWords = [
-        'סיום', 'לסיים', 'להגיש', 'לשלוח', 'סיימתי', 
-        'זהו', 'תם', 'הסתיים', 'בחלק', 'finish', 'done', 'end',
-        'תודה', 'תודה רבה', 'די', 'מספיק', 'הכל', 'בסדר', 'מוכן'
-    ];
-    
-    return finishingWords.some(word => {
-        return msg === word || 
-               msg.startsWith(word + ' ') || 
-               msg.endsWith(' ' + word) ||
-               msg.includes(' ' + word + ' ');
-    });
 }
 
 const responseHandler = new ResponseHandler(memory, customers);
