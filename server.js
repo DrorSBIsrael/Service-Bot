@@ -641,7 +641,6 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
         conv.lastActivity = new Date();
         if (customer && !conv.customer) {
             conv.customer = customer;
-            conv.stage = 'menu';
         }
         log('DEBUG', `🔄 מצאתי conversation קיים - שלב: ${conv.stage}`);
         return conv;
@@ -1985,7 +1984,7 @@ class ResponseHandler {
                     customer: customer
                 };
             }
-            
+
             autoFinishManager.clearTimer(phone);
             const serviceNumber = await getNextServiceNumber();
             this.memory.updateStage(phone, 'completed', customer);
