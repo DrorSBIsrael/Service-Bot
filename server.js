@@ -2313,15 +2313,37 @@ async function sendWhatsApp(phone, message) {
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     
     try {
-                const response = await axios.post(url, {
+        // בדיקה שהטלפון והמסר תקינים
+        if (!phone || !message) {
+            log('ERROR', '❌ טלפון או מסר ריקים');
+            return null;
+        }
+        
+        log('DEBUG', `📤 שולח ל-${phone}: ${message.substring(0, 50)}...`);
+        
+        const response = await axios.post(url, {
             chatId: `${phone}@c.us`,
             message: message
+        }, {
+            timeout: 8000,
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
-        log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
+        
+        if (response.data && response.data.idMessage) {
+            log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
+        } else {
+            log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
+        }
+        
         return response.data;
+        
     } catch (error) {
-        log('ERROR', '❌ שגיאת WhatsApp:', error.message);
-        throw error;
+        log('ERROR', '❌ שגיאת WhatsApp:', error.response?.data?.error || error.message);
+        
+        // אל תזרוק שגיאה - פשוט החזר null
+        return null;
     }
 }
 
