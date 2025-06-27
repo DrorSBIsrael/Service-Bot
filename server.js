@@ -697,8 +697,15 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
         const beforeCount = this.conversations.size;
         
         for (const [key, conv] of this.conversations.entries()) {
-            if (now - conv.lastActivity > this.maxAge) {
+            const timeSinceLastActivity = now - conv.lastActivity;
+            
+            // 🔧 ניקוי אגרסיבי - מחק שיחות ישנות או תקועות
+            if (timeSinceLastActivity > this.maxAge || 
+                (timeSinceLastActivity > 10 * 60 * 1000 && // 10 דקות
+                 ['identifying', 'confirming_identity', 'guest_details'].includes(conv.stage))) {
+                
                 this.conversations.delete(key);
+                log('INFO', `🧹 נוקה conversation תקוע: ${key} - שלב: ${conv.stage}`);
             }
         }
         
@@ -2898,10 +2905,19 @@ app.post('/webhook/whatsapp', async (req, res) => {
         if (req.body.typeWebhook !== 'incomingMessageReceived') {
             return res.status(200).json({ status: 'OK - not a message' });
         }
-        if (req.body.senderData && req.body.senderData.sender.includes('@g.us')) {
-            log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${req.body.senderData.sender}`);
-            return res.status(200).json({ status: 'OK - group message ignored' });
-        }
+// בדיקה מוגברת להודעות קבוצה
+if (req.body.senderData && req.body.senderData.sender) {
+    const sender = req.body.senderData.sender;
+    
+    // בדיקות מרובות לקבוצות
+    if (sender.includes('@g.us') || 
+        sender.includes('-') || 
+        sender.match(/^\d+-\d+@/)) {
+        
+        log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+        return res.status(200).json({ status: 'OK - group message ignored' });
+    }
+}
         
         // בדיקה נוספת - אם זה הטלפון של המערכת עצמה
         if (req.body.senderData && req.body.senderData.sender) {
