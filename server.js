@@ -2106,8 +2106,10 @@ class ResponseHandler {
         }
         
         if (message && message.trim().length >= 5) {
+            autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+            
             return {
-                response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n🟡 רשום סיום לשליחת המייל`,
+                response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n⏰ **סיום אוטומטי בעוד 90 שניות**`,
                 stage: 'order_request',
                 customer: customer
             };
@@ -2173,6 +2175,8 @@ class ResponseHandler {
         } else {
             this.memory.updateStage(phone, 'completed', customer);
             
+            autoFinishManager.startTimer(phone, customer, 'training_request', handleAutoFinish);
+            
             return {
                 response: `📚 **קיבלתי את בקשת ההדרכה!**\n\n"${message}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n❓ **כדי לחזור לתפריט הראשי** - כתוב "תפריט"\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
                 stage: 'completed',
@@ -2221,7 +2225,31 @@ class ResponseHandler {
             };
         }
     }
-} // <-- הוסף את השורה הזו!
+    async handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles) {
+        if (message.toLowerCase().includes('סיום')) {
+            const serviceNumber = await getNextServiceNumber();
+            this.memory.updateStage(phone, 'completed', customer);
+            
+            return {
+                response: `✅ **פנייה למשרד התקבלה בהצלחה!**\n\n📧 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                stage: 'completed',
+                customer: customer,
+                serviceNumber: serviceNumber,
+                sendGeneralOfficeEmail: true,
+                officeRequestDetails: message,
+                attachments: downloadedFiles
+            };
+        }
+        
+        autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
+        
+        return {
+            response: `📋 **נושא הפנייה נרשם:** "${message}"\n\nכתוב "סיום" כדי לשלוח\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            stage: 'general_office_request',
+            customer: customer
+        };
+    }
+} 
 // פונקציות עזר משופרות
 function extractUnitNumber(message, conversation = null) {
     const patterns = [
@@ -2257,6 +2285,17 @@ function extractUnitNumber(message, conversation = null) {
     
     return null;
 }
+
+class ResponseHandlerExtension {
+    static isMenuRequest(message) {
+        const msg = message.toLowerCase().trim();
+        const menuWords = ['תפריט', 'חזרה', 'ביטול', 'menu', 'cancel'];
+        return menuWords.some(word => msg.includes(word));
+    }
+}
+
+// הוסף את השיטה למחלקה הקיימת
+ResponseHandler.prototype.isMenuRequest = ResponseHandlerExtension.isMenuRequest;
 
 const responseHandler = new ResponseHandler(memory, customers);
 
