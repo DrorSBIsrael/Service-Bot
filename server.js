@@ -3281,7 +3281,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
         let hasFile = false;
         let fileType = '';
         let downloadedFiles = [];
-
+       
 // עיבוד טקסט - גרסה מתוקנת
 if (messageData.textMessageData && messageData.textMessageData.textMessage) {
     // הודעת טקסט רגילה
@@ -3306,10 +3306,38 @@ if (messageData.textMessageData && messageData.textMessageData.textMessage) {
     
     fileType = getFileType(fileName, mimeType);
     log('INFO', `📁 ${fileType}: ${fileName} - Caption מקורי: "${messageData.fileMessageData.caption}" - טקסט סופי: "${messageText}"`);
+} else if (messageData.extendedTextMessageData && messageData.extendedTextMessageData.text) {
+    // הודעת טקסט מורחבת (עם קישורים וכו')
+    messageText = messageData.extendedTextMessageData.text.trim();
+    log('DEBUG', `📝 טקסט מורחב: "${messageText}"`);
+} else if (messageData.imageMessageData) {
+    // תמונה ישירה
+    hasFile = true;
+    fileType = 'תמונה';
+    messageText = messageData.imageMessageData.caption || 'שלח תמונה';
+    log('DEBUG', `📸 תמונה: "${messageText}"`);
+} else if (messageData.videoMessageData) {
+    // סרטון ישיר
+    hasFile = true;
+    fileType = 'סרטון';
+    messageText = messageData.videoMessageData.caption || 'שלח סרטון';
+    log('DEBUG', `🎥 סרטון: "${messageText}"`);
 } else {
-    // מקרה חירום - סוג הודעה לא מזוהה
-    messageText = 'הודעה לא מזוהה';
-    log('WARN', '⚠️ סוג הודעה לא מזוהה, messageData:', JSON.stringify(messageData, null, 2));
+    // נסה לחלץ טקסט מכל מקום אפשרי
+    const possibleTexts = [
+        messageData.text,
+        messageData.message,
+        messageData.body,
+        messageData.content
+    ];
+    
+    messageText = possibleTexts.find(text => text && typeof text === 'string' && text.trim() !== '') || 'שלום';
+    
+    if (messageText === 'שלום') {
+        log('WARN', '⚠️ לא נמצא טקסט - משתמש בברירת מחדל, messageData:', JSON.stringify(messageData, null, 2));
+    } else {
+        log('DEBUG', `🔧 טקסט משוחזר: "${messageText}"`);
+    }
 }
 
 log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
