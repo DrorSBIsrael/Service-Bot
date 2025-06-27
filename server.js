@@ -1496,6 +1496,7 @@ class ResponseHandler {
             }
         }
         
+        
 // 🔧 חדש: פונקציות עזר לברכות ומספר יחידה
 
 // זיהוי ברכות בתחילת הודעה
@@ -2458,6 +2459,149 @@ async handleAskingUnitNumber(message, phone, customer, hasFile, downloadedFiles)
 }
 } // סגירת המחלקה ResponseHandler
 
+// זיהוי ברכות בתחילת הודעה
+function extractGreetingAndContent(message) {
+    const greetings = [
+        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
+        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
+        'good morning', 'good evening', 'hello', 'hi'
+    ];
+    
+    const msg = message.trim();
+    let greeting = '';
+    let content = msg;
+    
+    for (const greet of greetings) {
+        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
+        if (pattern.test(msg)) {
+            greeting = greet;
+            content = msg.replace(pattern, '').trim();
+            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
+            break;
+        }
+    }
+    
+    return { greeting, content: content || msg };
+}
+
+// יצירת ברכת תשובה מתאימה
+function createGreetingResponse(greeting) {
+    const timeOfDay = new Date().toLocaleString('he-IL', { 
+        timeZone: 'Asia/Jerusalem',
+        hour: 'numeric'
+    });
+    const hour = parseInt(timeOfDay);
+    
+    const greetingMap = {
+        'בוקר טוב': 'בוקר טוב',
+        'ערב טוב': 'ערב טוב', 
+        'לילה טוב': 'לילה טוב',
+        'צהריים טובים': 'צהריים טובים',
+        'שלום': 'שלום',
+        'שלום לך': 'שלום',
+        'היי': 'היי',
+        'הלו': 'שלום',
+        'אהלן': 'אהלן',
+        'מה שלום': 'שלום',
+        'good morning': 'בוקר טוב',
+        'good evening': 'ערב טוב',
+        'hello': 'שלום',
+        'hi': 'היי'
+    };
+    
+    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
+    
+    // התאמה לפי שעה אם זה ברכה כללית
+    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
+        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
+        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
+        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
+        else response = 'שלום';
+    }
+    
+    return response;
+}
+
+// ולידציה מדויקת של מספר יחידה (3 ספרות)
+function validateUnitNumber(message) {
+    // חיפוש מספר יחידה במספר תבניות
+    const patterns = [
+        /יחידה\s*(\d{1,4})/gi,
+        /מחסום\s*(\d{1,4})/gi,
+        /מספר\s*(\d{1,4})/gi,
+        /\b(\d{1,4})\b/g
+    ];
+    
+    let foundNumbers = [];
+    
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(message)) !== null) {
+            const num = match[1];
+            if (num.length <= 4) { // מקסימום 4 ספרות
+                foundNumbers.push({
+                    number: num,
+                    isValid: num.length === 3,
+                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
+                });
+            }
+        }
+    }
+    
+    if (foundNumbers.length === 0) {
+        return { found: false, isValid: false, number: null, formatted: null };
+    }
+    
+    // בחר את המספר הראשון שנמצא
+    const firstNumber = foundNumbers[0];
+    
+    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
+    
+    return {
+        found: true,
+        isValid: firstNumber.isValid,
+        number: firstNumber.number,
+        formatted: firstNumber.formatted
+    };
+}
+
+// שימור מידע מההודעה הראשונה
+function extractInitialInfo(content) {
+    if (!content || content.length < 5) return null;
+    
+    const info = {
+        hasProblem: false,
+        hasUnitNumber: false,
+        problemKeywords: [],
+        unitInfo: null,
+        fullContent: content
+    };
+    
+    // זיהוי מילות מפתח לבעיות
+    const problemKeywords = [
+        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
+        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
+    ];
+    
+    for (const keyword of problemKeywords) {
+        if (content.toLowerCase().includes(keyword)) {
+            info.hasProblem = true;
+            info.problemKeywords.push(keyword);
+        }
+    }
+    
+    // בדיקת מספר יחידה
+    const unitCheck = validateUnitNumber(content);
+    if (unitCheck.found) {
+        info.hasUnitNumber = true;
+        info.unitInfo = unitCheck;
+    }
+    
+    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
+    
+    return info;
+}
+
 // פונקציות עזר משופרות
 function extractUnitNumber(message, conversation = null) {
     const patterns = [
@@ -3070,149 +3214,6 @@ function getFileType(fileName, mimeType) {
     }
     
     return 'קובץ';
-}
-
-// זיהוי ברכות בתחילת הודעה
-function extractGreetingAndContent(message) {
-    const greetings = [
-        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
-        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
-        'good morning', 'good evening', 'hello', 'hi'
-    ];
-    
-    const msg = message.trim();
-    let greeting = '';
-    let content = msg;
-    
-    for (const greet of greetings) {
-        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
-        if (pattern.test(msg)) {
-            greeting = greet;
-            content = msg.replace(pattern, '').trim();
-            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
-            break;
-        }
-    }
-    
-    return { greeting, content: content || msg };
-}
-
-// יצירת ברכת תשובה מתאימה
-function createGreetingResponse(greeting) {
-    const timeOfDay = new Date().toLocaleString('he-IL', { 
-        timeZone: 'Asia/Jerusalem',
-        hour: 'numeric'
-    });
-    const hour = parseInt(timeOfDay);
-    
-    const greetingMap = {
-        'בוקר טוב': 'בוקר טוב',
-        'ערב טוב': 'ערב טוב', 
-        'לילה טוב': 'לילה טוב',
-        'צהריים טובים': 'צהריים טובים',
-        'שלום': 'שלום',
-        'שלום לך': 'שלום',
-        'היי': 'היי',
-        'הלו': 'שלום',
-        'אהלן': 'אהלן',
-        'מה שלום': 'שלום',
-        'good morning': 'בוקר טוב',
-        'good evening': 'ערב טוב',
-        'hello': 'שלום',
-        'hi': 'היי'
-    };
-    
-    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
-    
-    // התאמה לפי שעה אם זה ברכה כללית
-    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
-        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
-        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
-        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
-        else response = 'שלום';
-    }
-    
-    return response;
-}
-
-// ולידציה מדויקת של מספר יחידה (3 ספרות)
-function validateUnitNumber(message) {
-    // חיפוש מספר יחידה במספר תבניות
-    const patterns = [
-        /יחידה\s*(\d{1,4})/gi,
-        /מחסום\s*(\d{1,4})/gi,
-        /מספר\s*(\d{1,4})/gi,
-        /\b(\d{1,4})\b/g
-    ];
-    
-    let foundNumbers = [];
-    
-    for (const pattern of patterns) {
-        let match;
-        while ((match = pattern.exec(message)) !== null) {
-            const num = match[1];
-            if (num.length <= 4) { // מקסימום 4 ספרות
-                foundNumbers.push({
-                    number: num,
-                    isValid: num.length === 3,
-                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
-                });
-            }
-        }
-    }
-    
-    if (foundNumbers.length === 0) {
-        return { found: false, isValid: false, number: null, formatted: null };
-    }
-    
-    // בחר את המספר הראשון שנמצא
-    const firstNumber = foundNumbers[0];
-    
-    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
-    
-    return {
-        found: true,
-        isValid: firstNumber.isValid,
-        number: firstNumber.number,
-        formatted: firstNumber.formatted
-    };
-}
-
-// שימור מידע מההודעה הראשונה
-function extractInitialInfo(content) {
-    if (!content || content.length < 5) return null;
-    
-    const info = {
-        hasProblem: false,
-        hasUnitNumber: false,
-        problemKeywords: [],
-        unitInfo: null,
-        fullContent: content
-    };
-    
-    // זיהוי מילות מפתח לבעיות
-    const problemKeywords = [
-        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
-        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
-    ];
-    
-    for (const keyword of problemKeywords) {
-        if (content.toLowerCase().includes(keyword)) {
-            info.hasProblem = true;
-            info.problemKeywords.push(keyword);
-        }
-    }
-    
-    // בדיקת מספר יחידה
-    const unitCheck = validateUnitNumber(content);
-    if (unitCheck.found) {
-        info.hasUnitNumber = true;
-        info.unitInfo = unitCheck;
-    }
-    
-    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
-    
-    return info;
 }
 
 // עמוד בית
