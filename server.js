@@ -1335,11 +1335,22 @@ class ResponseHandler {
     }
     
     async generateResponse(message, phone, customer = null, hasFile = false, fileType = '', downloadedFiles = []) {
-        const msg = message.toLowerCase().trim();
+        // 🔧 חדש: טיפול בברכות ושימור מידע
+        const { greeting, content } = extractGreetingAndContent(message);
+        const greetingResponse = greeting ? createGreetingResponse(greeting) : 'שלום';
+        const msg = content.toLowerCase().trim();
         const conversation = this.memory.getConversation(phone, customer);
         
-        log('INFO', `🎯 מעבד הודעה: "${message}" מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}`);                
-        // ביטול טיימר אוטומטי אם קיים
+        // שימור מידע מההודעה הראשונה אם זה לקוח חדש
+        let initialInfo = null;
+        if (content && content.length > 5 && (!conversation || conversation.stage === 'identifying')) {
+            initialInfo = extractInitialInfo(content);
+            if (initialInfo && (initialInfo.hasProblem || initialInfo.hasUnitNumber)) {
+                log('INFO', `📋 שמרתי מידע ראשוני: ${JSON.stringify(initialInfo)}`);
+            }
+        }
+        
+        log('INFO', `🎯 מעבד הודעה: "${message}" מ-${customer ? customer.name : 'לא מזוהה'} - שלב: ${conversation ? conversation.stage : 'אין'}${greeting ? ` - ברכה: "${greeting}"` : ''}`);        // ביטול טיימר אוטומטי אם קיים
         autoFinishManager.clearTimer(phone);
         // שלב 1: זיהוי לקוח אם לא קיים
         if (!customer) {
@@ -1485,27 +1496,199 @@ class ResponseHandler {
             }
         }
         
-        // בקשת זיהוי ראשונה
-        return {
-            response: `שלום! 👋 - אני הבוט של שיידט\n\nכדי לטפל בפנייתך אני צריכה:\n\n🏢 **שם החניון שלך**\n\nדוגמאות:\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי גבעתיים"\n\n❓ **במידה ואינך לקוח לחץ 1**\n\n📞 039792365`,
-            stage: 'identifying'
-        };
+// 🔧 חדש: פונקציות עזר לברכות ומספר יחידה
+
+// זיהוי ברכות בתחילת הודעה
+function extractGreetingAndContent(message) {
+    const greetings = [
+        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
+        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
+        'good morning', 'good evening', 'hello', 'hi'
+    ];
+    
+    const msg = message.trim();
+    let greeting = '';
+    let content = msg;
+    
+    for (const greet of greetings) {
+        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
+        if (pattern.test(msg)) {
+            greeting = greet;
+            content = msg.replace(pattern, '').trim();
+            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
+            break;
+        }
+    }
+    
+    return { greeting, content: content || msg };
+}
+
+// יצירת ברכת תשובה מתאימה
+function createGreetingResponse(greeting) {
+    const timeOfDay = new Date().toLocaleString('he-IL', { 
+        timeZone: 'Asia/Jerusalem',
+        hour: 'numeric'
+    });
+    const hour = parseInt(timeOfDay);
+    
+    const greetingMap = {
+        'בוקר טוב': 'בוקר טוב',
+        'ערב טוב': 'ערב טוב', 
+        'לילה טוב': 'לילה טוב',
+        'צהריים טובים': 'צהריים טובים',
+        'שלום': 'שלום',
+        'שלום לך': 'שלום',
+        'היי': 'היי',
+        'הלו': 'שלום',
+        'אהלן': 'אהלן',
+        'מה שלום': 'שלום',
+        'good morning': 'בוקר טוב',
+        'good evening': 'ערב טוב',
+        'hello': 'שלום',
+        'hi': 'היי'
+    };
+    
+    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
+    
+    // התאמה לפי שעה אם זה ברכה כללית
+    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
+        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
+        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
+        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
+        else response = 'שלום';
+    }
+    
+    return response;
+}
+
+// ולידציה מדויקת של מספר יחידה (3 ספרות)
+function validateUnitNumber(message) {
+    // חיפוש מספר יחידה במספר תבניות
+    const patterns = [
+        /יחידה\s*(\d{1,4})/gi,
+        /מחסום\s*(\d{1,4})/gi,
+        /מספר\s*(\d{1,4})/gi,
+        /\b(\d{1,4})\b/g
+    ];
+    
+    let foundNumbers = [];
+    
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(message)) !== null) {
+            const num = match[1];
+            if (num.length <= 4) { // מקסימום 4 ספרות
+                foundNumbers.push({
+                    number: num,
+                    isValid: num.length === 3,
+                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
+                });
+            }
+        }
+    }
+    
+    if (foundNumbers.length === 0) {
+        return { found: false, isValid: false, number: null, formatted: null };
+    }
+    
+    // בחר את המספר הראשון שנמצא
+    const firstNumber = foundNumbers[0];
+    
+    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
+    
+    return {
+        found: true,
+        isValid: firstNumber.isValid,
+        number: firstNumber.number,
+        formatted: firstNumber.formatted
+    };
+}
+
+// שימור מידע מההודעה הראשונה
+function extractInitialInfo(content) {
+    if (!content || content.length < 5) return null;
+    
+    const info = {
+        hasProblem: false,
+        hasUnitNumber: false,
+        problemKeywords: [],
+        unitInfo: null,
+        fullContent: content
+    };
+    
+    // זיהוי מילות מפתח לבעיות
+    const problemKeywords = [
+        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
+        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
+    ];
+    
+    for (const keyword of problemKeywords) {
+        if (content.toLowerCase().includes(keyword)) {
+            info.hasProblem = true;
+            info.problemKeywords.push(keyword);
+        }
+    }
+    
+    // בדיקת מספר יחידה
+    const unitCheck = validateUnitNumber(content);
+    if (unitCheck.found) {
+        info.hasUnitNumber = true;
+        info.unitInfo = unitCheck;
+    }
+    
+    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
+    
+    return info;
+}
     }
 
     async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles) {
         const msg = message.toLowerCase().trim();
         const currentStage = conversation ? conversation.stage : 'menu';
         
-        // תפריט ראשי
-        if (currentStage === 'menu' || !currentStage) {
-            if (msg === '1' || msg.includes('תקלה')) {
-                this.memory.updateStage(phone, 'problem_description', customer);
-                return {
-                    response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה לא דולקת"\n• "מחסום לא עולה"\n• "לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`,
-                    stage: 'problem_description',
-                    customer: customer
-                };
+// תפריט ראשי
+if (currentStage === 'menu' || !currentStage) {
+    if (msg === '1' || msg.includes('תקלה')) {
+        // 🔧 חדש: בדיקה אם יש מידע ראשוני שמור
+        const savedInfo = conversation?.data?.initialInfo;
+        
+        if (savedInfo && savedInfo.hasProblem) {
+            // יש מידע שמור - השתמש בו
+            this.memory.updateStage(phone, 'problem_description_with_info', customer, {
+                savedProblemInfo: savedInfo
+            });
+            
+            let confirmMsg = `שלום ${customer.name} 👋\n\n🔧 **זיהיתי בעיה:**\n"${savedInfo.fullContent}"`;
+            
+            if (savedInfo.hasUnitNumber && savedInfo.unitInfo.isValid) {
+                confirmMsg += `\n\n✅ יחידה ${savedInfo.unitInfo.formatted} - מספר תקין`;
+                confirmMsg += `\n\nהאם זה נכון או שיש תקלה אחרת?`;
+                confirmMsg += `\n\n✅ כתוב "נכון" לאישור\n❌ או תאר תקלה אחרת\n\nהמתן מספר שניות לתשובה🤞`;
+            } else if (savedInfo.hasUnitNumber && !savedInfo.unitInfo.isValid) {
+                confirmMsg += `\n\n⚠️ מספר יחידה לא מדויק: ${savedInfo.unitInfo.number}`;
+                confirmMsg += `\n\nאנא ציין מספר יחידה תקין (3 ספרות):\nדוגמאות: 007, 101, 205, 350`;
+                confirmMsg += `\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
+            } else {
+                confirmMsg += `\n\n❓ באיזה יחידה הבעיה? (מספר 3 ספרות)`;
+                confirmMsg += `\nדוגמאות: 101, 205, 350`;
+                confirmMsg += `\n\nאו כתוב "ללא יחידה" אם אין מספר ספציפי\n\nהמתן מספר שניות לתשובה🤞`;
             }
+            
+            return {
+                response: confirmMsg,
+                stage: 'problem_description_with_info',
+                customer: customer
+            };
+        } else {
+            // אין מידע שמור - תהליך רגיל
+            this.memory.updateStage(phone, 'problem_description', customer);
+            return {
+                response: `שלום ${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`,
+                stage: 'problem_description',
+                customer: customer
+            };
+        }
+    }
             
 // דיווח נזק
 if (msg === '2' || msg.includes('נזק')) {
@@ -1561,6 +1744,14 @@ if (msg === '5' || msg.includes('משרד')) {
             return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
         }
         
+        // 🔧 חדש: טיפול בתקלות עם מידע ראשוני
+        if (currentStage === 'problem_description_with_info') {
+            return await this.handleProblemDescriptionWithInfo(message, phone, customer, hasFile, downloadedFiles);
+    }
+        // 🔧 חדש: טיפול בשלב בקשת מספר יחידה
+        if (currentStage === 'asking_unit_number') {
+        return await this.handleAskingUnitNumber(message, phone, customer, hasFile, downloadedFiles);
+    }
         // טיפול בנזק
         if (currentStage === 'damage_photo') {
             return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
@@ -2163,7 +2354,108 @@ if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
             customer: customer
         };
     }
+// 🔧 חדש: טיפול בתקלות עם מידע ראשוני
+async handleProblemDescriptionWithInfo(message, phone, customer, hasFile, downloadedFiles) {
+    const msg = message.toLowerCase().trim();
+    const conversation = this.memory.getConversation(phone, customer);
+    const savedInfo = conversation?.data?.savedProblemInfo;
+    
+    // בדיקה אם הלקוח אישר את הבעיה השמורה
+    if (msg.includes('נכון') || msg.includes('כן') || msg.includes('בסדר')) {
+        // לקוח אישר - עבד עם המידע השמור
+        const problemDescription = savedInfo.fullContent;
+        return await this.processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, savedInfo);
+    }
+    
+    // בדיקה אם זה מספר יחידה חדש
+    const unitCheck = validateUnitNumber(message);
+    if (unitCheck.found) {
+        if (unitCheck.isValid) {
+            // מספר יחידה תקין - עבד עם הבעיה השמורה + המספר החדש
+            const updatedProblem = `${savedInfo.fullContent.replace(/יחידה?\s*\d*/gi, '')} יחידה ${unitCheck.formatted}`.trim();
+            const updatedInfo = { ...savedInfo, unitInfo: unitCheck, hasUnitNumber: true };
+            return await this.processProblemWithValidation(updatedProblem, phone, customer, hasFile, downloadedFiles, updatedInfo);
+        } else {
+            // מספר יחידה לא תקין - בקש שוב
+            return {
+                response: "מספר יחידה לא תקין. אנא ציין מספר יחידה של 3 ספרות: 007, 101, 205, 350. או כתוב 'ללא יחידה' אם אין מספר ספציפי.",
+                stage: 'problem_description_with_info',
+                customer: customer
+            };
+        }
+    }
+    
+    // בדיקה אם הלקוח כתב "ללא יחידה"
+    if (msg.includes('ללא יחידה') || msg.includes('אין יחידה') || msg.includes('בלי יחידה')) {
+        const problemDescription = savedInfo.fullContent + " (ללא מספר יחידה ספציפי)";
+        const updatedInfo = { ...savedInfo, hasUnitNumber: false, unitInfo: null };
+        return await this.processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, updatedInfo);
+    }
+    
+    // אחרת - זו בעיה חדשה לגמרי
+    return await this.processProblemWithValidation(message, phone, customer, hasFile, downloadedFiles, null);
+}
 
+// 🔧 פונקציה מרכזית לעיבוד תקלות עם ולידציה
+async processProblemWithValidation(problemDescription, phone, customer, hasFile, downloadedFiles, savedInfo = null) {
+    // בדיקת מספר יחידה בתיאור הסופי
+    const finalUnitCheck = validateUnitNumber(problemDescription);
+    
+    if (!finalUnitCheck.found || !finalUnitCheck.isValid) {
+        // אין מספר יחידה תקין - שאל פעם אחת
+        this.memory.updateStage(phone, 'asking_unit_number', customer, {
+            problemDescription: problemDescription,
+            savedInfo: savedInfo,
+            hasFile: hasFile,
+            downloadedFiles: downloadedFiles,
+            askedOnce: false
+        });
+        
+        return {
+            response: "קיבלתי את התיאור. באיזה יחידה הבעיה? (מספר 3 ספרות) דוגמאות: 007, 101, 205, 350. או כתוב 'ללא יחידה' כדי להמשיך בלי מספר.",
+            stage: 'asking_unit_number',
+            customer: customer
+        };
+    }
+    
+    // יש מספר יחידה תקין - המשך לעיבוד רגיל
+    return await this.handleProblemDescription(problemDescription, phone, customer, hasFile, downloadedFiles);
+}
+// 🔧 טיפול בשלב בקשת מספר יחידה
+async handleAskingUnitNumber(message, phone, customer, hasFile, downloadedFiles) {
+    const conversation = this.memory.getConversation(phone, customer);
+    const data = conversation?.data;
+    const msg = message.toLowerCase().trim();
+    
+    // בדיקת מספר יחידה
+    const unitCheck = validateUnitNumber(message);
+    
+    if (unitCheck.found && unitCheck.isValid) {
+        // מספר יחידה תקין - המשך עם הבעיה המלאה
+        const problemWithUnit = `${data.problemDescription} - יחידה ${unitCheck.formatted}`;
+        return await this.handleProblemDescription(problemWithUnit, phone, customer, data.hasFile, data.downloadedFiles);
+    } else if (msg.includes('ללא יחידה') || msg.includes('אין יחידה') || msg.includes('בלי יחידה')) {
+        // הלקוח אמר שאין מספר יחידה - המשך בלי
+        const problemWithNote = `${data.problemDescription} (לקוח ציין שאין מספר יחידה ספציפי)`;
+        return await this.handleProblemDescription(problemWithNote, phone, customer, data.hasFile, data.downloadedFiles);
+    } else if (!data.askedOnce) {
+        // עדיין לא שאלנו פעם אחת - נסה שוב
+        this.memory.updateStage(phone, 'asking_unit_number', customer, {
+            ...data,
+            askedOnce: true
+        });
+        
+        return {
+            response: "לא זיהיתי מספר יחידה תקין. אנא ציין מספר של 3 ספרות (למשל: 007, 101, 205) או כתוב 'ללא יחידה' כדי להמשיך.",
+            stage: 'asking_unit_number',
+            customer: customer
+        };
+    } else {
+        // כבר שאלנו פעם אחת - המשך בלי מספר יחידה
+        const problemFinal = `${data.problemDescription} (מספר יחידה לא צוין)`;
+        return await this.handleProblemDescription(problemFinal, phone, customer, data.hasFile, data.downloadedFiles);
+    }
+}
 } // סגירת המחלקה ResponseHandler
 
 // פונקציות עזר משופרות
@@ -2778,6 +3070,149 @@ function getFileType(fileName, mimeType) {
     }
     
     return 'קובץ';
+}
+
+// זיהוי ברכות בתחילת הודעה
+function extractGreetingAndContent(message) {
+    const greetings = [
+        'בוקר טוב', 'ערב טוב', 'לילה טוב', 'צהריים טובים',
+        'שלום', 'שלום לך', 'היי', 'הלו', 'אהלן', 'מה שלום',
+        'good morning', 'good evening', 'hello', 'hi'
+    ];
+    
+    const msg = message.trim();
+    let greeting = '';
+    let content = msg;
+    
+    for (const greet of greetings) {
+        const pattern = new RegExp(`^${greet}[,\\s]*`, 'i');
+        if (pattern.test(msg)) {
+            greeting = greet;
+            content = msg.replace(pattern, '').trim();
+            log('DEBUG', `🎈 זוהתה ברכה: "${greeting}" - תוכן: "${content}"`);
+            break;
+        }
+    }
+    
+    return { greeting, content: content || msg };
+}
+
+// יצירת ברכת תשובה מתאימה
+function createGreetingResponse(greeting) {
+    const timeOfDay = new Date().toLocaleString('he-IL', { 
+        timeZone: 'Asia/Jerusalem',
+        hour: 'numeric'
+    });
+    const hour = parseInt(timeOfDay);
+    
+    const greetingMap = {
+        'בוקר טוב': 'בוקר טוב',
+        'ערב טוב': 'ערב טוב', 
+        'לילה טוב': 'לילה טוב',
+        'צהריים טובים': 'צהריים טובים',
+        'שלום': 'שלום',
+        'שלום לך': 'שלום',
+        'היי': 'היי',
+        'הלו': 'שלום',
+        'אהלן': 'אהלן',
+        'מה שלום': 'שלום',
+        'good morning': 'בוקר טוב',
+        'good evening': 'ערב טוב',
+        'hello': 'שלום',
+        'hi': 'היי'
+    };
+    
+    let response = greetingMap[greeting.toLowerCase()] || 'שלום';
+    
+    // התאמה לפי שעה אם זה ברכה כללית
+    if (greeting.toLowerCase() === 'שלום' || greeting.toLowerCase() === 'היי') {
+        if (hour >= 6 && hour < 12) response = 'בוקר טוב';
+        else if (hour >= 12 && hour < 17) response = 'צהריים טובים';
+        else if (hour >= 17 && hour < 22) response = 'ערב טוב';
+        else response = 'שלום';
+    }
+    
+    return response;
+}
+
+// ולידציה מדויקת של מספר יחידה (3 ספרות)
+function validateUnitNumber(message) {
+    // חיפוש מספר יחידה במספר תבניות
+    const patterns = [
+        /יחידה\s*(\d{1,4})/gi,
+        /מחסום\s*(\d{1,4})/gi,
+        /מספר\s*(\d{1,4})/gi,
+        /\b(\d{1,4})\b/g
+    ];
+    
+    let foundNumbers = [];
+    
+    for (const pattern of patterns) {
+        let match;
+        while ((match = pattern.exec(message)) !== null) {
+            const num = match[1];
+            if (num.length <= 4) { // מקסימום 4 ספרות
+                foundNumbers.push({
+                    number: num,
+                    isValid: num.length === 3,
+                    formatted: num.padStart(3, '0') // הוספת אפסים בתחילה
+                });
+            }
+        }
+    }
+    
+    if (foundNumbers.length === 0) {
+        return { found: false, isValid: false, number: null, formatted: null };
+    }
+    
+    // בחר את המספר הראשון שנמצא
+    const firstNumber = foundNumbers[0];
+    
+    log('DEBUG', `🔢 מספר יחידה נמצא: ${firstNumber.number} - תקין: ${firstNumber.isValid} - מעוצב: ${firstNumber.formatted}`);
+    
+    return {
+        found: true,
+        isValid: firstNumber.isValid,
+        number: firstNumber.number,
+        formatted: firstNumber.formatted
+    };
+}
+
+// שימור מידע מההודעה הראשונה
+function extractInitialInfo(content) {
+    if (!content || content.length < 5) return null;
+    
+    const info = {
+        hasProblem: false,
+        hasUnitNumber: false,
+        problemKeywords: [],
+        unitInfo: null,
+        fullContent: content
+    };
+    
+    // זיהוי מילות מפתח לבעיות
+    const problemKeywords = [
+        'בעיה', 'תקלה', 'לא עובד', 'לא דולק', 'לא מגיב', 'תקוע', 'שבור',
+        'לא מדפיס', 'לא עולה', 'לא יורד', 'נתקע', 'כשל', 'פגום'
+    ];
+    
+    for (const keyword of problemKeywords) {
+        if (content.toLowerCase().includes(keyword)) {
+            info.hasProblem = true;
+            info.problemKeywords.push(keyword);
+        }
+    }
+    
+    // בדיקת מספר יחידה
+    const unitCheck = validateUnitNumber(content);
+    if (unitCheck.found) {
+        info.hasUnitNumber = true;
+        info.unitInfo = unitCheck;
+    }
+    
+    log('DEBUG', `📋 מידע ראשוני: בעיה=${info.hasProblem}, יחידה=${info.hasUnitNumber}, תוכן="${content}"`);
+    
+    return info;
 }
 
 // עמוד בית
