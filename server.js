@@ -1976,6 +1976,16 @@ class ResponseHandler {
                 };
             }
             
+            if (unitNumber) {
+                autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+                
+                return {
+                    response: `📝 **מספר יחידה נרשם: ${unitNumber}**\n\nעכשיו שלח תמונות של הנזק\n\n📎 **ניתן לשלוח עד 4 קבצים**\n\n✏️ **לסיום:** כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                    stage: 'damage_photo',
+                    customer: customer
+                };
+            }
+            
             autoFinishManager.clearTimer(phone);
             const serviceNumber = await getNextServiceNumber();
             this.memory.updateStage(phone, 'completed', customer);
