@@ -3645,6 +3645,44 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
     }
 });
 
+// פונקציה להורדת קבצים מ-WhatsApp
+async function downloadWhatsAppFile(downloadUrl, fileName) {
+    try {
+        log('INFO', `📥 מוריד קובץ: ${fileName}`);
+        
+        const response = await axios({
+            method: 'GET',
+            url: downloadUrl,
+            responseType: 'stream'
+        });
+        
+        const filePath = path.join(__dirname, 'uploads', fileName);
+        
+        // יצירת תיקיית uploads אם לא קיימת
+        const uploadsDir = path.join(__dirname, 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        const writer = fs.createWriteStream(filePath);
+        response.data.pipe(writer);
+        
+        return new Promise((resolve, reject) => {
+            writer.on('finish', () => {
+                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
+                resolve(filePath);
+            });
+            writer.on('error', (error) => {
+                log('ERROR', `❌ שגיאה בכתיבת קובץ: ${error.message}`);
+                reject(error);
+            });
+        });
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בהורדת קובץ: ${error.message}`);
+        return null;
+    }
+}
 // הפעלת שרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
