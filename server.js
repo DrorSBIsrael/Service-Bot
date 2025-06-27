@@ -1354,14 +1354,14 @@ class ResponseHandler {
         autoFinishManager.clearTimer(phone);
         // שלב 1: זיהוי לקוח אם לא קיים
         if (!customer) {
-            return await this.handleCustomerIdentification(message, phone, conversation);
+            return await this.handleCustomerIdentification(message, phone, conversation, greeting, content, initialInfo);
         }
         
         // שלב 2: טיפול לפי שלב נוכחי
         return await this.handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles);
     }
 
-    async handleCustomerIdentification(message, phone, conversation) {
+    async handleCustomerIdentification(message, phone, conversation, greeting = null, content = null, initialInfo = null) {
         const msg = message.toLowerCase().trim();
         
         log('DEBUG', `🔍 זיהוי לקוח - הודעה: "${message}"`);
