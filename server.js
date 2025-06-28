@@ -3792,9 +3792,31 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         
 // 🔧 תיקון: נזקים - בדיקה אם אנחנו בשלב אישור
 if (conversation?.stage === 'damage_confirmation') {
-    // אנחנו כבר במסך אישור - תן לפונקציה handleDamageReport לטפל בזה
-    log('INFO', `📎 קובץ נוסף בשלב damage_confirmation - מעביר לטיפול רגיל`);
-    // לא עושים כלום מיוחד כאן - נתן לזה להמשיך לטיפול הרגיל
+    // אנחנו כבר במסך אישור - טפל בקובץ ישירות
+    log('INFO', `📎 קובץ נוסף בשלב damage_confirmation - מטפל ישירות`);
+    
+    const updatedFiles = [...tempFiles, { 
+        path: downloadedFiles[0], 
+        type: fileType, 
+        name: `file_${Date.now()}` 
+    }];
+    
+    memory.updateStage(phone, 'damage_confirmation', customer, {
+        ...conversation.data,
+        tempFiles: updatedFiles
+    });
+    
+    autoFinishManager.startTimer(phone, customer, 'damage_confirmation', handleAutoFinish);
+    
+    const damageData = conversation.data.pendingDamage;
+    const hasUnit = damageData?.unitNumber ? `יחידה ${damageData.unitNumber}` : 'יחידה: לא הוגדר';
+    
+    await sendWhatsApp(phone, `📎 **${fileType} נוסף לדיווח!** (${updatedFiles.length} קבצים)\n\n📋 **דיווח נזק מעודכן:**\n${hasUnit}\n"${damageData?.description || 'נזק'}"\n\n✅ **כתוב "אישור" לשליחת הדיווח**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+    
+    memory.addMessage(phone, `${fileType} נוסף לדיווח`, 'hadar', customer);
+    
+    return res.status(200).json({ status: 'OK - file added to damage confirmation' });
+    
 } else if (conversation?.stage === 'damage_photo') {
     const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
     if (unitMatch) {
