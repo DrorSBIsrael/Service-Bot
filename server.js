@@ -2232,8 +2232,7 @@ class ResponseHandler {
                 attachments: allFiles
             };
         }
-        
-        // טיפול בקבצים
+      
         if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
             const updatedFiles = [...tempFiles, { 
                 path: downloadedFiles[0], 
@@ -2241,6 +2240,27 @@ class ResponseHandler {
                 name: `file_${Date.now()}` 
             }];
             
+            // 🔧 תיקון: בדיקה אם אנחנו כבר בשלב אישור
+            if (conversation?.stage === 'damage_confirmation' && conversation?.data?.pendingDamage) {
+                // אנחנו כבר במסך אישור - פשוט הוסף את הקובץ
+                this.memory.updateStage(phone, 'damage_confirmation', customer, {
+                    ...conversation.data,
+                    tempFiles: updatedFiles
+                });
+                
+                autoFinishManager.startTimer(phone, customer, 'damage_confirmation', handleAutoFinish);
+                
+                const damageData = conversation.data.pendingDamage;
+                const hasUnit = damageData.unitNumber ? `יחידה ${damageData.unitNumber}` : 'יחידה: לא הוגדר';
+                
+                return {
+                    response: `📎 **${fileType} נוסף לדיווח!** (${updatedFiles.length} קבצים)\n\n📋 **דיווח נזק מעודכן:**\n${hasUnit}\n"${damageData.description}"\n\n✅ **כתוב "אישור" לשליחת הדיווח**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                    stage: 'damage_confirmation',
+                    customer: customer
+                };
+            }
+            
+            // אחרת, טיפול רגיל בקובץ חדש
             this.memory.updateStage(phone, 'damage_photo', customer, { 
                 ...conversation?.data, 
                 tempFiles: updatedFiles 
