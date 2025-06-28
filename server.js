@@ -852,7 +852,7 @@ async function handleAutoFinish(phone, customer, stage) {
         } else if (stage === 'waiting_training_feedback') {
             await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבל משוב על ההדרכה\n\n📧 אשלח הדרכה מפורטת למייל\n\n📞 039792365`);
             
-            // 🔧 תיקון: שלח מייל הדרכה מורחב
+            // 🔧 שלח מייל הדרכה מורחב
             if (conversation && conversation.data) {
                 await sendEmail(customer, 'training', `${conversation.data.trainingRequest} - דרושה הדרכה מורחבת`, {
                     serviceNumber: conversation.data.serviceNumber,
@@ -867,7 +867,7 @@ async function handleAutoFinish(phone, customer, stage) {
             await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלו קבצים נוספים\n\nכדי לדווח על נזק יש צורך לפחות ב:\n• תמונה/סרטון של הנזק\n• מספר היחידה\n\nאנא התחל מחדש ושלח קבצים עם מספר יחידה\n\n📞 039792365`);
             
         } else if (stage === 'order_request') {
-            // 🔧 תיקון: בסיום אוטומטי בהצעת מחיר - שלח מייל
+            // 🔧 בסיום אוטומטי בהצעת מחיר - שלח מייל
             let orderDescription = '';
             if (conversation && conversation.messages) {
                 const orderMessages = conversation.messages.filter(msg => 
@@ -903,7 +903,7 @@ async function handleAutoFinish(phone, customer, stage) {
             await sendWhatsApp(phone, `⏰ **סיום אוטומטי לאחר 90 שניות**\n\n❌ לא התקבלה בקשת הדרכה מפורטת\n\nכדי לקבל הדרכה יש לציין את הנושא\n\nאנא התחל מחדש וכתוב על איזה נושא אתה זקוק להדרכה\n\n📞 039792365`);
             
         } else if (stage === 'general_office_request') {
-            // 🔧 תיקון: בסיום אוטומטי במשרד כללי - שלח מייל אם יש תוכן
+            // 🔧 בסיום אוטומטי במשרד כללי - שלח מייל אם יש תוכן
             let officeRequestDetails = '';
             if (conversation && conversation.messages) {
                 const officeMessages = conversation.messages.filter(msg => 
@@ -2148,50 +2148,73 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
             customer: customer
         };
     }
+
+// 🔧 בדיקת סיום עם שמירת נתונים מהשיחה
+if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
+    const conversation = this.memory.getConversation(phone, customer);
+    let orderDescription = '';
     
-    // 🔧 תיקון: בדיקת סיום עם שמירת נתונים מהשיחה
-    if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-        const conversation = this.memory.getConversation(phone, customer);
-        let orderDescription = '';
+    // 🔧 חיפוש טוב יותר של תיאור ההזמנה
+    if (conversation && conversation.messages) {
+        const orderMessages = conversation.messages.filter(msg => 
+            msg.sender === 'customer' && 
+            msg.message.length > 4 && 
+            !msg.message.toLowerCase().includes('סיום') &&
+            !msg.message.toLowerCase().includes('לסיים') &&
+            !msg.message.toLowerCase().includes('3') &&
+            !msg.message.toLowerCase().includes('מחיר') &&
+            !msg.message.toLowerCase().includes('הצעת') &&
+            !msg.message.toLowerCase().includes('שלום') &&
+            !msg.message.toLowerCase().includes('בוקר') &&
+            !msg.message.toLowerCase().includes('ערב') &&
+            // 🔧 חדש: סינון הודעות שלפני הכניסה לשלב הזמנה
+            !msg.message.match(/^[1-5]$/) // מספרים בודדים
+        );
         
-        // חיפוש תיאור ההזמנה מההודעות הקודמות
-        if (conversation && conversation.messages) {
-            const orderMessages = conversation.messages.filter(msg => 
-                msg.sender === 'customer' && 
-                msg.message.length > 4 && 
-                !msg.message.toLowerCase().includes('סיום') &&
-                !msg.message.toLowerCase().includes('לסיים') &&
-                !msg.message.toLowerCase().includes('3') &&
-                !msg.message.toLowerCase().includes('מחיר')
+        // 🔧 קח את ההודעה האחרונה שהיא באמת הזמנה
+        if (orderMessages.length > 0) {
+            // חפש הודעות שנראות כמו הזמנה (מכילות מספרים או מילות מפתח)
+            const realOrderMessages = orderMessages.filter(msg => 
+                msg.message.match(/\d+/) || // מכיל מספרים
+                msg.message.toLowerCase().includes('כרטיס') ||
+                msg.message.toLowerCase().includes('נייר') ||
+                msg.message.toLowerCase().includes('גליל') ||
+                msg.message.toLowerCase().includes('זרוע') ||
+                msg.message.toLowerCase().includes('חלק') ||
+                msg.message.toLowerCase().includes('מבקש') ||
+                msg.message.toLowerCase().includes('צריך')
             );
             
-            if (orderMessages.length > 0) {
+            if (realOrderMessages.length > 0) {
+                orderDescription = realOrderMessages[realOrderMessages.length - 1].message;
+            } else {
                 orderDescription = orderMessages[orderMessages.length - 1].message;
             }
         }
-        
-        if (!orderDescription || orderDescription.length < 5) {
-            return {
-                response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
-                stage: 'order_request',
-                customer: customer
-            };
-        }
-        
-        autoFinishManager.clearTimer(phone);
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
-        
+    }
+    
+    if (!orderDescription || orderDescription.length < 5) {
         return {
-            response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendOrderEmail: true,
-            orderDetails: orderDescription,
-            attachments: downloadedFiles
+            response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
+            stage: 'order_request',
+            customer: customer
         };
     }
+    
+    autoFinishManager.clearTimer(phone);
+    const serviceNumber = await getNextServiceNumber();
+    this.memory.updateStage(phone, 'completed', customer);
+    
+    return {
+        response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        customer: customer,
+        serviceNumber: serviceNumber,
+        sendOrderEmail: true,
+        orderDetails: orderDescription,
+        attachments: downloadedFiles
+    };
+}
 
     // טיפול בקבצים
     if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
@@ -2251,7 +2274,7 @@ async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) 
             attachments: downloadedFiles
         });
         
-        // 🔧 תיקון: הוספת טיימר אוטומטי
+        // 🔧 הוספת טיימר אוטומטי
         autoFinishManager.startTimer(phone, customer, 'waiting_training_feedback', handleAutoFinish);
         
         let immediateResponse = `📚 **חומר הדרכה מותאם אישית:**\n\n${trainingContent.content}`;
@@ -2297,7 +2320,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
     const msg = message.toLowerCase().trim();
     const data = conversation.data;
     
-    // 🔧 תיקון: ביטול טיימר
+    // 🔧 ביטול טיימר
     autoFinishManager.clearTimer(phone);
     
     if (msg.includes('כן') || msg.includes('ברור') || msg.includes('תודה') || msg.includes('עזר')) {
@@ -3206,8 +3229,7 @@ if (!customer) {
 const currentConv = memory.getConversation(phone, customer);
 log('DEBUG', `💭 conversation נוכחי: שלב=${currentConv ? currentConv.stage : 'אין'}, לקוח=${currentConv?.customer?.name || 'אין'}`);
 
-// 🔧 החלף את כל הקוד שמטפל בקבצים בזה:
-
+// 🔧 תיקון מלא לטיפול בקבצים - 
 if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downloadUrl) {
     const conversation = memory.getConversation(phone, customer);
     
@@ -3222,57 +3244,13 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         return res.status(200).json({ status: 'OK - report already completed' });
     }
     
-    // טיפול מיוחד עבור תקלות - עבד מיד ללא המתנה לסיום
-    if (conversation?.stage === 'problem_description') {
-        const timestamp = Date.now();
-        const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-        const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
-        
-        const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
-        if (filePath) {
-            downloadedFiles.push(filePath);
-            log('INFO', `✅ ${fileType} הורד עבור תקלה: ${fileName}`);
-            
-            // עבד את התקלה מיד עם הקובץ
-            const result = await responseHandler.generateResponse(
-                messageText, 
-                phone, 
-                customer, 
-                hasFile, 
-                fileType, 
-                downloadedFiles
-            );
-            
-            await sendWhatsApp(phone, result.response);
-            memory.addMessage(phone, result.response, 'hadar', result.customer);
-            
-            log('INFO', `📤 תקלה עובדה עם קובץ ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
-
-            // שליחת מיילים לפי הצורך
-            if (result.sendTechnicianEmail) {
-                log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
-                await sendEmail(result.customer, 'technician', messageText, {
-                    serviceNumber: result.serviceNumber,
-                    problemDescription: result.problemDescription,
-                    solution: result.solution,
-                    resolved: result.resolved,
-                    attachments: result.attachments
-                });
-                await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
-            } else if (result.sendSummaryEmail) {
-                log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
-                await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
-                    serviceNumber: result.serviceNumber,
-                    problemDescription: result.problemDescription,
-                    solution: result.solution,
-                    resolved: result.resolved
-                });
-            }
-            return res.status(200).json({ status: 'OK - problem processed with file' });
-        }
+    // 🔧 תיקון קריטי: אם אין שלב מוגדר או לקוח - הצג תפריט
+    if (!conversation?.stage || !customer) {
+        await sendWhatsApp(phone, `📎 **קיבלתי קובץ**\n\nאבל אני צריכה לדעת איך לעזור לך:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`);
+        return res.status(200).json({ status: 'OK - file received but no stage' });
     }
     
-    // 🔧 לכל השאר (כולל נזקים) - טיפול אחיד שצובר קבצים
+    // 🔧 חדש: טיפול מיוחד לכל שלב
     const existingFiles = conversation?.data?.tempFiles || [];
     
     // בדיקה שלא חורגים מ-4 קבצים בסה"כ
@@ -3290,7 +3268,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         downloadedFiles.push(filePath);
         log('INFO', `✅ ${fileType} הורד: ${fileName}`);
         
-        // 🔧 תיקון חשוב: שמירת הקובץ בזיכרון הזמני של השיחה
+        // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
         const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
         memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
             ...conversation?.data, 
@@ -3299,13 +3277,42 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         
         log('INFO', `📁 זיכרון עודכן: ${updatedFiles.length} קבצים (${updatedFiles.map(f => f.type).join(', ')})`);
         
-        // 🔧 בדיקה מיוחדת לנזקים - אם יש מספר יחידה עם הקובץ הנוכחי
+        // 🔧 חדש: טיפול חכם לפי שלב
+        
+        // תקלות - עבד מיד עם הקובץ
+        if (conversation?.stage === 'problem_description') {
+            const result = await responseHandler.generateResponse(
+                messageText, 
+                phone, 
+                customer, 
+                hasFile, 
+                fileType, 
+                [filePath]
+            );
+            
+            await sendWhatsApp(phone, result.response);
+            memory.addMessage(phone, result.response, 'hadar', result.customer);
+            
+            // שליחת מיילים לפי הצורך
+            if (result.sendTechnicianEmail) {
+                await sendEmail(result.customer, 'technician', messageText, {
+                    serviceNumber: result.serviceNumber,
+                    problemDescription: result.problemDescription,
+                    solution: result.solution,
+                    resolved: result.resolved,
+                    attachments: result.attachments
+                });
+                await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
+            }
+            return res.status(200).json({ status: 'OK - problem processed with file' });
+        }
+        
+        // 🔧 חדש: נזקים - בדיקה מיוחדת למספר יחידה בטקסט
         if (conversation?.stage === 'damage_photo') {
             const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
             if (unitMatch) {
                 log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
                 
-                // 🔧 חשוב: כלול את כל הקבצים מהזיכרון הזמני
                 const allFilePaths = updatedFiles.map(f => f.path);
                 
                 const result = await responseHandler.generateResponse(
@@ -3320,9 +3327,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                 await sendWhatsApp(phone, result.response);
                 memory.addMessage(phone, result.response, 'hadar', result.customer);
                 
-                // שליחת מיילים עם כל הקבצים
                 if (result.sendDamageEmail) {
-                    log('INFO', `📧 שולח מייל נזק עם ${allFilePaths.length} קבצים: ${updatedFiles.map(f => f.type).join(', ')}`);
                     await sendEmail(result.customer, 'damage', result.problemDescription, {
                         serviceNumber: result.serviceNumber,
                         problemDescription: result.problemDescription,
@@ -3331,38 +3336,61 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
                 }
                 
-                // נקה את הזיכרון הזמני אחרי שליחה
-                memory.updateStage(phone, 'completed', customer, { 
-                    ...conversation?.data, 
-                    tempFiles: [] 
-                });
-                
+                memory.updateStage(phone, 'completed', customer, { tempFiles: [] });
                 return res.status(200).json({ status: 'OK - damage processed with all files' });
             }
+            
+            // אם אין מספר יחידה - הנחיות עם טיימר
+            autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+            
+            await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📝 **עכשיו כתוב מספר היחידה:**\nדוגמה: "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב מספר יחידה + "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            return res.status(200).json({ status: 'OK - damage file received, waiting for unit number' });
         }
         
-        // הודעת אישור עם הנחיות ברורות
-        const filesSummary = updatedFiles.map((file, index) => `${index + 1}. ${file.type}`).join('\n');
-        const remainingSlots = 4 - updatedFiles.length;
-        
-        let confirmMessage = `✅ **${fileType} התקבל בהצלחה!**\n\nקבצים שהתקבלו (${updatedFiles.length}/4):\n${filesSummary}`;
-        
-        if (remainingSlots > 0) {
-            confirmMessage += `\n\n📎 ניתן לשלוח עוד ${remainingSlots} קבצים`;
+        // 🔧 חדש: הצעת מחיר - אם יש טקסט עם הקובץ
+        if (conversation?.stage === 'order_request') {
+            autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+            
+            if (messageText && messageText.length > 10 && 
+                !messageText.includes('.jpg') && !messageText.includes('.png')) {
+                // יש טקסט הזמנה עם הקובץ
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📋 **הזמנה נרשמה:** "${messageText}"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            } else {
+                // רק קובץ בלי טקסט
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📝 **עכשיו כתוב מה אתה מבקש להזמין:**\nדוגמה: "20,000 כרטיסים"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            }
+            return res.status(200).json({ status: 'OK - order file received' });
         }
         
-        // הנחיות ברורות לסיום
-        if (conversation?.stage === 'damage_photo') {
-            confirmMessage += `\n\n✏️ **לסיום הדיווח:** כתוב "סיום" + מספר היחידה`;
-            confirmMessage += `\nדוגמה: "סיום יחידה 101"`;
-        } else {
-            confirmMessage += `\n\n✏️ **לסיום:** כתוב "סיום"`;
+        // 🔧 חדש: הדרכה
+        if (conversation?.stage === 'training_request') {
+            autoFinishManager.startTimer(phone, customer, 'training_request', handleAutoFinish);
+            
+            if (messageText && messageText.length > 10 && 
+                !messageText.includes('.jpg') && !messageText.includes('.png')) {
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📚 **נושא הדרכה נרשם:** "${messageText}"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            } else {
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📝 **עכשיו כתוב על איזה נושא אתה זקוק להדרכה:**\nדוגמה: "הפעלת המערכת"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            }
+            return res.status(200).json({ status: 'OK - training file received' });
         }
         
-        confirmMessage += `\n\n📞 039792365`;
+        // 🔧 חדש: משרד כללי
+        if (conversation?.stage === 'general_office_request') {
+            autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
+            
+            if (messageText && messageText.length > 10 && 
+                !messageText.includes('.jpg') && !messageText.includes('.png')) {
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n🏢 **נושא פנייה נרשם:** "${messageText}"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            } else {
+                await sendWhatsApp(phone, `✅ **${fileType} התקבל!** (${updatedFiles.length}/4)\n\n📝 **עכשיו כתוב את נושא הפנייה:**\nדוגמה: "עדכון פרטי התקשרות"\n\n📎 שלח עוד קבצים או כתוב "סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`);
+            }
+            return res.status(200).json({ status: 'OK - office file received' });
+        }
         
-        await sendWhatsApp(phone, confirmMessage);
-        return res.status(200).json({ status: 'OK - file received and saved' });
+        // ברירת מחדל - אם השלב לא מוכר
+        await sendWhatsApp(phone, `✅ **${fileType} התקבל!**\n\nאבל אני צריכה לדעת איך לעזור לך:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`);
+        return res.status(200).json({ status: 'OK - file received but unknown stage' });
     }
 }
 
@@ -3485,6 +3513,22 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
                 resolved: result.resolved,
                 attachments: result.attachments
             });
+            // 🔧 חדש: הוסף מייל ללקוח
+            await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
+        }
+        
+        // 🔧 חדש: גם בהדרכה סופית
+        if (result.sendTrainingEmailFinal) {
+            log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
+            await sendEmail(result.customer, 'training', result.trainingRequest, {
+                serviceNumber: result.serviceNumber,
+                trainingRequest: result.trainingRequest,
+                trainingContent: result.trainingContent,
+                resolved: result.resolved,
+                attachments: result.attachments
+            });
+            // 🔧 חדש: הוסף מייל ללקוח
+            await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
         }
 
         res.status(200).json({ status: 'OK' });
