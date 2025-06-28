@@ -1822,6 +1822,10 @@ class ResponseHandler {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
         
+        if (currentStage === 'order_confirmation') {
+            return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
+        }
+        
         if (currentStage === 'waiting_feedback') {
             return await this.handleFeedback(message, phone, customer, conversation);
         }
@@ -2149,6 +2153,52 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         };
     }
 
+    // 🔧 חדש: טיפול באישור הזמנה
+if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
+    const conversation = this.memory.getConversation(phone, customer);
+    const orderDescription = conversation?.data?.pendingOrder;
+    
+    if (!orderDescription) {
+        return {
+            response: `❌ **לא נמצאה הזמנה לאישור**\n\nאנא כתוב מה אתה מבקש להזמין\n\n📞 039792365`,
+            stage: 'order_request',
+            customer: customer
+        };
+    }
+    
+    autoFinishManager.clearTimer(phone);
+    const serviceNumber = await getNextServiceNumber();
+    this.memory.updateStage(phone, 'completed', customer);
+    
+    return {
+        response: `✅ **הזמנה נשלחה בהצלחה!**\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+        stage: 'completed',
+        customer: customer,
+        serviceNumber: serviceNumber,
+        sendOrderEmail: true,
+        orderDetails: orderDescription,
+        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+    };
+}
+
+// 🔧 חדש: טיפול בתוספות להזמנה קיימת
+if (conversation?.stage === 'order_confirmation' && conversation?.data?.pendingOrder) {
+    const existingOrder = conversation.data.pendingOrder;
+    const updatedOrder = `${existingOrder}\n+ ${message}`;
+    
+    this.memory.updateStage(phone, 'order_confirmation', customer, {
+        ...conversation.data,
+        pendingOrder: updatedOrder
+    });
+    
+    autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
+    
+    return {
+        response: `📋 **הזמנה עודכנה:**\n\n"${updatedOrder}"\n\n✅ **לחץ "אישור" לשליחה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'order_confirmation',
+        customer: customer
+    };
+}
 // 🔧 בדיקת סיום עם שמירת נתונים מהשיחה
 if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
     const conversation = this.memory.getConversation(phone, customer);
@@ -2228,15 +2278,32 @@ if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes
     }
     
     // טיפול בטקסט הזמנה
-    if (message && message.trim().length >= 5) {
-        autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
-        
-        return {
-            response: `📋 **הזמנה נרשמה:** "${message}"\n\n📎 **רוצה לצרף קבצים?** (תמונות, מפרטים, PDF)\n\nאו כתוב "סיום" כדי לשלוח את ההזמנה\n\n⏰ **סיום אוטומטי בעוד 90 שניות**`,
-            stage: 'order_request',
-            customer: customer
-        };
+// 🔧 טיפול בטקסט הזמנה - עם מסך אישור
+if (message && message.trim().length >= 5 && 
+    !message.toLowerCase().includes('מחיר') && 
+    !message.toLowerCase().includes('הצעת') &&
+    !message.toLowerCase().includes('סיום')) {
+    
+    // שמירת ההזמנה ומעבר למסך אישור
+    this.memory.updateStage(phone, 'order_confirmation', customer, {
+        ...conversation?.data,
+        pendingOrder: message
+    });
+    
+    autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
+    
+    const attachedFiles = conversation?.data?.tempFiles || [];
+    let filesText = '';
+    if (attachedFiles.length > 0) {
+        filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
     }
+    
+    return {
+        response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **לחץ "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'order_confirmation',
+        customer: customer
+    };
+}
     
     // ברירת מחדל
     return {
