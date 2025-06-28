@@ -2966,29 +2966,33 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
-// פונקציה פשוטה לכפתורי אישור
+// פונקציה פשוטה לכפתורי אישור - ניסיון עם API אחר
 async function sendConfirmationWithButtons(phone, message) {
     const instanceId = '7105253183';
     const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     
-    // ננסה API פשוט של Buttons
+    // ניסיון 1: sendTemplateButtons
     try {
-        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendButtons/${token}`;
+        const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendTemplateButtons/${token}`;
         
-        const buttons = [
+        const templateButtons = [
             {
-                "buttonId": "אישור",
-                "buttonText": {
-                    "displayText": "✅ אישור"
-                },
-                "type": 1
+                index: 1,
+                urlButton: null,
+                callButton: null,
+                quickReplyButton: {
+                    displayText: "✅ אישור",
+                    id: "אישור"
+                }
             },
             {
-                "buttonId": "ביטול", 
-                "buttonText": {
-                    "displayText": "❌ ביטול"
-                },
-                "type": 1
+                index: 2,
+                urlButton: null,
+                callButton: null,
+                quickReplyButton: {
+                    displayText: "❌ ביטול",
+                    id: "ביטול"
+                }
             }
         ];
         
@@ -2996,24 +3000,66 @@ async function sendConfirmationWithButtons(phone, message) {
             chatId: `${phone}@c.us`,
             message: message,
             footer: "שיידט את בכמן",
-            buttons: buttons
+            templateButtons: templateButtons
         }, {
             timeout: 5000,
             headers: { 'Content-Type': 'application/json' }
         });
         
         if (response.data?.idMessage) {
-            log('INFO', '✅ כפתורי אישור נשלחו');
+            log('INFO', '✅ כפתורי תבנית נשלחו');
             return true;
         }
         
     } catch (error) {
-        log('WARN', '⚠️ כפתורים נכשלו, שולח הודעה רגילה');
+        log('WARN', '⚠️ כפתורי תבנית נכשלו, מנסה רשימה...');
+        
+        // ניסיון 2: sendListMessage
+        try {
+            const listUrl = `https://7105.api.greenapi.com/waInstance${instanceId}/sendListMessage/${token}`;
+            
+            const response2 = await axios.post(listUrl, {
+                chatId: `${phone}@c.us`,
+                message: message,
+                footer: "שיידט את בכמן",
+                title: "בחר פעולה",
+                buttonText: "לחץ כאן",
+                sections: [
+                    {
+                        title: "אפשרויות",
+                        rows: [
+                            {
+                                rowId: "אישור",
+                                title: "✅ אישור ושליחה",
+                                description: "אשר את הדיווח ושלח"
+                            },
+                            {
+                                rowId: "ביטול",
+                                title: "❌ ביטול",
+                                description: "בטל את הדיווח"
+                            }
+                        ]
+                    }
+                ]
+            }, {
+                timeout: 5000,
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (response2.data?.idMessage) {
+                log('INFO', '✅ רשימה נשלחה');
+                return true;
+            }
+            
+        } catch (error2) {
+            log('WARN', '⚠️ גם רשימה נכשלה, חוזר להודעה רגילה');
+        }
     }
     
-    // אם נכשל - שלח הודעה רגילה
+    // אם הכל נכשל - שלח הודעה רגילה
     return await sendWhatsApp(phone, message + '\n\n✅ כתוב "אישור"\n❌ כתוב "ביטול"');
 }
+
 // מזהה קבוצת WhatsApp לתקלות דחופות
 const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
 
