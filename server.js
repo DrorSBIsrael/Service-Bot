@@ -1930,15 +1930,17 @@ class ResponseHandler {
     // 🔧 טיפול לפי שלב עם ברכות
     async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles, greetingResponse = '') {
         const msg = message.toLowerCase().trim();
-        const currentStage = conversation ? conversation.stage : 'menu';
+        let currentStage = conversation ? conversation.stage : 'menu';
         
-        // 🔧 חדש: טיפול במצב completed עם אזכור התקלה הקודמת
+        // 🔧 תיקון: טיפול במצב completed עם בדיקות בטיחות
         if (currentStage === 'completed') {
             const wasAutoFinished = conversation?.data?.autoFinished;
             const lastIssue = conversation?.data?.lastIssue;
             const lastServiceNumber = conversation?.data?.lastServiceNumber;
             
             if (wasAutoFinished && lastIssue) {
+                log('DEBUG', `🔄 טיפול במצב completed עם אזכור תקלה: "${lastIssue}"`);
+                
                 // זה תגובה לסיום אוטומטי של תקלה
                 if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('עדיין')) {
                     // הפתרון לא עזר - שלח טכנאי
@@ -1979,7 +1981,8 @@ class ResponseHandler {
                 }
             }
             
-            // אם זה מצב completed רגיל - חזור לתפריט
+            // אם זה מצב completed רגיל או לא מזוהה - חזור לתפריט
+            log('DEBUG', `🔄 מצב completed רגיל - עובר לתפריט`);
             this.memory.updateStage(phone, 'menu', customer);
             currentStage = 'menu';
         }
@@ -2012,7 +2015,6 @@ class ResponseHandler {
                 return { response, stage: 'problem_description', customer: customer };
             }
             
-            // שאר הטיפולים נשארים כמו שהם...
             if (msg === '2' || msg.includes('נזק')) {
                 this.memory.updateStage(phone, 'damage_photo', customer);
                 
@@ -2107,7 +2109,7 @@ class ResponseHandler {
             return await this.handleTrainingFeedback(message, phone, customer, conversation);
         }
         
-        // 🔧 חדש: שלב technician_escalated
+        // 🔧 שלב technician_escalated
         if (currentStage === 'technician_escalated') {
             // הטכנאי כבר בדרך - הצע תפריט חדש
             this.memory.updateStage(phone, 'menu', customer);
@@ -2119,6 +2121,7 @@ class ResponseHandler {
         }
         
         // ברירת מחדל - חזור לתפריט
+        log('DEBUG', `🔄 לא מזוהה שלב ${currentStage} - חוזר לתפריט`);
         this.memory.updateStage(phone, 'menu', customer);
         return {
             response: `לא הבנתי את הבקשה.\n\nחזרה לתפריט הראשי:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
@@ -2126,7 +2129,6 @@ class ResponseHandler {
             customer: customer
         };
     }
-
     // 🔧 פונקציות עזר לטיפול במידע ראשוני
     async handleInitialProblem(savedInfo, phone, customer, greetingResponse) {
         this.memory.updateStage(phone, 'problem_description_with_info', customer, {
