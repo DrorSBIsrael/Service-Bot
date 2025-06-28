@@ -3727,11 +3727,37 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         return res.status(200).json({ status: 'OK - report already completed' });
     }
     
-    // 🔧 תיקון קריטי: אם אין שלב מוגדר או לקוח - הצג תפריט
-    if (!conversation?.stage || !customer) {
-        await sendWhatsApp(phone, `📎 **קיבלתי קובץ**\n\nאבל אני צריכה לדעת איך לעזור לך:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`);
-        return res.status(200).json({ status: 'OK - file received but no stage' });
+// 🔧 תיקון: בדיקה מתקדמת של שלב ולקוח
+if (!customer) {
+    // נסה לזהות לקוח מחדש
+    customer = findCustomerByPhone(phone);
+    if (customer) {
+        log('INFO', `🔍 זיהיתי לקוח מחדש: ${customer.name}`);
     }
+}
+
+// בדיקה אם יש conversation אבל לא זוהה לקוח בפרמטרים
+if (!customer && conversation && conversation.customer) {
+    customer = conversation.customer;
+    log('INFO', `🔍 לקוח נמצא בזיכרון: ${customer.name}`);
+}
+
+// אם אין לקוח בכלל - בקש זיהוי
+if (!customer) {
+    await sendWhatsApp(phone, `📎 **קיבלתי קובץ!**\n\nראשית, אנא כתוב את שם החניון שלך:\n\n• "תפארת העיר"\n• "שניידר" \n• "אינפיניטי"\n• "עזריאלי"\n\n❓ **לקוח חדש? לחץ 1**\n\n📞 039792365`);
+    return res.status(200).json({ status: 'OK - customer identification needed' });
+}
+
+// אם אין שלב אבל יש לקוח - הצג תפריט
+if (!conversation || !conversation.stage || conversation.stage === 'menu') {
+    // שמור את הקובץ בזיכרון זמני
+    memory.updateStage(phone, 'menu_with_file', customer, { 
+        tempFiles: [{ path: filePath, type: fileType, name: fileName }]
+    });
+    
+    await sendWhatsApp(phone, `📎 **${fileType} התקבל מ${customer.name}!**\n\nאיך אוכל לעזור לך עם הקובץ?\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`);
+    return res.status(200).json({ status: 'OK - file saved, showing menu' });
+}
     
     // 🔧 חדש: טיפול מיוחד לכל שלב
     const existingFiles = conversation?.data?.tempFiles || [];
