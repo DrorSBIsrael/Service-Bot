@@ -3763,8 +3763,13 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                 [filePath]
             );
             
-            await sendWhatsApp(phone, result.response);
-            memory.addMessage(phone, result.response, 'hadar', result.customer);
+// שליחת תגובה עם בדיקת כפתורים
+if (result.useButtons) {
+    await sendConfirmationWithButtons(phone, result.response);
+} else {
+    await sendWhatsApp(phone, result.response);
+}
+memory.addMessage(phone, result.response, 'hadar', result.customer);
             
             // שליחת מיילים לפי הצורך
             if (result.sendTechnicianEmail) {
@@ -3797,8 +3802,13 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     allFilePaths
                 );
                 
-                await sendWhatsApp(phone, result.response);
-                memory.addMessage(phone, result.response, 'hadar', result.customer);
+// שליחת תגובה עם בדיקת כפתורים
+if (result.useButtons) {
+    await sendConfirmationWithButtons(phone, result.response);
+} else {
+    await sendWhatsApp(phone, result.response);
+}
+memory.addMessage(phone, result.response, 'hadar', result.customer);
                 
                 if (result.sendDamageEmail) {
                     await sendEmail(result.customer, 'damage', result.problemDescription, {
@@ -3896,9 +3906,13 @@ if (tempFiles.length > 0) {
             downloadedFiles
         );
         
-        // שליחת תגובה
-        await sendWhatsApp(phone, result.response);
-        memory.addMessage(phone, result.response, 'hadar', result.customer);
+// שליחת תגובה עם בדיקת כפתורים
+if (result.useButtons) {
+    await sendConfirmationWithButtons(phone, result.response);
+} else {
+    await sendWhatsApp(phone, result.response);
+}
+memory.addMessage(phone, result.response, 'hadar', result.customer);
         
         log('INFO', `📤 תגובה נשלחה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
         
