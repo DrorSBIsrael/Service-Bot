@@ -2361,6 +2361,85 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
     }
 }
 
+async handleFeedback(message, phone, customer, conversation) {
+    const msg = message.toLowerCase().trim();
+    const data = conversation.data;
+    
+    // ביטול טיימר
+    autoFinishManager.clearTimer(phone);
+    
+    // בדיקה אם זה תשובה חיובית
+    if (msg.includes('כן') || msg.includes('תודה') || msg.includes('עזר') || 
+        msg.includes('פתר') || msg.includes('עבד') || msg.includes('הצליח') ||
+        msg.includes('בסדר') || msg.includes('טוב') || msg.includes('מעולה')) {
+        
+        this.memory.updateStage(phone, 'menu', customer);
+        
+        return {
+            response: `🎉 **מעולה! שמח שהפתרון עזר!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+            stage: 'menu',
+            customer: customer,
+            sendSummaryEmail: true,
+            serviceNumber: data.serviceNumber,
+            problemDescription: data.problemDescription,
+            solution: data.solution,
+            resolved: true
+        };
+    }
+    
+    // בדיקה אם זה תשובה שלילית ברורה
+    if (msg.includes('לא עזר') || msg.includes('לא עבד') || msg.includes('לא פתר') ||
+        msg.includes('לא הצליח') || msg.includes('עדיין') || msg === 'לא') {
+        
+        this.memory.updateStage(phone, 'completed', customer);
+        
+        return {
+            response: `🔧 **מעביר לטכנאי מומחה**\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${data.serviceNumber}\n\n📞 039792365`,
+            stage: 'completed',
+            customer: customer,
+            sendTechnicianEmail: true,
+            serviceNumber: data.serviceNumber,
+            problemDescription: data.problemDescription,
+            additionalInfo: message,
+            solution: data.solution,
+            resolved: false,
+            attachments: data.attachments
+        };
+    }
+    
+    // 🔧 חדש: אם זה לא "כן" או "לא" אלא מידע נוסף על התקלה
+    if (message.length > 3) {
+        log('INFO', `📝 לקוח הוסיף מידע נוסף: "${message}"`);
+        
+        this.memory.updateStage(phone, 'completed', customer);
+        
+        // עדכן את תיאור הבעיה עם המידע החדש
+        const fullProblemDescription = `${data.problemDescription}\n\nמידע נוסף מהלקוח: ${message}`;
+        
+        return {
+            response: `📝 **קיבלתי את המידע הנוסף!**\n\n"${message}"\n\n🔧 מעביר לטכנאי מומחה עם כל הפרטים\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${data.serviceNumber}\n\n📞 039792365`,
+            stage: 'completed',
+            customer: customer,
+            sendTechnicianEmail: true,
+            serviceNumber: data.serviceNumber,
+            problemDescription: fullProblemDescription,
+            solution: data.solution,
+            resolved: false,
+            attachments: data.attachments,
+            additionalInfo: message
+        };
+    }
+    
+    // אם זה משהו לא ברור - בקש הבהרה
+    autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
+    
+    return {
+        response: `❓ **האם הפתרון עזר לפתור את הבעיה?**\n\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה\n📝 או תאר מה עדיין לא עובד\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+        stage: 'waiting_feedback',
+        customer: customer
+    };
+}
+
 isFinishingWord(message) {
     const msg = message.toLowerCase().trim();
     
