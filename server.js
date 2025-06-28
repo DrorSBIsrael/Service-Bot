@@ -1813,7 +1813,7 @@ class ResponseHandler {
         if (currentStage === 'problem_description') {
             return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
         }
-        
+
         if (currentStage === 'damage_photo') {
             return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
         }
@@ -1903,72 +1903,144 @@ class ResponseHandler {
     }
 
     async handleProblemDescription(message, phone, customer, hasFile, downloadedFiles) {
-        const serviceNumber = await getNextServiceNumber();
+        const msg = message.toLowerCase().trim();
+        const conversation = this.memory.getConversation(phone, customer);
         
-        this.memory.updateStage(phone, 'processing_problem', customer, {
-            serviceNumber: serviceNumber,
-            problemDescription: message,
-            attachments: downloadedFiles
-        });
-        
-        let solution;
-        if (process.env.OPENAI_ASSISTANT_ID) {
-            log('INFO', '🤖 מנסה פתרון עם OpenAI Assistant...');
-            solution = await handleProblemWithAssistant(message, customer);
-        } else {
-            log('INFO', '🔧 Assistant לא זמין - משתמש בשיטה הרגילה');
-            solution = await findSolution(message, customer);
-        }
-        
-        if (solution.found) {
-            this.memory.updateStage(phone, 'waiting_feedback', customer, {
+        // 🔧 חדש: טיפול באישור תקלה
+        if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
+            const problemDescription = conversation?.data?.pendingProblem;
+            
+            if (!problemDescription) {
+                return {
+                    response: `❌ **לא נמצאה תקלה לאישור**\n\nאנא תאר את התקלה\n\n📞 039792365`,
+                    stage: 'problem_description',
+                    customer: customer
+                };
+            }
+            
+            // עבד את התקלה שנשמרה
+            const serviceNumber = await getNextServiceNumber();
+            
+            this.memory.updateStage(phone, 'processing_problem', customer, {
                 serviceNumber: serviceNumber,
-                problemDescription: message,
-                solution: solution.response,
-                attachments: downloadedFiles,
-                threadId: solution.threadId || null,
-                source: solution.source || 'database'
+                problemDescription: problemDescription,
+                attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
             });
             
-            autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
-
-            let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
-            
-            if (downloadedFiles && downloadedFiles.length > 0) {
-                const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-                responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+            let solution;
+            if (process.env.OPENAI_ASSISTANT_ID) {
+                solution = await handleProblemWithAssistant(problemDescription, customer);
+            } else {
+                solution = await findSolution(problemDescription, customer);
             }
             
-            responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
-            
-            return {
-                response: responseMessage,
-                stage: 'waiting_feedback',
-                customer: customer,
-                serviceNumber: serviceNumber
-            };
-        } else {
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            let responseMessage = `📋 **קיבלתי את התיאור**\n\n"${message}"`;
-            
-            if (downloadedFiles && downloadedFiles.length > 0) {
-                const fileTypes = downloadedFiles.map((_, index) => `קובץ ${index + 1}`).join(', ');
-                responseMessage += `\n\n📎 **קבצים שהתקבלו:** ${fileTypes}`;
+            if (solution.found) {
+                this.memory.updateStage(phone, 'waiting_feedback', customer, {
+                    serviceNumber: serviceNumber,
+                    problemDescription: problemDescription,
+                    solution: solution.response,
+                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || [],
+                    threadId: solution.threadId || null,
+                    source: solution.source || 'database'
+                });
+                
+                autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
+    
+                let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+                
+                return {
+                    response: responseMessage,
+                    stage: 'waiting_feedback',
+                    customer: customer,
+                    serviceNumber: serviceNumber
+                };
+            } else {
+                this.memory.updateStage(phone, 'completed', customer);
+                
+                return {
+                    response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    customer: customer,
+                    serviceNumber: serviceNumber,
+                    sendTechnicianEmail: true,
+                    problemDescription: problemDescription,
+                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                };
             }
+        }
+    
+        // 🔧 טיפול בתוספות לתקלה קיימת
+        if (conversation?.stage === 'problem_confirmation' && conversation?.data?.pendingProblem) {
+            const existingProblem = conversation.data.pendingProblem;
+            const updatedProblem = `${existingProblem}\n+ ${message}`;
             
-            responseMessage += `\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+            this.memory.updateStage(phone, 'problem_confirmation', customer, {
+                ...conversation.data,
+                pendingProblem: updatedProblem
+            });
+            
+            autoFinishManager.startTimer(phone, customer, 'problem_confirmation', handleAutoFinish);
             
             return {
-                response: responseMessage,
-                stage: 'completed',
-                customer: customer,
-                serviceNumber: serviceNumber,
-                sendTechnicianEmail: true,
-                problemDescription: message,
-                attachments: downloadedFiles
+                response: `📋 **תיאור התקלה עודכן:**\n\n"${updatedProblem}"\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'problem_confirmation',
+                customer: customer
             };
         }
+    
+        // טיפול בקבצים
+        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
+            const updatedFiles = [...(conversation?.data?.tempFiles || []), { 
+                path: downloadedFiles[0], 
+                type: getFileType(downloadedFiles[0]) 
+            }];
+            
+            this.memory.updateStage(phone, 'problem_description', customer, { 
+                ...conversation?.data, 
+                tempFiles: updatedFiles 
+            });
+            
+            autoFinishManager.startTimer(phone, customer, 'problem_description', handleAutoFinish);
+            
+            return {
+                response: `✅ **קובץ התקבל!**\n\nתאר את התקלה + מספר יחידה\n\n📷 **אפשר לצרף עוד קבצים**\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'problem_description',
+                customer: customer
+            };
+        }
+        
+        // 🔧 טיפול בתיאור תקלה - עם מסך אישור
+        if (message && message.trim().length >= 10) {
+            
+            // שמירת התקלה ומעבר למסך אישור
+            this.memory.updateStage(phone, 'problem_confirmation', customer, {
+                ...conversation?.data,
+                pendingProblem: message
+            });
+            
+            autoFinishManager.startTimer(phone, customer, 'problem_confirmation', handleAutoFinish);
+            
+            const attachedFiles = conversation?.data?.tempFiles || [];
+            let filesText = '';
+            if (attachedFiles.length > 0) {
+                filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
+            }
+            
+            return {
+                response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+                stage: 'problem_confirmation',
+                customer: customer
+            };
+        }
+        
+        // ברירת מחדל
+        autoFinishManager.startTimer(phone, customer, 'problem_description', handleAutoFinish);
+        
+        return {
+            response: `🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            stage: 'problem_description',
+            customer: customer
+        };
     }
 
     // 🔧 handleDamageReport
@@ -2295,7 +2367,7 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         }
         
         return {
-            response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **לחץ "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
             stage: 'order_confirmation',
             customer: customer
         };
