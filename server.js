@@ -1804,8 +1804,47 @@ class ResponseHandler {
             this.memory.updateStage(phone, 'menu', customer);
             
             let response = greetingResponse ? `${greetingResponse} ` : 'שלום ';
-            response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
-            
+            const menuMessage = `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאני הדר, הבוט של שיידט את בכמן\n\nאיך אוכל לעזור לך היום?`;
+
+const menuButtons = [
+    {
+        "buttonId": "1",
+        "buttonText": {
+            "displayText": "🔧 דיווח תקלה"
+        },
+        "type": 1
+    },
+    {
+        "buttonId": "2", 
+        "buttonText": {
+            "displayText": "🚨 דיווח נזק"
+        },
+        "type": 1
+    },
+    {
+        "buttonId": "3",
+        "buttonText": {
+            "displayText": "💰 הצעת מחיר"
+        },
+        "type": 1
+    },
+    {
+        "buttonId": "4",
+        "buttonText": {
+            "displayText": "📚 הדרכה"
+        },
+        "type": 1
+    },
+    {
+        "buttonId": "5",
+        "buttonText": {
+            "displayText": "🏢 משרד כללי"
+        },
+        "type": 1
+    }
+];
+
+await sendWhatsAppWithButtons(phone, menuMessage, menuButtons);
             return { response, stage: 'menu', customer: customer };
         }
         
@@ -3002,6 +3041,282 @@ async function sendWhatsApp(phone, message) {
         // אל תזרוק שגיאה - פשוט החזר null
         return null;
     }
+}
+
+// שליחת WhatsApp רגילה
+async function sendWhatsApp(phone, message) {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
+    
+    try {
+        if (!phone || !message) {
+            log('ERROR', '❌ טלפון או מסר ריקים');
+            return null;
+        }
+        
+        log('DEBUG', `📤 שולח ל-${phone}: ${message.substring(0, 50)}...`);
+        
+        const response = await axios.post(url, {
+            chatId: `${phone}@c.us`,
+            message: message
+        }, {
+            timeout: 8000,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.data && response.data.idMessage) {
+            log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
+        } else {
+            log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
+        }
+        
+        return response.data;
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאת WhatsApp:', error.response?.data?.error || error.message);
+        return null;
+    }
+}
+
+// שליחת WhatsApp עם כפתורים
+async function sendWhatsAppWithButtons(phone, message, buttons) {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendButtons/${token}`;
+    
+    try {
+        if (!phone || !message) {
+            log('ERROR', '❌ טלפון או מסר ריקים');
+            return null;
+        }
+        
+        log('DEBUG', `📤 שולח כפתורים ל-${phone}: ${buttons.length} כפתורים`);
+        
+        const response = await axios.post(url, {
+            chatId: `${phone}@c.us`,
+            message: message,
+            footer: "שיידט את בכמן - מערכת בקרת חניה",
+            buttons: buttons
+        }, {
+            timeout: 8000,
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.data && response.data.idMessage) {
+            log('INFO', `✅ כפתורים נשלחו בהצלחה: ${response.data.idMessage}`);
+        } else {
+            log('INFO', `✅ כפתורים נשלחו: ${response.data ? 'הצלחה' : 'כשל'}`);
+        }
+        
+        return response.data;
+        
+    } catch (error) {
+        log('ERROR', '❌ שגיאת כפתורים WhatsApp:', error.response?.data?.error || error.message);
+        log('WARN', '🔄 נסיון חזרה עם הודעה רגילה...');
+        // אם כפתורים נכשלו - נסה הודעה רגילה
+        return await sendWhatsApp(phone, message);
+    }
+}
+
+// פונקציה ליצירת כפתורי תפריט ראשי
+function createMainMenuButtons() {
+    return [
+        {
+            "buttonId": "1",
+            "buttonText": {
+                "displayText": "🔧 דיווח תקלה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "2", 
+            "buttonText": {
+                "displayText": "🚨 דיווח נזק"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "3",
+            "buttonText": {
+                "displayText": "💰 הצעת מחיר"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "4",
+            "buttonText": {
+                "displayText": "📚 הדרכה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "5",
+            "buttonText": {
+                "displayText": "🏢 משרד כללי"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי אישור
+function createConfirmationButtons() {
+    return [
+        {
+            "buttonId": "אישור",
+            "buttonText": {
+                "displayText": "✅ אישור"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "ביטול",
+            "buttonText": {
+                "displayText": "❌ ביטול"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "תפריט",
+            "buttonText": {
+                "displayText": "🔄 תפריט ראשי"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי כן/לא
+function createYesNoButtons() {
+    return [
+        {
+            "buttonId": "כן",
+            "buttonText": {
+                "displayText": "✅ כן"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "לא",
+            "buttonText": {
+                "displayText": "❌ לא"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי סיום ועוד
+function createFinishButtons() {
+    return [
+        {
+            "buttonId": "סיום",
+            "buttonText": {
+                "displayText": "✅ סיום ושליחה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "עוד קבצים",
+            "buttonText": {
+                "displayText": "📎 שלח עוד קבצים"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "ביטול",
+            "buttonText": {
+                "displayText": "❌ ביטול"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי אישור מתקדמים
+function createAdvancedConfirmationButtons() {
+    return [
+        {
+            "buttonId": "אישור",
+            "buttonText": {
+                "displayText": "✅ אישור ושליחה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "עוד פרטים",
+            "buttonText": {
+                "displayText": "➕ הוסף פרטים"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "תפריט",
+            "buttonText": {
+                "displayText": "🔄 תפריט ראשי"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי זיהוי לקוח
+function createCustomerIdentificationButtons() {
+    return [
+        {
+            "buttonId": "כן",
+            "buttonText": {
+                "displayText": "✅ כן, זה אני"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "לא",
+            "buttonText": {
+                "displayText": "❌ לא, זה לא אני"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "1",
+            "buttonText": {
+                "displayText": "🆕 לקוח חדש"
+            },
+            "type": 1
+        }
+    ];
+}
+
+// פונקציה ליצירת כפתורי משוב
+function createFeedbackButtons() {
+    return [
+        {
+            "buttonId": "כן",
+            "buttonText": {
+                "displayText": "✅ כן, הבעיה נפתרה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "לא",
+            "buttonText": {
+                "displayText": "❌ לא, עדיין יש בעיה"
+            },
+            "type": 1
+        },
+        {
+            "buttonId": "מידע נוסף",
+            "buttonText": {
+                "displayText": "📝 רוצה להוסיף מידע"
+            },
+            "type": 1
+        }
+    ];
 }
 
 // מזהה קבוצת WhatsApp לתקלות דחופות
