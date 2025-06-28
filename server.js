@@ -1806,45 +1806,9 @@ class ResponseHandler {
             let response = greetingResponse ? `${greetingResponse} ` : 'שלום ';
             const menuMessage = `שלום ${customer.name} מחניון ${customer.site} 👋\n\nאני הדר, הבוט של שיידט את בכמן\n\nאיך אוכל לעזור לך היום?`;
 
-const menuButtons = [
-    {
-        "buttonId": "1",
-        "buttonText": {
-            "displayText": "🔧 דיווח תקלה"
-        },
-        "type": 1
-    },
-    {
-        "buttonId": "2", 
-        "buttonText": {
-            "displayText": "🚨 דיווח נזק"
-        },
-        "type": 1
-    },
-    {
-        "buttonId": "3",
-        "buttonText": {
-            "displayText": "💰 הצעת מחיר"
-        },
-        "type": 1
-    },
-    {
-        "buttonId": "4",
-        "buttonText": {
-            "displayText": "📚 הדרכה"
-        },
-        "type": 1
-    },
-    {
-        "buttonId": "5",
-        "buttonText": {
-            "displayText": "🏢 משרד כללי"
-        },
-        "type": 1
-    }
-];
-
-await sendWhatsAppWithButtons(phone, menuMessage, menuButtons);
+            const menuButtons = createMainMenuButtons();
+            await sendWhatsAppWithButtons(phone, menuMessage, menuButtons);
+            
             return { response, stage: 'menu', customer: customer };
         }
         
@@ -3082,10 +3046,13 @@ async function sendWhatsApp(phone, message) {
 }
 
 // שליחת WhatsApp עם כפתורים
+// שליחת WhatsApp עם כפתורים - גרסה מתוקנת
 async function sendWhatsAppWithButtons(phone, message, buttons) {
     const instanceId = '7105253183';
     const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
-    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendButtons/${token}`;
+    
+    // נסיון ראשון: sendButtons
+    let url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendButtons/${token}`;
     
     try {
         if (!phone || !message) {
@@ -3093,12 +3060,12 @@ async function sendWhatsAppWithButtons(phone, message, buttons) {
             return null;
         }
         
-        log('DEBUG', `📤 שולח כפתורים ל-${phone}: ${buttons.length} כפתורים`);
+        log('DEBUG', `📤 ניסיון 1: שולח כפתורים ל-${phone}: ${buttons.length} כפתורים`);
         
-        const response = await axios.post(url, {
+        let response = await axios.post(url, {
             chatId: `${phone}@c.us`,
             message: message,
-            footer: "שיידט את בכמן - מערכת בקרת חניה",
+            footer: "שיידט את בכמן",
             buttons: buttons
         }, {
             timeout: 8000,
@@ -3108,215 +3075,89 @@ async function sendWhatsAppWithButtons(phone, message, buttons) {
         });
         
         if (response.data && response.data.idMessage) {
-            log('INFO', `✅ כפתורים נשלחו בהצלחה: ${response.data.idMessage}`);
-        } else {
-            log('INFO', `✅ כפתורים נשלחו: ${response.data ? 'הצלחה' : 'כשל'}`);
+            log('INFO', `✅ כפתורים נשלחו בהצלחה (sendButtons): ${response.data.idMessage}`);
+            return response.data;
         }
-        
-        return response.data;
         
     } catch (error) {
-        log('ERROR', '❌ שגיאת כפתורים WhatsApp:', error.response?.data?.error || error.message);
-        log('WARN', '🔄 נסיון חזרה עם הודעה רגילה...');
-        // אם כפתורים נכשלו - נסה הודעה רגילה
-        return await sendWhatsApp(phone, message);
+        log('WARN', `⚠️ sendButtons נכשל: ${error.response?.data?.error || error.message}`);
+        
+        // נסיון שני: sendTemplateButtons
+        try {
+            url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendTemplateButtons/${token}`;
+            log('DEBUG', '📤 ניסיון 2: sendTemplateButtons');
+            
+            const templateButtons = buttons.map((btn, index) => ({
+                index: index + 1,
+                urlButton: null,
+                callButton: null,
+                quickReplyButton: {
+                    displayText: btn.buttonText.displayText,
+                    id: btn.buttonId
+                }
+            }));
+            
+            response = await axios.post(url, {
+                chatId: `${phone}@c.us`,
+                message: message,
+                footer: "שיידט את בכמן",
+                templateButtons: templateButtons
+            }, {
+                timeout: 8000,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            if (response.data && response.data.idMessage) {
+                log('INFO', `✅ כפתורים נשלחו בהצלחה (sendTemplateButtons): ${response.data.idMessage}`);
+                return response.data;
+            }
+            
+        } catch (error2) {
+            log('WARN', `⚠️ sendTemplateButtons נכשל: ${error2.response?.data?.error || error2.message}`);
+            
+            // נסיון שלישי: sendInteractiveMessage
+            try {
+                url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendInteractiveMessage/${token}`;
+                log('DEBUG', '📤 ניסיון 3: sendInteractiveMessage');
+                
+                response = await axios.post(url, {
+                    chatId: `${phone}@c.us`,
+                    message: {
+                        text: message
+                    },
+                    footer: {
+                        text: "שיידט את בכמן"
+                    },
+                    buttons: buttons.map(btn => ({
+                        buttonId: btn.buttonId,
+                        buttonText: {
+                            displayText: btn.buttonText.displayText
+                        },
+                        type: 1
+                    }))
+                }, {
+                    timeout: 8000,
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (response.data && response.data.idMessage) {
+                    log('INFO', `✅ כפתורים נשלחו בהצלחה (sendInteractiveMessage): ${response.data.idMessage}`);
+                    return response.data;
+                }
+                
+            } catch (error3) {
+                log('ERROR', `❌ כל הניסיונות נכשלו: ${error3.response?.data?.error || error3.message}`);
+            }
+        }
     }
-}
-
-// פונקציה ליצירת כפתורי תפריט ראשי
-function createMainMenuButtons() {
-    return [
-        {
-            "buttonId": "1",
-            "buttonText": {
-                "displayText": "🔧 דיווח תקלה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "2", 
-            "buttonText": {
-                "displayText": "🚨 דיווח נזק"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "3",
-            "buttonText": {
-                "displayText": "💰 הצעת מחיר"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "4",
-            "buttonText": {
-                "displayText": "📚 הדרכה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "5",
-            "buttonText": {
-                "displayText": "🏢 משרד כללי"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי אישור
-function createConfirmationButtons() {
-    return [
-        {
-            "buttonId": "אישור",
-            "buttonText": {
-                "displayText": "✅ אישור"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "ביטול",
-            "buttonText": {
-                "displayText": "❌ ביטול"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "תפריט",
-            "buttonText": {
-                "displayText": "🔄 תפריט ראשי"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי כן/לא
-function createYesNoButtons() {
-    return [
-        {
-            "buttonId": "כן",
-            "buttonText": {
-                "displayText": "✅ כן"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "לא",
-            "buttonText": {
-                "displayText": "❌ לא"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי סיום ועוד
-function createFinishButtons() {
-    return [
-        {
-            "buttonId": "סיום",
-            "buttonText": {
-                "displayText": "✅ סיום ושליחה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "עוד קבצים",
-            "buttonText": {
-                "displayText": "📎 שלח עוד קבצים"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "ביטול",
-            "buttonText": {
-                "displayText": "❌ ביטול"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי אישור מתקדמים
-function createAdvancedConfirmationButtons() {
-    return [
-        {
-            "buttonId": "אישור",
-            "buttonText": {
-                "displayText": "✅ אישור ושליחה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "עוד פרטים",
-            "buttonText": {
-                "displayText": "➕ הוסף פרטים"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "תפריט",
-            "buttonText": {
-                "displayText": "🔄 תפריט ראשי"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי זיהוי לקוח
-function createCustomerIdentificationButtons() {
-    return [
-        {
-            "buttonId": "כן",
-            "buttonText": {
-                "displayText": "✅ כן, זה אני"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "לא",
-            "buttonText": {
-                "displayText": "❌ לא, זה לא אני"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "1",
-            "buttonText": {
-                "displayText": "🆕 לקוח חדש"
-            },
-            "type": 1
-        }
-    ];
-}
-
-// פונקציה ליצירת כפתורי משוב
-function createFeedbackButtons() {
-    return [
-        {
-            "buttonId": "כן",
-            "buttonText": {
-                "displayText": "✅ כן, הבעיה נפתרה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "לא",
-            "buttonText": {
-                "displayText": "❌ לא, עדיין יש בעיה"
-            },
-            "type": 1
-        },
-        {
-            "buttonId": "מידע נוסף",
-            "buttonText": {
-                "displayText": "📝 רוצה להוסיף מידע"
-            },
-            "type": 1
-        }
-    ];
+    
+    // אם כל הניסיונות נכשלו - חזור להודעה רגילה
+    log('WARN', '🔄 חוזר להודעה רגילה...');
+    return await sendWhatsApp(phone, message + '\n\n' + buttons.map((btn, i) => `${i+1}. ${btn.buttonText.displayText.replace(/[🔧🚨💰📚🏢✅❌🔄➕📝]/g, '')}`).join('\n'));
 }
 
 // מזהה קבוצת WhatsApp לתקלות דחופות
