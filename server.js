@@ -1825,7 +1825,7 @@ class ResponseHandler {
         if (currentStage === 'order_confirmation') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-        
+
         if (currentStage === 'waiting_feedback') {
             return await this.handleFeedback(message, phone, customer, conversation);
         }
@@ -2142,6 +2142,7 @@ async handleDamageReport(message, phone, customer, hasFile, fileType, downloaded
     // 🔧 handleOrderRequest
 async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
     const msg = message.toLowerCase().trim();
+    const conversation = this.memory.getConversation(phone, customer);
     
     if (this.isMenuRequest(message)) {
         this.memory.updateStage(phone, 'menu', customer);
@@ -2154,165 +2155,161 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
     }
 
     // 🔧 חדש: טיפול באישור הזמנה
-if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-    const conversation = this.memory.getConversation(phone, customer);
-    const orderDescription = conversation?.data?.pendingOrder;
-    
-    if (!orderDescription) {
+    if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
+        const orderDescription = conversation?.data?.pendingOrder;
+        
+        if (!orderDescription) {
+            return {
+                response: `❌ **לא נמצאה הזמנה לאישור**\n\nאנא כתוב מה אתה מבקש להזמין\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
+        
+        autoFinishManager.clearTimer(phone);
+        const serviceNumber = await getNextServiceNumber();
+        this.memory.updateStage(phone, 'completed', customer);
+        
         return {
-            response: `❌ **לא נמצאה הזמנה לאישור**\n\nאנא כתוב מה אתה מבקש להזמין\n\n📞 039792365`,
-            stage: 'order_request',
+            response: `✅ **הזמנה נשלחה בהצלחה!**\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            stage: 'completed',
+            customer: customer,
+            serviceNumber: serviceNumber,
+            sendOrderEmail: true,
+            orderDetails: orderDescription,
+            attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+        };
+    }
+
+    // 🔧 חדש: טיפול בתוספות להזמנה קיימת
+    if (conversation?.stage === 'order_confirmation' && conversation?.data?.pendingOrder) {
+        const existingOrder = conversation.data.pendingOrder;
+        const updatedOrder = `${existingOrder}\n+ ${message}`;
+        
+        this.memory.updateStage(phone, 'order_confirmation', customer, {
+            ...conversation.data,
+            pendingOrder: updatedOrder
+        });
+        
+        autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
+        
+        return {
+            response: `📋 **הזמנה עודכנה:**\n\n"${updatedOrder}"\n\n✅ **לחץ "אישור" לשליחה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            stage: 'order_confirmation',
             customer: customer
         };
     }
-    
-    autoFinishManager.clearTimer(phone);
-    const serviceNumber = await getNextServiceNumber();
-    this.memory.updateStage(phone, 'completed', customer);
-    
-    return {
-        response: `✅ **הזמנה נשלחה בהצלחה!**\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-        stage: 'completed',
-        customer: customer,
-        serviceNumber: serviceNumber,
-        sendOrderEmail: true,
-        orderDetails: orderDescription,
-        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-    };
-}
 
-// 🔧 חדש: טיפול בתוספות להזמנה קיימת
-if (conversation?.stage === 'order_confirmation' && conversation?.data?.pendingOrder) {
-    const existingOrder = conversation.data.pendingOrder;
-    const updatedOrder = `${existingOrder}\n+ ${message}`;
-    
-    this.memory.updateStage(phone, 'order_confirmation', customer, {
-        ...conversation.data,
-        pendingOrder: updatedOrder
-    });
-    
-    autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
-    
-    return {
-        response: `📋 **הזמנה עודכנה:**\n\n"${updatedOrder}"\n\n✅ **לחץ "אישור" לשליחה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-        stage: 'order_confirmation',
-        customer: customer
-    };
-}
-// 🔧 בדיקת סיום עם שמירת נתונים מהשיחה
-if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-    const conversation = this.memory.getConversation(phone, customer);
-    let orderDescription = '';
-    
-    // 🔧 חיפוש טוב יותר של תיאור ההזמנה
-    if (conversation && conversation.messages) {
-        const orderMessages = conversation.messages.filter(msg => 
-            msg.sender === 'customer' && 
-            msg.message.length > 4 && 
-            !msg.message.toLowerCase().includes('סיום') &&
-            !msg.message.toLowerCase().includes('לסיים') &&
-            !msg.message.toLowerCase().includes('3') &&
-            !msg.message.toLowerCase().includes('מחיר') &&
-            !msg.message.toLowerCase().includes('הצעת') &&
-            !msg.message.toLowerCase().includes('שלום') &&
-            !msg.message.toLowerCase().includes('בוקר') &&
-            !msg.message.toLowerCase().includes('ערב') &&
-            // 🔧 חדש: סינון הודעות שלפני הכניסה לשלב הזמנה
-            !msg.message.match(/^[1-5]$/) // מספרים בודדים
-        );
+    // 🔧 בדיקת סיום עם שמירת נתונים מהשיחה
+    if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
+        let orderDescription = '';
         
-        // 🔧 קח את ההודעה האחרונה שהיא באמת הזמנה
-        if (orderMessages.length > 0) {
-            // חפש הודעות שנראות כמו הזמנה (מכילות מספרים או מילות מפתח)
-            const realOrderMessages = orderMessages.filter(msg => 
-                msg.message.match(/\d+/) || // מכיל מספרים
-                msg.message.toLowerCase().includes('כרטיס') ||
-                msg.message.toLowerCase().includes('נייר') ||
-                msg.message.toLowerCase().includes('גליל') ||
-                msg.message.toLowerCase().includes('זרוע') ||
-                msg.message.toLowerCase().includes('חלק') ||
-                msg.message.toLowerCase().includes('מבקש') ||
-                msg.message.toLowerCase().includes('צריך')
+        // 🔧 חיפוש טוב יותר של תיאור ההזמנה
+        if (conversation && conversation.messages) {
+            const orderMessages = conversation.messages.filter(msg => 
+                msg.sender === 'customer' && 
+                msg.message.length > 4 && 
+                !msg.message.toLowerCase().includes('סיום') &&
+                !msg.message.toLowerCase().includes('לסיים') &&
+                !msg.message.toLowerCase().includes('3') &&
+                !msg.message.toLowerCase().includes('מחיר') &&
+                !msg.message.toLowerCase().includes('הצעת') &&
+                !msg.message.toLowerCase().includes('שלום') &&
+                !msg.message.toLowerCase().includes('בוקר') &&
+                !msg.message.toLowerCase().includes('ערב') &&
+                !msg.message.match(/^[1-5]$/) // מספרים בודדים
             );
             
-            if (realOrderMessages.length > 0) {
-                orderDescription = realOrderMessages[realOrderMessages.length - 1].message;
-            } else {
-                orderDescription = orderMessages[orderMessages.length - 1].message;
+            if (orderMessages.length > 0) {
+                const realOrderMessages = orderMessages.filter(msg => 
+                    msg.message.match(/\d+/) || // מכיל מספרים
+                    msg.message.toLowerCase().includes('כרטיס') ||
+                    msg.message.toLowerCase().includes('נייר') ||
+                    msg.message.toLowerCase().includes('גליל') ||
+                    msg.message.toLowerCase().includes('זרוע') ||
+                    msg.message.toLowerCase().includes('חלק') ||
+                    msg.message.toLowerCase().includes('מבקש') ||
+                    msg.message.toLowerCase().includes('צריך')
+                );
+                
+                if (realOrderMessages.length > 0) {
+                    orderDescription = realOrderMessages[realOrderMessages.length - 1].message;
+                } else {
+                    orderDescription = orderMessages[orderMessages.length - 1].message;
+                }
             }
         }
-    }
-    
-    if (!orderDescription || orderDescription.length < 5) {
+        
+        if (!orderDescription || orderDescription.length < 5) {
+            return {
+                response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "2000 כרטיסים + סיום"\n\n📞 039792365`,
+                stage: 'order_request',
+                customer: customer
+            };
+        }
+        
+        autoFinishManager.clearTimer(phone);
+        const serviceNumber = await getNextServiceNumber();
+        this.memory.updateStage(phone, 'completed', customer);
+        
         return {
-            response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "250000 כרטיסים + סיום"\n\n📞 039792365`,
-            stage: 'order_request',
-            customer: customer
+            response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+            stage: 'completed',
+            customer: customer,
+            serviceNumber: serviceNumber,
+            sendOrderEmail: true,
+            orderDetails: orderDescription,
+            attachments: downloadedFiles
         };
     }
-    
-    autoFinishManager.clearTimer(phone);
-    const serviceNumber = await getNextServiceNumber();
-    this.memory.updateStage(phone, 'completed', customer);
-    
-    return {
-        response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-        stage: 'completed',
-        customer: customer,
-        serviceNumber: serviceNumber,
-        sendOrderEmail: true,
-        orderDetails: orderDescription,
-        attachments: downloadedFiles
-    };
-}
 
     // טיפול בקבצים
     if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
         autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
         
         return {
-            response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "20,000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "2000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
             stage: 'order_request',
             customer: customer
         };
     }
     
-    // טיפול בטקסט הזמנה
-// 🔧 טיפול בטקסט הזמנה - עם מסך אישור
-if (message && message.trim().length >= 5 && 
-    !message.toLowerCase().includes('מחיר') && 
-    !message.toLowerCase().includes('הצעת') &&
-    !message.toLowerCase().includes('סיום')) {
-    
-    // שמירת ההזמנה ומעבר למסך אישור
-    this.memory.updateStage(phone, 'order_confirmation', customer, {
-        ...conversation?.data,
-        pendingOrder: message
-    });
-    
-    autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
-    
-    const attachedFiles = conversation?.data?.tempFiles || [];
-    let filesText = '';
-    if (attachedFiles.length > 0) {
-        filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
+    // 🔧 טיפול בטקסט הזמנה - עם מסך אישור
+    if (message && message.trim().length >= 5 && 
+        !message.toLowerCase().includes('מחיר') && 
+        !message.toLowerCase().includes('הצעת') &&
+        !message.toLowerCase().includes('סיום')) {
+        
+        // שמירת ההזמנה ומעבר למסך אישור
+        this.memory.updateStage(phone, 'order_confirmation', customer, {
+            ...conversation?.data,
+            pendingOrder: message
+        });
+        
+        autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
+        
+        const attachedFiles = conversation?.data?.tempFiles || [];
+        let filesText = '';
+        if (attachedFiles.length > 0) {
+            filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
+        }
+        
+        return {
+            response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **לחץ "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
+            stage: 'order_confirmation',
+            customer: customer
+        };
     }
     
-    return {
-        response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **לחץ "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
-        stage: 'order_confirmation',
-        customer: customer
-    };
-}
-    
     // ברירת מחדל
+    autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+    
     return {
-        response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`,
+        response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "2000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n⏰ **סיום אוטומטי בעוד 90 שניות**\n\n📞 039792365`,
         stage: 'order_request',
         customer: customer
     };
 }
-
     // handleTrainingRequest 
 async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
     const serviceNumber = await getNextServiceNumber();
