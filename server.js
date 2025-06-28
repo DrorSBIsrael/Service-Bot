@@ -827,7 +827,6 @@ class AutoFinishManager {
 const autoFinishManager = new AutoFinishManager();
 
 // פונקציה לטיפול בסיום אוטומטי
-// 🔧 תיקון פונקציית handleAutoFinish - שמירת מידע על התקלה במקום מעבר לתפריט
 async function handleAutoFinish(phone, customer, stage) {
     try {
         log('INFO', `🤖 מבצע סיום אוטומטי עבור ${customer ? customer.name : phone} בשלב ${stage}`);
@@ -976,206 +975,6 @@ async function handleAutoFinish(phone, customer, stage) {
         log('ERROR', '❌ שגיאה בסיום אוטומטי:', error.message);
         memory.updateStage(phone, 'menu', customer);
     }
-}
-
-// 🔧 תיקון handleByStage - טיפול במצב completed ואזכור התקלה הקודמת
-async handleByStage(message, phone, customer, conversation, hasFile, fileType, downloadedFiles, greetingResponse = '') {
-    const msg = message.toLowerCase().trim();
-    const currentStage = conversation ? conversation.stage : 'menu';
-    
-    // 🔧 חדש: טיפול במצב completed עם אזכור התקלה הקודמת
-    if (currentStage === 'completed') {
-        const wasAutoFinished = conversation?.data?.autoFinished;
-        const lastIssue = conversation?.data?.lastIssue;
-        const lastServiceNumber = conversation?.data?.lastServiceNumber;
-        
-        if (wasAutoFinished && lastIssue) {
-            // זה תגובה לסיום אוטומטי של תקלה
-            if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('עדיין')) {
-                // הפתרון לא עזר - שלח טכנאי
-                this.memory.updateStage(phone, 'technician_escalated', customer);
-                
-                return {
-                    response: `📝 **הבנתי שהפתרון לא עזר**\n\n"${lastIssue}"\n\n🔧 **מעביר לטכנאי מומחה**\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${lastServiceNumber}\n\n📞 039792365`,
-                    stage: 'technician_escalated',
-                    customer: customer,
-                    sendTechnicianEmail: true,
-                    serviceNumber: lastServiceNumber,
-                    problemDescription: `${lastIssue} - הפתרון הראשוני לא עזר`,
-                    resolved: false
-                };
-                
-            } else if (msg.includes('כן') || msg.includes('עזר') || msg.includes('תודה')) {
-                // הפתרון עזר
-                this.memory.updateStage(phone, 'menu', customer);
-                
-                return {
-                    response: `🎉 **מעולה! שמח שהפתרון עזר!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                    stage: 'menu',
-                    customer: customer,
-                    sendSummaryEmail: true,
-                    serviceNumber: lastServiceNumber,
-                    problemDescription: lastIssue,
-                    resolved: true
-                };
-                
-            } else if (msg === '1' || msg.includes('תקלה')) {
-                // רוצה לדווח תקלה חדשה
-                this.memory.updateStage(phone, 'problem_description', customer);
-                
-                let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋\n\n🔧 **תיאור התקלה החדשה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
-                
-                return { response, stage: 'problem_description', customer: customer };
-            }
-        }
-        
-        // אם זה מצב completed רגיל - חזור לתפריט
-        this.memory.updateStage(phone, 'menu', customer);
-        currentStage = 'menu';
-    }
-    
-    // תפריט ראשי
-    if (currentStage === 'menu' || !currentStage) {
-        const savedInfo = conversation?.data?.initialInfo;
-        
-        // בדיקה אם הלקוח ענה על הצעה שזוהתה מראש
-        if (savedInfo && (msg.includes('כן') || msg.includes('נכון'))) {
-            if (savedInfo.hasProblem) {
-                return await this.handleInitialProblem(savedInfo, phone, customer, greetingResponse);
-            } else if (savedInfo.hasOrder) {
-                return await this.handleInitialOrder(savedInfo, phone, customer, greetingResponse);
-            } else if (savedInfo.hasDamage) {
-                return await this.handleInitialDamage(savedInfo, phone, customer, greetingResponse);
-            }
-        } else if (savedInfo && (msg.includes('לא') || msg.includes('לא נכון'))) {
-            // נקה את המידע הראשוני ותציג תפריט רגיל
-            this.memory.updateStage(phone, 'menu', customer, { initialInfo: null });
-        }
-        
-        // טיפול בבחירות תפריט
-        if (msg === '1' || msg.includes('תקלה')) {
-            this.memory.updateStage(phone, 'problem_description', customer);
-            
-            let response = greetingResponse ? `${greetingResponse} ` : '';
-            response += `${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
-            
-            return { response, stage: 'problem_description', customer: customer };
-        }
-        
-        // שאר הטיפולים נשארים כמו שהם...
-        if (msg === '2' || msg.includes('נזק')) {
-            this.memory.updateStage(phone, 'damage_photo', customer);
-            
-            let response = greetingResponse ? `${greetingResponse} ` : '';
-            response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`;
-            
-            return { response, stage: 'damage_photo', customer: customer };
-        }
-        
-        if (msg === '3' || msg.includes('מחיר')) {
-            this.memory.updateStage(phone, 'order_request', customer);
-            
-            let response = greetingResponse ? `${greetingResponse} ` : '';
-            response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`;
-            
-            return { response, stage: 'order_request', customer: customer };
-        }
-        
-        if (msg === '4' || msg.includes('הדרכה')) {
-            this.memory.updateStage(phone, 'training_request', customer);
-            
-            let response = greetingResponse ? `${greetingResponse} ` : '';
-            response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\nהמתן מספר שניות לתשובה🤞`;
-            
-            return { response, stage: 'training_request', customer: customer };
-        }
-        
-        if (msg === '5' || msg.includes('משרד')) {
-            this.memory.updateStage(phone, 'general_office_request', customer);
-            
-            let response = greetingResponse ? `${greetingResponse} ` : '';
-            response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`;
-            
-            return { response, stage: 'general_office_request', customer: customer };
-        }
-        
-        // ברירת מחדל - תפריט רגיל עם ברכה
-        this.memory.updateStage(phone, 'menu', customer);
-        
-        let response = greetingResponse ? `${greetingResponse} ` : 'שלום ';
-        response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`;
-        
-        return { response, stage: 'menu', customer: customer };
-    }
-    
-    // שאר השלבים נשארים כמו שהם
-    if (currentStage === 'problem_description') {
-        return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
-    }
-
-    if (currentStage === 'problem_confirmation') {
-        return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
-    }
-    
-    if (currentStage === 'damage_photo') {
-        return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
-    }
-    
-    if (currentStage === 'damage_confirmation') {
-        return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
-    }
-
-    if (currentStage === 'order_request') {
-        return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-    
-    if (currentStage === 'order_confirmation') {
-        return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-
-    if (currentStage === 'waiting_feedback') {
-        return await this.handleFeedback(message, phone, customer, conversation);
-    }
-    
-    if (currentStage === 'training_request') {
-        return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-    
-    if (currentStage === 'training_confirmation') {
-        return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-
-    if (currentStage === 'general_office_request') {
-        return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-    
-    if (currentStage === 'office_confirmation') {
-        return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
-    }
-
-    if (currentStage === 'waiting_training_feedback') {
-        return await this.handleTrainingFeedback(message, phone, customer, conversation);
-    }
-    
-    // 🔧 חדש: שלב technician_escalated
-    if (currentStage === 'technician_escalated') {
-        // הטכנאי כבר בדרך - הצע תפריט חדש
-        this.memory.updateStage(phone, 'menu', customer);
-        return {
-            response: `✅ **הטכנאי כבר בדרך אליך**\n\nאיך אוכל לעזור בעוד?\n1️⃣ דיווח תקלה נוספת\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-            stage: 'menu',
-            customer: customer
-        };
-    }
-    
-    // ברירת מחדל - חזור לתפריט
-    this.memory.updateStage(phone, 'menu', customer);
-    return {
-        response: `לא הבנתי את הבקשה.\n\nחזרה לתפריט הראשי:\n\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-        stage: 'menu',
-        customer: customer
-    };
 }
 
 // אתחול Google Sheets
@@ -1962,6 +1761,58 @@ class ResponseHandler {
         const msg = message.toLowerCase().trim();
         const currentStage = conversation ? conversation.stage : 'menu';
         
+        // 🔧 חדש: טיפול במצב completed עם אזכור התקלה הקודמת
+        if (currentStage === 'completed') {
+            const wasAutoFinished = conversation?.data?.autoFinished;
+            const lastIssue = conversation?.data?.lastIssue;
+            const lastServiceNumber = conversation?.data?.lastServiceNumber;
+            
+            if (wasAutoFinished && lastIssue) {
+                // זה תגובה לסיום אוטומטי של תקלה
+                if (msg.includes('לא') || msg.includes('לא עזר') || msg.includes('עדיין')) {
+                    // הפתרון לא עזר - שלח טכנאי
+                    this.memory.updateStage(phone, 'technician_escalated', customer);
+                    
+                    return {
+                        response: `📝 **הבנתי שהפתרון לא עזר**\n\n"${lastIssue}"\n\n🔧 **מעביר לטכנאי מומחה**\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${lastServiceNumber}\n\n📞 039792365`,
+                        stage: 'technician_escalated',
+                        customer: customer,
+                        sendTechnicianEmail: true,
+                        serviceNumber: lastServiceNumber,
+                        problemDescription: `${lastIssue} - הפתרון הראשוני לא עזר`,
+                        resolved: false
+                    };
+                    
+                } else if (msg.includes('כן') || msg.includes('עזר') || msg.includes('תודה')) {
+                    // הפתרון עזר
+                    this.memory.updateStage(phone, 'menu', customer);
+                    
+                    return {
+                        response: `🎉 **מעולה! שמח שהפתרון עזר!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                        stage: 'menu',
+                        customer: customer,
+                        sendSummaryEmail: true,
+                        serviceNumber: lastServiceNumber,
+                        problemDescription: lastIssue,
+                        resolved: true
+                    };
+                    
+                } else if (msg === '1' || msg.includes('תקלה')) {
+                    // רוצה לדווח תקלה חדשה
+                    this.memory.updateStage(phone, 'problem_description', customer);
+                    
+                    let response = greetingResponse ? `${greetingResponse} ` : '';
+                    response += `${customer.name} 👋\n\n🔧 **תיאור התקלה החדשה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
+                    
+                    return { response, stage: 'problem_description', customer: customer };
+                }
+            }
+            
+            // אם זה מצב completed רגיל - חזור לתפריט
+            this.memory.updateStage(phone, 'menu', customer);
+            currentStage = 'menu';
+        }
+        
         // תפריט ראשי
         if (currentStage === 'menu' || !currentStage) {
             const savedInfo = conversation?.data?.initialInfo;
@@ -1990,6 +1841,7 @@ class ResponseHandler {
                 return { response, stage: 'problem_description', customer: customer };
             }
             
+            // שאר הטיפולים נשארים כמו שהם...
             if (msg === '2' || msg.includes('נזק')) {
                 this.memory.updateStage(phone, 'damage_photo', customer);
                 
@@ -2035,11 +1887,11 @@ class ResponseHandler {
             return { response, stage: 'menu', customer: customer };
         }
         
-        // שאר השלבים נשארים כמו שהם (רק עם הוספת ברכות במקומות המתאימים)
+        // שאר השלבים נשארים כמו שהם
         if (currentStage === 'problem_description') {
             return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
         }
-
+    
         if (currentStage === 'problem_confirmation') {
             return await this.handleProblemDescription(message, phone, customer, hasFile, downloadedFiles);
         }
@@ -2051,7 +1903,7 @@ class ResponseHandler {
         if (currentStage === 'damage_confirmation') {
             return await this.handleDamageReport(message, phone, customer, hasFile, fileType, downloadedFiles);
         }
-
+    
         if (currentStage === 'order_request') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
@@ -2059,7 +1911,7 @@ class ResponseHandler {
         if (currentStage === 'order_confirmation') {
             return await this.handleOrderRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-
+    
         if (currentStage === 'waiting_feedback') {
             return await this.handleFeedback(message, phone, customer, conversation);
         }
@@ -2071,7 +1923,7 @@ class ResponseHandler {
         if (currentStage === 'training_confirmation') {
             return await this.handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-
+    
         if (currentStage === 'general_office_request') {
             return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
         }
@@ -2079,10 +1931,20 @@ class ResponseHandler {
         if (currentStage === 'office_confirmation') {
             return await this.handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles);
         }
-
-        // 🔧  משוב הדרכה - ללא שאלה כפולה
+    
         if (currentStage === 'waiting_training_feedback') {
             return await this.handleTrainingFeedback(message, phone, customer, conversation);
+        }
+        
+        // 🔧 חדש: שלב technician_escalated
+        if (currentStage === 'technician_escalated') {
+            // הטכנאי כבר בדרך - הצע תפריט חדש
+            this.memory.updateStage(phone, 'menu', customer);
+            return {
+                response: `✅ **הטכנאי כבר בדרך אליך**\n\nאיך אוכל לעזור בעוד?\n1️⃣ דיווח תקלה נוספת\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
+                stage: 'menu',
+                customer: customer
+            };
         }
         
         // ברירת מחדל - חזור לתפריט
