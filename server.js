@@ -3850,13 +3850,37 @@ if (req.body.senderData && req.body.senderData.sender) {
     const sender = req.body.senderData.sender;
     
     // בדיקות מרובות לקבוצות
-    if (sender.includes('@g.us') || 
-        sender.includes('-') || 
-        sender.match(/^\d+-\d+@/)) {
+// 🔧 בדיקות מרובות לקבוצות - מורחב
+if (sender.includes('@g.us') || 
+    sender.includes('-') || 
+    sender.match(/^\d+-\d+@/) ||
+    sender.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
+    
+    log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+    return res.status(200).json({ status: 'OK - group message ignored' });
+}
+
+// 🔧 בדיקה נוספת במקום אחר במבנה הנתונים
+if (req.body.messageData && req.body.messageData.chatId) {
+    const chatId = req.body.messageData.chatId;
+    
+    if (chatId.includes('@g.us') || 
+        chatId.includes('-') || 
+        chatId.match(/^\d+-\d+@/) ||
+        chatId.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
         
-        log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+        log('INFO', `🚫 מתעלם מהודעה מקבוצה (chatId): ${chatId}`);
         return res.status(200).json({ status: 'OK - group message ignored' });
     }
+}
+
+// 🔧 בדיקה נוספת של ID הקבוצה הספציפית
+const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
+
+if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
+    log('INFO', `🚫 מתעלם מהודעה מקבוצת שיידט הספציפית`);
+    return res.status(200).json({ status: 'OK - company group ignored' });
+}
 }
         
         // בדיקה נוספת - אם זה הטלפון של המערכת עצמה
