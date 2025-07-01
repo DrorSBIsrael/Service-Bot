@@ -3319,19 +3319,26 @@ function isWorkingHours() {
 }
 
 // שליחת מייל משופרת
-async function sendEmail(customer, type, details, extraData = {}) {
+async function sendEmail(customer, type, details, extraData = {}, phoneUsed = null) {
     try {
         const serviceNumber = extraData.serviceNumber || getNextServiceNumber();
         
-        // רשימת טלפונים
-        const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
-            .filter(phone => phone && phone.trim() !== '')
-            .map((phone, index) => {
-                const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
-                return `<p><strong>${label}:</strong> ${phone}</p>`;
-            })
-            .join('');
-        
+// רשימת טלפונים עם הטלפון שפנה
+let phoneList = '';
+if (phoneUsed) {
+    phoneList += `<p><strong>📱 טלפון שפנה:</strong> ${phoneUsed}</p>`;
+    phoneList += `<br>`;
+}
+
+const allPhones = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
+    .filter(phone => phone && phone.trim() !== '')
+    .map((phone, index) => {
+        const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
+        return `<p><strong>${label}:</strong> ${phone}</p>`;
+    })
+    .join('');
+
+phoneList += allPhones;        
         let subject, emailType, bgColor;
         if (type === 'technician') {
             subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
@@ -3454,9 +3461,10 @@ if (extraData.problemDescription) {
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
-                    `📞 **טלפון:** ${customer.phone}\n` +
+                    `📞 **טלפון שפנה:** ${customer.phone}\n` +
+                    `📞 **טלפון ראשי:** ${customer.phone1}\n` +
                     `🆔 **מספר קריאה:** ${extraData.serviceNumber || 'לא זמין'}\n\n` +
-                    `🔧 **תיאור התקלה:**\n${details}\n\n` +
+                    `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
                 
                 await sendWhatsAppToGroup(groupMessage);
