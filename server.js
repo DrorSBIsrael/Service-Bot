@@ -1473,7 +1473,6 @@ async function findSolutionFallbackSmart(problemDescription) {
             
             solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             
-            log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
@@ -1544,7 +1543,6 @@ async function findSolutionFallback(problemDescription) {
             
             solution += `\n\n❓ האם עזר? (כן/לא)`;
             
-            log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
@@ -1580,7 +1578,6 @@ function isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
-        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -3042,7 +3039,6 @@ isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
-        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -3242,9 +3238,7 @@ async function sendWhatsApp(phone, message) {
         });
         
         if (response.data && response.data.idMessage) {
-            log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
         } else {
-            log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
         }
         
         return response.data;
@@ -3271,7 +3265,6 @@ async function sendWhatsAppToGroup(message) {
             chatId: GROUP_CHAT_ID,
             message: message
         });
-        log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
         return response.data;
     } catch (error) {
         log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
@@ -4013,9 +4006,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     
     const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
     if (filePath) {
-        downloadedFiles.push(filePath);
-        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
-        
+        downloadedFiles.push(filePath);        
         // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
         const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
         memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
@@ -4309,7 +4300,6 @@ async function downloadWhatsAppFile(downloadUrl, fileName) {
         
         return new Promise((resolve, reject) => {
             writer.on('finish', () => {
-                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
                 resolve(filePath);
             });
             writer.on('error', (error) => {
