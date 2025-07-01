@@ -3461,8 +3461,8 @@ if (extraData.problemDescription) {
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
-                    `📞 **טלפון שפנה:** ${customer.phone}\n` +
-                    `📞 **טלפון ראשי:** ${customer.phone1}\n` +
+                    `📞 **טלפון שפנה:** ${phone}\n` +
+                    `📞 **טלפון ראשי:** ${customer.phone}\n` +
                     `🆔 **מספר קריאה:** ${extraData.serviceNumber || 'לא זמין'}\n\n` +
                     `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
@@ -4057,7 +4057,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     solution: result.solution,
                     resolved: result.resolved,
                     attachments: result.attachments
-                });
+                }, phone);
                 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
             }
             return res.status(200).json({ status: 'OK - problem processed with file' });
@@ -4194,7 +4194,7 @@ if (tempFiles.length > 0) {
                 solution: result.solution,
                 resolved: result.resolved,
                 attachments: result.attachments
-            });
+            }, phone);
 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
             log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
