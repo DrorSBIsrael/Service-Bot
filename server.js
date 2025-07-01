@@ -55,7 +55,6 @@ async function getLastServiceNumber() {
 
         const rows = response.data.values;
         if (!rows || rows.length <= 1) {
-            log('INFO', '📊 טבלה ריקה - מתחיל מ-HSC-10001');
             return 10001;
         }
 
@@ -71,7 +70,7 @@ async function getLastServiceNumber() {
             }
         }
 
-        log('INFO', `📊 מספר הקריאה האחרון בטבלה: HSC-${maxNumber}`);
+        // log('INFO', `📊 מספר הקריאה האחרון בטבלה: HSC-${maxNumber}`);
         return maxNumber;
 } catch (error) {
     console.log('FULL ERROR:', error);
@@ -128,7 +127,6 @@ async function createSheetsHeaders() {
         });
 
         if (response.data.values && response.data.values.length > 0) {
-            log('INFO', '📊 כותרות כבר קיימות בטבלה');
             return true;
         }
 
@@ -204,7 +202,6 @@ function getIsraeliTime() {
 async function createThread() {
     try {
         const thread = await openai.beta.threads.create();
-        log('INFO', `🧵 נוצר thread חדש: ${thread.id}`);
         return thread.id;
     } catch (error) {
         log('ERROR', '❌ שגיאה ביצירת thread:', error.message);
@@ -236,8 +233,6 @@ async function runAssistant(threadId, assistantId, instructions = "") {
             max_completion_tokens: 1000, // הגבלת אורך התשובה
             temperature: 0.3 // יותר עקבי, פחות יצירתי
         });
-        
-        log('INFO', `🤖 מפעיל Assistant: ${run.id}`);
         
         // המתנה עם timeout מהיר יותר
         let runStatus = await openai.beta.threads.runs.retrieve(threadId, run.id);
@@ -273,8 +268,6 @@ async function runAssistant(threadId, assistantId, instructions = "") {
 // פונקציה מיוחדת לטיפול בתקלות עם Assistant
 async function handleProblemWithAssistant(problemDescription, customer) {
     try {
-        log('INFO', '🔧 מעבד תקלה עם OpenAI Assistant מותאם...');
-        
         const threadId = await createThread();
         if (!threadId) {
             log('WARN', '⚠️ נכשל ביצירת thread - עובר לשיטה הרגילה');
@@ -335,8 +328,6 @@ FORMAT:
         );
         
         if (assistantResponse) {
-            log('INFO', '✅ Assistant נתן פתרון מותאם אישית');
-            
             // עיצוב התגובה עם הוראות ברורות
             let formattedResponse = `${assistantResponse}`;
             formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה`;
@@ -360,7 +351,7 @@ FORMAT:
 // פונקציה מיוחדת לטיפול בהדרכה עם Assistant
 async function handleTrainingWithAssistant(trainingRequest, customer) {
     try {
-        log('INFO', '📚 מעבד בקשת הדרכה עם OpenAI Assistant...');
+        // log('INFO', '📚 מעבד בקשת הדרכה עם OpenAI Assistant...');
         
         const threadId = await createThread();
         if (!threadId) return null;
@@ -421,7 +412,7 @@ FORMAT:
         );
         
         if (assistantResponse) {
-            log('INFO', '✅ Assistant הכין חומר הדרכה מותאם');
+            // log('INFO', '✅ Assistant הכין חומר הדרכה מותאם');
             return {
                 success: true,
                 content: assistantResponse,
@@ -512,7 +503,7 @@ try {
     
     log('INFO', `📋 מסד תקלות נטען: ${serviceFailureDB.length} תרחישים`);
     
-    log('INFO', '🔍 בדיקת תוכן קובץ התרחישים:');
+    // log('INFO', '🔍 בדיקת תוכן קובץ התרחישים:');
     if (serviceFailureDB.length > 0) {
         serviceFailureDB.forEach((scenario, index) => {
             log('DEBUG', `${index + 1}. "${scenario.תרחיש}" - יש פתרון: ${scenario.שלבים ? 'כן' : 'לא'} - יש הערות: ${scenario.הערות ? 'כן' : 'לא'}`);
@@ -576,7 +567,7 @@ try {
         }
     ];
     
-    log('INFO', `📋 נוצר מסד תקלות ברירת מחדל: ${serviceFailureDB.length} תרחישים`);
+    // log('INFO', `📋 נוצר מסד תקלות ברירת מחדל: ${serviceFailureDB.length} תרחישים`);
 }
 
 // הגדרות Express
@@ -605,7 +596,7 @@ class AdvancedMemory {
         this.conversations = new Map();
         this.maxAge = 4 * 60 * 60 * 1000; // 4 שעות
         setInterval(() => this.cleanup(), 60 * 60 * 1000); // ניקוי כל שעה
-        log('INFO', '🧠 זיכרון מתקדם אותחל');
+        // log('INFO', '🧠 זיכרון מתקדם אותחל');
     }
     
     // יצירת מפתח ייחודי ללקוח
@@ -658,7 +649,7 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
     };
     
     this.conversations.set(key, conv);
-    log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
+    // log('INFO', `➕ יצרתי conversation חדש: ${key} - שלב: ${conv.stage}`);
     return conv;
 }
 
@@ -683,7 +674,7 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
             conv.lastActivity = new Date();
             // עדכון נתונים נוספים
             conv.data = { ...conv.data, ...data };
-            log('INFO', `🔄 עדכון שלב: ${oldStage} → ${newStage} עבור ${customer ? customer.name : phone}`);
+            // log('INFO', `🔄 עדכון שלב: ${oldStage} → ${newStage} עבור ${customer ? customer.name : phone}`);
         } else {
             log('WARN', `⚠️ לא נמצא conversation לעדכון שלב עבור ${phone}`);
         }
@@ -704,13 +695,13 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
                  ['identifying', 'confirming_identity', 'guest_details'].includes(conv.stage))) {
                 
                 this.conversations.delete(key);
-                log('INFO', `🧹 נוקה conversation תקוע: ${key} - שלב: ${conv.stage}`);
+                // log('INFO', `🧹 נוקה conversation תקוע: ${key} - שלב: ${conv.stage}`);
             }
         }
         
         const afterCount = this.conversations.size;
         if (beforeCount !== afterCount) {
-            log('INFO', `🧹 ניקוי זיכרון: ${beforeCount - afterCount} שיחות נמחקו`);
+            // log('INFO', `🧹 ניקוי זיכרון: ${beforeCount - afterCount} שיחות נמחקו`);
         }
     }
     
@@ -758,7 +749,7 @@ class AutoFinishManager {
     constructor() {
         this.timers = new Map(); // טיימרים פעילים
         this.TIMEOUT_DURATION = 60 * 1000; // 60 שניות במילישניות
-        log('INFO', '⏰ מנהל סיום אוטומטי הופעל');
+        // log('INFO', '⏰ מנהל סיום אוטומטי הופעל');
     }
     
     // התחלת טיימר חדש או איפוס קיים
@@ -768,10 +759,10 @@ class AutoFinishManager {
         // אם יש טיימר קיים - בטל אותו
         this.clearTimer(phone);
         
-        log('INFO', `⏱️ התחלת טיימר 60 שניות עבור ${customer ? customer.name : phone} בשלב ${stage}`);
+        // log('INFO', `⏱️ התחלת טיימר 60 שניות עבור ${customer ? customer.name : phone} בשלב ${stage}`);
         
         const timer = setTimeout(() => {
-            log('INFO', `⏰ טיימר פג עבור ${customer ? customer.name : phone} - מפעיל סיום אוטומטי`);
+            // log('INFO', `⏰ טיימר פג עבור ${customer ? customer.name : phone} - מפעיל סיום אוטומטי`);
             this.timers.delete(key);
             callback(phone, customer, stage);
         }, this.TIMEOUT_DURATION);
@@ -794,7 +785,7 @@ class AutoFinishManager {
             this.timers.delete(key);
             
             const elapsed = Math.round((Date.now() - timerData.startTime) / 1000);
-            log('INFO', `⏹️ טיימר בוטל עבור ${phone} (פעל ${elapsed} שניות)`);
+            // log('INFO', `⏹️ טיימר בוטל עבור ${phone} (פעל ${elapsed} שניות)`);
         }
     }
     
@@ -819,7 +810,7 @@ class AutoFinishManager {
             clearTimeout(timerData.timer);
         });
         this.timers.clear();
-        log('INFO', '🧹 כל הטיימרים נוקו');
+        // log('INFO', '🧹 כל הטיימרים נוקו');
     }
 }
 
@@ -1154,7 +1145,7 @@ async function handleAutoFinish(phone, customer, stage) {
     if (initialized) {
         await createSheetsHeaders();
         globalServiceCounter = await getLastServiceNumber();
-        log('INFO', `📊 Google Sheets מוכן - מספר קריאה הבא: HSC-${globalServiceCounter + 1}`);
+        // log('INFO', `📊 Google Sheets מוכן - מספר קריאה הבא: HSC-${globalServiceCounter + 1}`);
     }
 })();
 
@@ -1228,7 +1219,7 @@ function findCustomerByPhone(phone) {
                 for (const customerVar of customerVariations) {
                     // התאמה מדויקת
                     if (incomingVar === customerVar) {
-                        log('INFO', `✅ התאמה מדויקת: ${incomingVar} = ${customerVar} ללקוח ${customer.name}`);
+                        // log('INFO', `✅ התאמה מדויקת: ${incomingVar} = ${customerVar} ללקוח ${customer.name}`);
                         return customer;
                     }
                     
@@ -1238,7 +1229,6 @@ function findCustomerByPhone(phone) {
                         const customerSuffix = customerVar.slice(-9);
                         
                         if (incomingSuffix === customerSuffix) {
-                            log('INFO', `✅ התאמה חלקית: ${incomingSuffix} ללקוח ${customer.name}`);
                             return customer;
                         }
                     }
@@ -1339,7 +1329,7 @@ function findCustomerByName(message) {
 
 async function findSolution(problemDescription, customer) {
     try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI משופר...');
+        // log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI משופר...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
@@ -1391,7 +1381,7 @@ ${fullScenarios}
             const aiResponse = completion.choices[0].message.content.trim();
             const scenarioNumber = parseInt(aiResponse);
             
-            log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
+            // log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
             
             if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
                 const scenario = serviceFailureDB[scenarioNumber - 1];
@@ -1407,7 +1397,7 @@ ${fullScenarios}
                 log('INFO', `✅ OpenAI מצא פתרון מתאים: ${scenario.תרחיש}`);
                 return { found: true, response: solution, scenario: scenario };
             } else {
-                log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
+                // log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
                 return await findSolutionFallbackSmart(problemDescription);
             }
             
@@ -1424,7 +1414,7 @@ ${fullScenarios}
 
 async function findSolutionFallbackSmart(problemDescription) {
     try {
-        log('INFO', '🔄 מפעיל מערכת fallback חכמה משופרת...');
+        // log('INFO', '🔄 מפעיל מערכת fallback חכמה משופרת...');
         
         const problem = problemDescription.toLowerCase();
         
@@ -1476,11 +1466,11 @@ async function findSolutionFallbackSmart(problemDescription) {
             
             solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             
-            log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
+            // log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
-        log('INFO', '⚠️ גם fallback חכם לא מצא פתרון מתאים');
+        // log('INFO', '⚠️ גם fallback חכם לא מצא פתרון מתאים');
         return {
             found: false,
             response: '🔧 **לא נמצא פתרון מתאים במדריך**\n\n📧 שלחתי את התקלה לטכנאי מומחה\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **דחוף:** 039792365'
@@ -1498,7 +1488,7 @@ async function findSolutionFallbackSmart(problemDescription) {
 // פונקציית fallback משופרת - עם התאמה מדויקת יותר
 async function findSolutionFallback(problemDescription) {
     try {
-        log('INFO', '🔄 מפעיל מערכת fallback חכמה...');
+        // log('INFO', '🔄 מפעיל מערכת fallback חכמה...');
         
         const problem = problemDescription.toLowerCase();
         
@@ -1547,11 +1537,11 @@ async function findSolutionFallback(problemDescription) {
             
             solution += `\n\n❓ האם עזר? (כן/לא)`;
             
-            log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
+            // log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
-        log('INFO', '⚠️ גם fallback לא מצא פתרון מתאים');
+        // log('INFO', '⚠️ גם fallback לא מצא פתרון מתאים');
         return {
             found: false,
             response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365'
@@ -1583,7 +1573,7 @@ function isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
-        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
+        // log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -1612,7 +1602,7 @@ class ResponseHandler {
         
         const conversation = this.memory.getConversation(phone, customer);
         
-        log('INFO', `🎯 מעבד: "${message}" ${greeting ? `[ברכה: "${greeting}"]` : ''} - שלב: ${conversation ? conversation.stage : 'אין'}`);
+        // log('INFO', `🎯 מעבד: "${message}" ${greeting ? `[ברכה: "${greeting}"]` : ''} - שלב: ${conversation ? conversation.stage : 'אין'}`);
         
         // ביטול טיימר אוטומטי
         autoFinishManager.clearTimer(phone);
@@ -2428,7 +2418,7 @@ class ResponseHandler {
         
         // 🔧 בדיקה אם יש גם קובץ וגם מספר יחידה - הצע אישור
         if ((hasFile || allFiles.length > 0) && unitNumber) {
-            log('INFO', '✅ יש גם קובץ וגם מספר יחידה - מציע אישור');
+            // log('INFO', '✅ יש גם קובץ וגם מספר יחידה - מציע אישור');
             
             // שמור את כל הנתונים ועבור למסך אישור
             this.memory.updateStage(phone, 'damage_confirmation', customer, {
@@ -3003,7 +2993,7 @@ async handleFeedback(message, phone, customer, conversation) {
     
     // 🔧 חדש: אם זה לא "כן" או "לא" אלא מידע נוסף על התקלה
     if (message.length > 3) {
-        log('INFO', `📝 לקוח הוסיף מידע נוסף: "${message}"`);
+        // log('INFO', `📝 לקוח הוסיף מידע נוסף: "${message}"`);
         
         this.memory.updateStage(phone, 'completed', customer);
         
@@ -3050,7 +3040,7 @@ isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
-        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
+        // log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -3250,9 +3240,9 @@ async function sendWhatsApp(phone, message) {
         });
         
         if (response.data && response.data.idMessage) {
-            log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
+            // log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
         } else {
-            log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
+            // log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
         }
         
         return response.data;
@@ -3279,7 +3269,7 @@ async function sendWhatsAppToGroup(message) {
             chatId: GROUP_CHAT_ID,
             message: message
         });
-        log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
+        // log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
         return response.data;
     } catch (error) {
         log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
@@ -3446,7 +3436,7 @@ switch(type) {
         // הוסף SMS רק מחוץ לשעות עבודה
         if (workingHours.shouldSendSMS) {
             emailRecipients.push('SMS@sbparking.co.il');
-            log('INFO', `📱 שולח גם ל-SMS - ${workingHours.dayName} ${workingHours.hour}:00 (מחוץ לשעות עבודה)`);
+            // log('INFO', `📱 שולח גם ל-SMS - ${workingHours.dayName} ${workingHours.hour}:00 (מחוץ לשעות עבודה)`);
             
             // 🔧 חדש: שליחה לקבוצת WhatsApp במקרה של תקלה מחוץ לשעות עבודה
             try {
@@ -3468,13 +3458,13 @@ if (extraData.problemDescription) {
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
                 
                 await sendWhatsAppToGroup(groupMessage);
-                log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name}`);
+                // log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name}`);
             } catch (groupError) {
                 log('ERROR', '❌ שגיאה בשליחה לקבוצה:', groupError.message);
                 // ממשיך גם אם השליחה לקבוצה נכשלת
             }
         } else {
-            log('INFO', `💼 שעות עבודה - ${workingHours.dayName} ${workingHours.hour}:00 (רק service@sbcloud.co.il)`);
+            // log('INFO', `💼 שעות עבודה - ${workingHours.dayName} ${workingHours.hour}:00 (רק service@sbcloud.co.il)`);
         }
         break;
         
@@ -3496,7 +3486,7 @@ if (extraData.problemDescription) {
 }
 
 // הוספת לוג מפורט
-log('INFO', `📧 נמענים: ${emailRecipients.join(', ')}`);
+// log('INFO', `📧 נמענים: ${emailRecipients.join(', ')}`);
 
 const mailOptions = {
     from: 'Report@sbparking.co.il',
@@ -3514,14 +3504,14 @@ if (extraData.attachments && extraData.attachments.length > 0) {
                 path: filePath
             };
         });
-        log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
+        // log('INFO', `📎 מצרף ${extraData.attachments.length} קבצים למייל`);
     } catch (attachmentError) {
         log('ERROR', '❌ שגיאה בהכנת קבצים מצורפים:', attachmentError.message);
     }
 }
 
         await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
+        // log('INFO', `📧 מייל נשלח: ${type} - ${customer.name} - ${serviceNumber}${extraData.attachments ? ` עם ${extraData.attachments.length} קבצים` : ''}`);
         
 // כתיבה ל-Google Sheets
         const serviceData = {
@@ -3637,7 +3627,7 @@ case 'general_office':
         };
 
         await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל אישור נשלח ללקוח: ${customer.name} (${customer.email})`);
+        // log('INFO', `📧 מייל אישור נשלח ללקוח: ${customer.name} (${customer.email})`);
         return true;
         
     } catch (error) {
@@ -3702,7 +3692,7 @@ async function sendGuestEmail(guestDetails, phone, serviceNumber) {
         };
 
         await transporter.sendMail(mailOptions);
-        log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
+        // log('INFO', `📧 מייל לקוח אורח נשלח: ${serviceNumber}`);
         
         // 🔧 כתיבה ל-Google Sheets
         const serviceData = {
@@ -3864,7 +3854,7 @@ if (sender.includes('@g.us') ||
     sender.match(/^\d+-\d+@/) ||
     sender.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
     
-    log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+    // log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
     return res.status(200).json({ status: 'OK - group message ignored' });
 }
 
@@ -3877,7 +3867,7 @@ if (req.body.messageData && req.body.messageData.chatId) {
         chatId.match(/^\d+-\d+@/) ||
         chatId.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
         
-        log('INFO', `🚫 מתעלם מהודעה מקבוצה (chatId): ${chatId}`);
+        // log('INFO', `🚫 מתעלם מהודעה מקבוצה (chatId): ${chatId}`);
         return res.status(200).json({ status: 'OK - group message ignored' });
     }
 }
@@ -3886,7 +3876,7 @@ if (req.body.messageData && req.body.messageData.chatId) {
 const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
 
 if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
-    log('INFO', `🚫 מתעלם מהודעה מקבוצת שיידט הספציפית`);
+    // log('INFO', `🚫 מתעלם מהודעה מקבוצת שיידט הספציפית`);
     return res.status(200).json({ status: 'OK - company group ignored' });
 }
 }
@@ -3896,7 +3886,7 @@ if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
             const phoneCheck = req.body.senderData.sender.replace('@c.us', '');
             const systemPhone = '546284210'; // הטלפון של הבוט
             if (phoneCheck.includes(systemPhone)) {
-                log('INFO', `🚫 מתעלם מהודעה מהמערכת עצמה: ${phoneCheck}`);
+                // log('INFO', `🚫 מתעלם מהודעה מהמערכת עצמה: ${phoneCheck}`);
                 return res.status(200).json({ status: 'OK - system message ignored' });
             }
         }
@@ -3970,7 +3960,7 @@ if (messageData.textMessageData && messageData.textMessageData.textMessage) {
     }
 }
 
-log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
+// log('INFO', `📞 הודעה מ-${phone} (${customerName}): ${messageText}`);
         
 // זיהוי לקוח
 let customer = findCustomerByPhone(phone);
@@ -3991,11 +3981,11 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     
     // התעלם מקבצים במצב waiting_feedback
     if (conversation?.stage === 'waiting_feedback') {
-        log('INFO', `⚠️ מתעלם מקובץ - כבר במצב המתנה למשוב`);
+        // log('INFO', `⚠️ מתעלם מקובץ - כבר במצב המתנה למשוב`);
         return res.status(200).json({ status: 'OK - ignoring file after solution' });
     }
     if (conversation?.stage === 'completed') {
-        log('INFO', `⚠️ מתעלם מקובץ - הדיווח כבר הושלם`);
+        // log('INFO', `⚠️ מתעלם מקובץ - הדיווח כבר הושלם`);
         await sendWhatsApp(phone, `✅ **הדיווח הקודם הושלם בהצלחה**\n\nאם ברצונך לדווח על נזק נוסף:\n🔄 כתוב "תפריט" ובחר "2" שוב\n\n📞 039792365`);
         return res.status(200).json({ status: 'OK - report already completed' });
     }
@@ -4022,7 +4012,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
     if (filePath) {
         downloadedFiles.push(filePath);
-        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
+        // log('INFO', `✅ ${fileType} הורד: ${fileName}`);
         
         // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
         const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
@@ -4031,7 +4021,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
             tempFiles: updatedFiles 
         });
         
-        log('INFO', `📁 זיכרון עודכן: ${updatedFiles.length} קבצים (${updatedFiles.map(f => f.type).join(', ')})`);
+        // log('INFO', `📁 זיכרון עודכן: ${updatedFiles.length} קבצים (${updatedFiles.map(f => f.type).join(', ')})`);
         
         // 🔧 חדש: טיפול חכם לפי שלב
         
@@ -4067,7 +4057,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         if (conversation?.stage === 'damage_photo') {
             const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
             if (unitMatch) {
-                log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
+                // log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
                 
                 const allFilePaths = updatedFiles.map(f => f.path);
                 
@@ -4183,11 +4173,11 @@ if (tempFiles.length > 0) {
         await sendWhatsApp(phone, result.response);
         memory.addMessage(phone, result.response, 'hadar', result.customer);
         
-        log('INFO', `📤 תגובה נשלחה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
+        // log('INFO', `📤 תגובה נשלחה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
         
         // שליחת מיילים לפי הצורך
         if (result.sendTechnicianEmail) {
-            log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'technician', messageText, {
                 serviceNumber: result.serviceNumber,
                 problemDescription: result.problemDescription,
@@ -4197,7 +4187,7 @@ if (tempFiles.length > 0) {
             }, phone);
 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
-            log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'summary', 'בעיה נפתרה בהצלחה', {
                 serviceNumber: result.serviceNumber,
                 problemDescription: result.problemDescription,
@@ -4205,7 +4195,7 @@ await sendCustomerConfirmationEmail(result.customer, 'technician', result.servic
                 resolved: result.resolved
             });
         } else if (result.sendOrderEmail) {
-            log('INFO', `📧 שולח מייל הזמנה ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל הזמנה ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'order', result.orderDetails, {
                 serviceNumber: result.serviceNumber,
                 orderDetails: result.orderDetails,
@@ -4213,7 +4203,7 @@ await sendCustomerConfirmationEmail(result.customer, 'technician', result.servic
             });
 await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumber, result.orderDetails);
 } else if (result.sendDamageEmail) {
-    log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
+    // log('INFO', `📧 שולח מייל נזק ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'damage', result.problemDescription, {
         serviceNumber: result.serviceNumber,
         problemDescription: result.problemDescription,
@@ -4221,7 +4211,7 @@ await sendCustomerConfirmationEmail(result.customer, 'order', result.serviceNumb
     });
 await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
 } else if (result.sendTrainingEmail) {
-    log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
+    // log('INFO', `📧 שולח מייל הדרכה ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'training', result.trainingRequest, {
         serviceNumber: result.serviceNumber,
         trainingRequest: result.trainingRequest,
@@ -4230,7 +4220,7 @@ await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNum
     });
 await sendCustomerConfirmationEmail(result.customer, 'training', result.serviceNumber, result.trainingRequest);
 } else if (result.sendGeneralOfficeEmail) {
-    log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
+    // log('INFO', `📧 שולח מייל משרד כללי ללקוח ${result.customer.name}`);
     await sendEmail(result.customer, 'general_office', result.officeRequestDetails, {
         serviceNumber: result.serviceNumber,
         officeRequestDetails: result.officeRequestDetails,
@@ -4240,7 +4230,7 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
 }
 
         if (result.sendTrainingEmailImmediate) {
-            log('INFO', `📧 שולח מייל הדרכה מיידי ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל הדרכה מיידי ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'training', result.trainingRequest, {
                 serviceNumber: result.serviceNumber,
                 trainingRequest: result.trainingRequest,
@@ -4250,7 +4240,7 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
         }
         
         if (result.sendTrainingEmailFinal) {
-            log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'training', result.trainingRequest, {
                 serviceNumber: result.serviceNumber,
                 trainingRequest: result.trainingRequest,
@@ -4261,7 +4251,7 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
         }
         
         if (result.sendTrainingEmailExpanded) {
-            log('INFO', `📧 שולח מייל הדרכה מורחב ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל הדרכה מורחב ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'training', `${result.trainingRequest} - דרושה הדרכה מורחבת`, {
                 serviceNumber: result.serviceNumber,
                 trainingRequest: result.trainingRequest,
@@ -4275,7 +4265,7 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
         
         // 🔧 חדש: גם בהדרכה סופית
         if (result.sendTrainingEmailFinal) {
-            log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
+            // log('INFO', `📧 שולח מייל הדרכה סופי ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'training', result.trainingRequest, {
                 serviceNumber: result.serviceNumber,
                 trainingRequest: result.trainingRequest,
@@ -4298,7 +4288,7 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
 // פונקציה להורדת קבצים מ-WhatsApp
 async function downloadWhatsAppFile(downloadUrl, fileName) {
     try {
-        log('INFO', `📥 מוריד קובץ: ${fileName}`);
+        // log('INFO', `📥 מוריד קובץ: ${fileName}`);
         
         const response = await axios({
             method: 'GET',
@@ -4319,7 +4309,7 @@ async function downloadWhatsAppFile(downloadUrl, fileName) {
         
         return new Promise((resolve, reject) => {
             writer.on('finish', () => {
-                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
+                // log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
                 resolve(filePath);
             });
             writer.on('error', (error) => {
