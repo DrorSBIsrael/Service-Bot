@@ -256,6 +256,7 @@ async function runAssistant(threadId, assistantId, instructions = "") {
             
             if (lastMessage.role === 'assistant') {
                 const response = lastMessage.content[0].text.value;
+                log('INFO', '✅ תגובה מהAssistant התקבלה');
                 return response;
             }
         }
@@ -334,6 +335,7 @@ FORMAT:
         );
         
         if (assistantResponse) {
+            log('INFO', '✅ Assistant נתן פתרון מותאם אישית');
             
             // עיצוב התגובה עם הוראות ברורות
             let formattedResponse = `${assistantResponse}`;
@@ -419,6 +421,7 @@ FORMAT:
         );
         
         if (assistantResponse) {
+            log('INFO', '✅ Assistant הכין חומר הדרכה מותאם');
             return {
                 success: true,
                 content: assistantResponse,
@@ -844,7 +847,18 @@ async function handleAutoFinish(phone, customer, stage) {
                     solution: conversation.data.solution,
                     resolved: false,
                     attachments: conversation.data.attachments
-                });
+                }, phone);
+                const workingHours = isWorkingHours();
+                if (workingHours.shouldSendSMS) {
+                    try {
+                        const groupMessage = `🚨 **תקלה דחופה - סיום אוטומטי**\n\n👤 **לקוח:** ${customer.name}\n🏢 **חניון:** ${customer.site}\n📞 **טלפון:** ${phone}\n🆔 **מספר קריאה:** ${serviceNumber}\n\n🔧 **תיאור התקלה:**\n${conversation.data.problemDescription}\n\n⏰ **זמן:** ${getIsraeliTime()}\n\n📝 **סיבה:** לקוח לא השיב תוך 60 שניות`;
+                        
+                        await sendWhatsAppToGroup(groupMessage);
+                        log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name} (סיום אוטומטי)`);
+                    } catch (groupError) {
+                        log('ERROR', '❌ שגיאה בשליחה לקבוצה:', groupError.message);
+                    }
+                }
             }
             
             memory.updateStage(phone, 'completed', customer, {
@@ -1473,6 +1487,7 @@ async function findSolutionFallbackSmart(problemDescription) {
             
             solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
             
+            log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
@@ -1543,6 +1558,7 @@ async function findSolutionFallback(problemDescription) {
             
             solution += `\n\n❓ האם עזר? (כן/לא)`;
             
+            log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
             return { found: true, response: solution, scenario: bestMatch };
         }
         
@@ -1578,6 +1594,7 @@ function isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
+        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -1604,7 +1621,10 @@ class ResponseHandler {
             log('DEBUG', `📋 מידע ראשוני: ${JSON.stringify(initialInfo)}`);
         }
         
-        const conversation = this.memory.getConversation(phone, customer);       
+        const conversation = this.memory.getConversation(phone, customer);
+        
+        log('INFO', `🎯 מעבד: "${message}" ${greeting ? `[ברכה: "${greeting}"]` : ''} - שלב: ${conversation ? conversation.stage : 'אין'}`);
+        
         // ביטול טיימר אוטומטי
         autoFinishManager.clearTimer(phone);
         
@@ -2418,7 +2438,9 @@ class ResponseHandler {
         const allFiles = [...(downloadedFiles || []), ...tempFiles.map(f => f.path)];
         
         // 🔧 בדיקה אם יש גם קובץ וגם מספר יחידה - הצע אישור
-        if ((hasFile || allFiles.length > 0) && unitNumber) {            
+        if ((hasFile || allFiles.length > 0) && unitNumber) {
+            log('INFO', '✅ יש גם קובץ וגם מספר יחידה - מציע אישור');
+            
             // שמור את כל הנתונים ועבור למסך אישור
             this.memory.updateStage(phone, 'damage_confirmation', customer, {
                 ...conversation?.data,
@@ -3039,6 +3061,7 @@ isFinishingWord(message) {
     );
     
     if (containsFinishingWord) {
+        log('INFO', `✅ זוהתה מילת סיום בהודעה: "${message}"`);
         return true;
     }
     
@@ -3238,7 +3261,9 @@ async function sendWhatsApp(phone, message) {
         });
         
         if (response.data && response.data.idMessage) {
+            log('INFO', `✅ WhatsApp נשלח בהצלחה: ${response.data.idMessage}`);
         } else {
+            log('INFO', `✅ WhatsApp נשלח: ${response.data ? 'הצלחה' : 'כשל'}`);
         }
         
         return response.data;
@@ -3265,6 +3290,7 @@ async function sendWhatsAppToGroup(message) {
             chatId: GROUP_CHAT_ID,
             message: message
         });
+        log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
         return response.data;
     } catch (error) {
         log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
@@ -4006,7 +4032,9 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     
     const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
     if (filePath) {
-        downloadedFiles.push(filePath);        
+        downloadedFiles.push(filePath);
+        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
+        
         // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
         const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
         memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
@@ -4049,7 +4077,9 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         // 🔧 חדש: נזקים - בדיקה מיוחדת למספר יחידה בטקסט
         if (conversation?.stage === 'damage_photo') {
             const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
-            if (unitMatch) {                
+            if (unitMatch) {
+                log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
+                
                 const allFilePaths = updatedFiles.map(f => f.path);
                 
                 const result = await responseHandler.generateResponse(
@@ -4300,6 +4330,7 @@ async function downloadWhatsAppFile(downloadUrl, fileName) {
         
         return new Promise((resolve, reject) => {
             writer.on('finish', () => {
+                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
                 resolve(filePath);
             });
             writer.on('error', (error) => {
