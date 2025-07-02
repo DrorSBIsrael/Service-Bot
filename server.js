@@ -848,17 +848,6 @@ async function handleAutoFinish(phone, customer, stage) {
                     resolved: false,
                     attachments: conversation.data.attachments
                 }, phone);
-                const workingHours = isWorkingHours();
-                if (workingHours.shouldSendSMS) {
-                    try {
-                        const groupMessage = `🚨 **תקלה דחופה - סיום אוטומטי**\n\n👤 **לקוח:** ${customer.name}\n🏢 **חניון:** ${customer.site}\n📞 **טלפון:** ${phone}\n🆔 **מספר קריאה:** ${serviceNumber}\n\n🔧 **תיאור התקלה:**\n${conversation.data.problemDescription}\n\n⏰ **זמן:** ${getIsraeliTime()}\n\n📝 **סיבה:** לקוח לא השיב תוך 60 שניות`;
-                        
-                        await sendWhatsAppToGroup(groupMessage);
-                        log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name} (סיום אוטומטי)`);
-                    } catch (groupError) {
-                        log('ERROR', '❌ שגיאה בשליחה לקבוצה:', groupError.message);
-                    }
-                }
             }
             
             memory.updateStage(phone, 'completed', customer, {
