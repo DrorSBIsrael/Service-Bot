@@ -8,7 +8,6 @@ const app = express();
 const OpenAI = require('openai');
 // Google Sheets Integration
 const { google } = require('googleapis');
-
 // הגדרת Google Sheets
 const sheets = google.sheets('v4');
 let auth = null;
@@ -847,7 +846,7 @@ async function handleAutoFinish(phone, customer, stage) {
                     solution: conversation.data.solution,
                     resolved: false,
                     attachments: conversation.data.attachments
-                });
+                }, phone);
             }
             
             memory.updateStage(phone, 'completed', customer, {
@@ -3319,19 +3318,26 @@ function isWorkingHours() {
 }
 
 // שליחת מייל משופרת
-async function sendEmail(customer, type, details, extraData = {}) {
+async function sendEmail(customer, type, details, extraData = {}, phoneUsed = null) {
     try {
         const serviceNumber = extraData.serviceNumber || getNextServiceNumber();
         
-        // רשימת טלפונים
-        const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
-            .filter(phone => phone && phone.trim() !== '')
-            .map((phone, index) => {
-                const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
-                return `<p><strong>${label}:</strong> ${phone}</p>`;
-            })
-            .join('');
-        
+// רשימת טלפונים עם הטלפון שפנה
+let phoneList = '';
+if (phoneUsed) {
+    phoneList += `<p><strong>📱 טלפון שפנה:</strong> ${phoneUsed}</p>`;
+    phoneList += `<br>`;
+}
+
+const allPhones = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
+    .filter(phone => phone && phone.trim() !== '')
+    .map((phone, index) => {
+        const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
+        return `<p><strong>${label}:</strong> ${phone}</p>`;
+    })
+    .join('');
+
+phoneList += allPhones;        
         let subject, emailType, bgColor;
         if (type === 'technician') {
             subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
@@ -3454,9 +3460,10 @@ if (extraData.problemDescription) {
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
-                    `📞 **טלפון:** ${customer.phone}\n` +
+                    `📞 **טלפון שפנה:** ${phone}\n` +
+                    `📞 **טלפון ראשי:** ${customer.phone}\n` +
                     `🆔 **מספר קריאה:** ${extraData.serviceNumber || 'לא זמין'}\n\n` +
-                    `🔧 **תיאור התקלה:**\n${details}\n\n` +
+                    `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
                 
                 await sendWhatsAppToGroup(groupMessage);
@@ -3850,13 +3857,37 @@ if (req.body.senderData && req.body.senderData.sender) {
     const sender = req.body.senderData.sender;
     
     // בדיקות מרובות לקבוצות
-    if (sender.includes('@g.us') || 
-        sender.includes('-') || 
-        sender.match(/^\d+-\d+@/)) {
+// 🔧 בדיקות מרובות לקבוצות - מורחב
+if (sender.includes('@g.us') || 
+    sender.includes('-') || 
+    sender.match(/^\d+-\d+@/) ||
+    sender.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
+    
+    log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+    return res.status(200).json({ status: 'OK - group message ignored' });
+}
+
+// 🔧 בדיקה נוספת במקום אחר במבנה הנתונים
+if (req.body.messageData && req.body.messageData.chatId) {
+    const chatId = req.body.messageData.chatId;
+    
+    if (chatId.includes('@g.us') || 
+        chatId.includes('-') || 
+        chatId.match(/^\d+-\d+@/) ||
+        chatId.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
         
-        log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+        log('INFO', `🚫 מתעלם מהודעה מקבוצה (chatId): ${chatId}`);
         return res.status(200).json({ status: 'OK - group message ignored' });
     }
+}
+
+// 🔧 בדיקה נוספת של ID הקבוצה הספציפית
+const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
+
+if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
+    log('INFO', `🚫 מתעלם מהודעה מקבוצת שיידט הספציפית`);
+    return res.status(200).json({ status: 'OK - company group ignored' });
+}
 }
         
         // בדיקה נוספת - אם זה הטלפון של המערכת עצמה
@@ -3982,12 +4013,10 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
         await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
         return res.status(200).json({ status: 'OK - file limit reached' });
     }
+
+    const originalFileName = messageData.fileMessageData.fileName || `file_${Date.now()}.file`;
+    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, originalFileName);    
     
-    const timestamp = Date.now();
-    const fileExtension = getFileExtension(messageData.fileMessageData.fileName || '', messageData.fileMessageData.mimeType || '');
-    const fileName = `file_${customer ? customer.id : 'unknown'}_${timestamp}${fileExtension}`;
-    
-    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, fileName);
     if (filePath) {
         downloadedFiles.push(filePath);
         log('INFO', `✅ ${fileType} הורד: ${fileName}`);
@@ -4025,7 +4054,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     solution: result.solution,
                     resolved: result.resolved,
                     attachments: result.attachments
-                });
+                }, phone);
                 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
             }
             return res.status(200).json({ status: 'OK - problem processed with file' });
@@ -4162,7 +4191,7 @@ if (tempFiles.length > 0) {
                 solution: result.solution,
                 resolved: result.resolved,
                 attachments: result.attachments
-            });
+            }, phone);
 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
             log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
@@ -4263,37 +4292,86 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
     }
 });
 
-// פונקציה להורדת קבצים מ-WhatsApp
-async function downloadWhatsAppFile(downloadUrl, fileName) {
+// 🔧 שלב 2: החלף את הפונקציה downloadWhatsAppFile הקיימת בזו
+async function downloadWhatsAppFile(downloadUrl, originalFileName) {
     try {
-        log('INFO', `📥 מוריד קובץ: ${fileName}`);
+        log('INFO', `📥 מוריד קובץ: ${originalFileName}`);
         
         const response = await axios({
             method: 'GET',
             url: downloadUrl,
-            responseType: 'stream'
+            responseType: 'stream',
+            timeout: 30000 // 30 שניות timeout
         });
         
-        const filePath = path.join(__dirname, 'uploads', fileName);
+        // 🔧 תיקון: יצירת שם קובץ בטוח
+        const timestamp = Date.now();
+        const fileExtension = path.extname(originalFileName) || '.file';
+        const baseName = path.basename(originalFileName, fileExtension).substring(0, 20); // מגביל אורך
         
-        // יצירת תיקיית uploads אם לא קיימת
+        // ניקוי תווים בעייתיים
+        const safeName = baseName.replace(/[\/\\:*?"<>|]/g, '_');
+        const fileName = `${safeName}_${timestamp}${fileExtension}`;
+        
+        log('DEBUG', `📝 שם קובץ מקורי: ${originalFileName} -> שם בטוח: ${fileName}`);
+        
+        // 🔧 תיקון: וידוא קיום תיקיית uploads
         const uploadsDir = path.join(__dirname, 'uploads');
         if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
+            try {
+                fs.mkdirSync(uploadsDir, { recursive: true });
+                log('INFO', `📁 תיקיית uploads נוצרה: ${uploadsDir}`);
+            } catch (mkdirError) {
+                log('ERROR', `❌ שגיאה ביצירת תיקייה: ${mkdirError.message}`);
+                throw mkdirError;
+            }
         }
+        
+        const filePath = path.join(uploadsDir, fileName);
+        
+        // 🔧 תיקון: בדיקה אחרונה של הנתיב
+        if (!filePath.startsWith(uploadsDir)) {
+            throw new Error('נתיב קובץ לא בטוח');
+        }
+        
+        log('DEBUG', `📍 נתיב מלא: ${filePath}`);
         
         const writer = fs.createWriteStream(filePath);
         response.data.pipe(writer);
         
         return new Promise((resolve, reject) => {
             writer.on('finish', () => {
-                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
-                resolve(filePath);
+                // 🔧 בדיקה שהקובץ נוצר בהצלחה
+                if (fs.existsSync(filePath)) {
+                    const stats = fs.statSync(filePath);
+                    log('INFO', `✅ קובץ הורד בהצלחה: ${fileName} (${stats.size} bytes)`);
+                    resolve(filePath);
+                } else {
+                    log('ERROR', `❌ קובץ לא נמצא אחרי הורדה: ${filePath}`);
+                    reject(new Error('קובץ לא נוצר'));
+                }
             });
+            
             writer.on('error', (error) => {
                 log('ERROR', `❌ שגיאה בכתיבת קובץ: ${error.message}`);
+                // נסה למחוק קובץ חלקי
+                try {
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                    }
+                } catch (unlinkError) {
+                    log('ERROR', `❌ שגיאה במחיקת קובץ חלקי: ${unlinkError.message}`);
+                }
                 reject(error);
             });
+            
+            // 🔧 timeout נוסף למקרה של תקיעה
+            setTimeout(() => {
+                if (!writer.destroyed) {
+                    writer.destroy();
+                    reject(new Error('Timeout בהורדת קובץ'));
+                }
+            }, 45000); // 45 שניות
         });
         
     } catch (error) {
@@ -4301,6 +4379,17 @@ async function downloadWhatsAppFile(downloadUrl, fileName) {
         return null;
     }
 }
+// פונקציות עזר לתאימות עם הקוד הקיים
+function getFileType(fileName, mimeType) {
+    const result = fileHandler.identifyFile(fileName, mimeType);
+    return result.type;
+}
+
+function getFileExtension(fileName, mimeType) {
+    const result = fileHandler.identifyFile(fileName, mimeType);
+    return result.ext;
+}
+
 // הפעלת שרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
