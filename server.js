@@ -847,7 +847,7 @@ async function handleAutoFinish(phone, customer, stage) {
                     solution: conversation.data.solution,
                     resolved: false,
                     attachments: conversation.data.attachments
-                });
+                }, phone);
             }
             
             memory.updateStage(phone, 'completed', customer, {
@@ -3319,19 +3319,26 @@ function isWorkingHours() {
 }
 
 // שליחת מייל משופרת
-async function sendEmail(customer, type, details, extraData = {}) {
+async function sendEmail(customer, type, details, extraData = {}, phoneUsed = null) {
     try {
         const serviceNumber = extraData.serviceNumber || getNextServiceNumber();
         
-        // רשימת טלפונים
-        const phoneList = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
-            .filter(phone => phone && phone.trim() !== '')
-            .map((phone, index) => {
-                const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
-                return `<p><strong>${label}:</strong> ${phone}</p>`;
-            })
-            .join('');
-        
+// רשימת טלפונים עם הטלפון שפנה
+let phoneList = '';
+if (phoneUsed) {
+    phoneList += `<p><strong>📱 טלפון שפנה:</strong> ${phoneUsed}</p>`;
+    phoneList += `<br>`;
+}
+
+const allPhones = [customer.phone, customer.phone1, customer.phone2, customer.phone3, customer.phone4]
+    .filter(phone => phone && phone.trim() !== '')
+    .map((phone, index) => {
+        const label = index === 0 ? 'טלפון ראשי' : `טלפון ${index}`;
+        return `<p><strong>${label}:</strong> ${phone}</p>`;
+    })
+    .join('');
+
+phoneList += allPhones;        
         let subject, emailType, bgColor;
         if (type === 'technician') {
             subject = `🚨 קריאת טכנאי ${serviceNumber} - ${customer.name} (${customer.site})`;
@@ -3454,9 +3461,10 @@ if (extraData.problemDescription) {
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
-                    `📞 **טלפון:** ${customer.phone}\n` +
+                    `📞 **טלפון שפנה:** ${phone}\n` +
+                    `📞 **טלפון ראשי:** ${customer.phone}\n` +
                     `🆔 **מספר קריאה:** ${extraData.serviceNumber || 'לא זמין'}\n\n` +
-                    `🔧 **תיאור התקלה:**\n${details}\n\n` +
+                    `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
                 
                 await sendWhatsAppToGroup(groupMessage);
@@ -3850,13 +3858,37 @@ if (req.body.senderData && req.body.senderData.sender) {
     const sender = req.body.senderData.sender;
     
     // בדיקות מרובות לקבוצות
-    if (sender.includes('@g.us') || 
-        sender.includes('-') || 
-        sender.match(/^\d+-\d+@/)) {
+// 🔧 בדיקות מרובות לקבוצות - מורחב
+if (sender.includes('@g.us') || 
+    sender.includes('-') || 
+    sender.match(/^\d+-\d+@/) ||
+    sender.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
+    
+    log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+    return res.status(200).json({ status: 'OK - group message ignored' });
+}
+
+// 🔧 בדיקה נוספת במקום אחר במבנה הנתונים
+if (req.body.messageData && req.body.messageData.chatId) {
+    const chatId = req.body.messageData.chatId;
+    
+    if (chatId.includes('@g.us') || 
+        chatId.includes('-') || 
+        chatId.match(/^\d+-\d+@/) ||
+        chatId.match(/\d{10,15}-\d{10,15}@g\.us$/)) {
         
-        log('INFO', `🚫 מתעלם מהודעה מקבוצה: ${sender}`);
+        log('INFO', `🚫 מתעלם מהודעה מקבוצה (chatId): ${chatId}`);
         return res.status(200).json({ status: 'OK - group message ignored' });
     }
+}
+
+// 🔧 בדיקה נוספת של ID הקבוצה הספציפית
+const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
+
+if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
+    log('INFO', `🚫 מתעלם מהודעה מקבוצת שיידט הספציפית`);
+    return res.status(200).json({ status: 'OK - company group ignored' });
+}
 }
         
         // בדיקה נוספת - אם זה הטלפון של המערכת עצמה
@@ -4025,7 +4057,7 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
                     solution: result.solution,
                     resolved: result.resolved,
                     attachments: result.attachments
-                });
+                }, phone);
                 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
             }
             return res.status(200).json({ status: 'OK - problem processed with file' });
@@ -4162,7 +4194,7 @@ if (tempFiles.length > 0) {
                 solution: result.solution,
                 resolved: result.resolved,
                 attachments: result.attachments
-            });
+            }, phone);
 await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         } else if (result.sendSummaryEmail) {
             log('INFO', `📧 שולח מייל סיכום ללקוח ${result.customer.name}`);
