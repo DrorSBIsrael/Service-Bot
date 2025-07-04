@@ -8,7 +8,7 @@ const app = express();
 const OpenAI = require('openai');
 // Google Sheets Integration
 const { google } = require('googleapis');
-
+const FileHandler = require('./FileHandler');
 // הגדרת Google Sheets
 const sheets = google.sheets('v4');
 let auth = null;
@@ -3223,7 +3223,7 @@ class ResponseHandlerExtension {
 ResponseHandler.prototype.isMenuRequest = ResponseHandlerExtension.isMenuRequest;
 
 const responseHandler = new ResponseHandler(memory, customers);
-
+const fileHandler = new FileHandler();
 // שליחת WhatsApp
 async function sendWhatsApp(phone, message) {
     const instanceId = '7105253183';
@@ -4297,42 +4297,20 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
 
 // פונקציה להורדת קבצים מ-WhatsApp
 async function downloadWhatsAppFile(downloadUrl, fileName) {
-    try {
-        log('INFO', `📥 מוריד קובץ: ${fileName}`);
-        
-        const response = await axios({
-            method: 'GET',
-            url: downloadUrl,
-            responseType: 'stream'
-        });
-        
-        const filePath = path.join(__dirname, 'uploads', fileName);
-        
-        // יצירת תיקיית uploads אם לא קיימת
-        const uploadsDir = path.join(__dirname, 'uploads');
-        if (!fs.existsSync(uploadsDir)) {
-            fs.mkdirSync(uploadsDir, { recursive: true });
-        }
-        
-        const writer = fs.createWriteStream(filePath);
-        response.data.pipe(writer);
-        
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => {
-                log('INFO', `✅ קובץ הורד בהצלחה: ${fileName}`);
-                resolve(filePath);
-            });
-            writer.on('error', (error) => {
-                log('ERROR', `❌ שגיאה בכתיבת קובץ: ${error.message}`);
-                reject(error);
-            });
-        });
-        
-    } catch (error) {
-        log('ERROR', `❌ שגיאה בהורדת קובץ: ${error.message}`);
-        return null;
-    }
+    return await fileHandler.downloadFromWhatsApp(downloadUrl, fileName);
 }
+
+// פונקציות עזר לתאימות עם הקוד הקיים
+function getFileType(fileName, mimeType) {
+    const result = fileHandler.identifyFile(fileName, mimeType);
+    return result.type;
+}
+
+function getFileExtension(fileName, mimeType) {
+    const result = fileHandler.identifyFile(fileName, mimeType);
+    return result.ext;
+}
+
 // הפעלת שרת
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
