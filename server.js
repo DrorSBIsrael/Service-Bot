@@ -847,7 +847,7 @@ async function handleAutoFinish(phone, customer, stage) {
                     solution: conversation.data.solution,
                     resolved: false,
                     attachments: conversation.data.attachments
-                }, phone);
+                });
             }
             
             memory.updateStage(phone, 'completed', customer, {
