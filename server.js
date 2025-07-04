@@ -4067,38 +4067,55 @@ if (filePath) {
         return res.status(200).json({ status: 'OK - problem processed with file' });
     }
         
-        // 🔧 חדש: נזקים - בדיקה מיוחדת למספר יחידה בטקסט
-        if (conversation?.stage === 'damage_photo') {
-            const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
-            if (unitMatch) {
-                log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
-                
-                const allFilePaths = updatedFiles.map(f => f.path);
-                
-                const result = await responseHandler.generateResponse(
-                    messageText, 
-                    phone, 
-                    customer, 
-                    hasFile, 
-                    fileType, 
-                    allFilePaths
-                );
-                
-                await sendWhatsApp(phone, result.response);
-                memory.addMessage(phone, result.response, 'hadar', result.customer);
-                
-                if (result.sendDamageEmail) {
-                    await sendEmail(result.customer, 'damage', result.problemDescription, {
-                        serviceNumber: result.serviceNumber,
-                        problemDescription: result.problemDescription,
-                        attachments: allFilePaths
-                    });
-                    await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
-                }
-                
-                memory.updateStage(phone, 'completed', customer, { tempFiles: [] });
-                return res.status(200).json({ status: 'OK - damage processed with all files' });
-            }
+// 🔧 תיקון: נזקים - בדיקה מיוחדת למספר יחידה בטקסט
+if (conversation?.stage === 'damage_photo') {
+            
+    // 🚫 התעלם משמות קבצים
+    if (messageText.includes('.jpg') || messageText.includes('.png') || 
+        messageText.includes('.pdf') || messageText.includes('.mp4') ||
+        messageText.includes('.jpeg') || messageText.includes('.gif') ||
+        (messageText.includes('-') && messageText.length > 20)) {
+        
+        log('INFO', `📎 זוהה שם קובץ: ${messageText} - ממתין למספר יחידה`);
+        
+        // זה שם קובץ - רק שמור ותבקש מספר יחידה
+        autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
+        
+        await sendWhatsApp(phone, `✅ **${detectedFileType} התקבל!** (${updatedFiles.length}/4)\n\n📝 **עכשיו כתוב מספר היחידה:**\nדוגמה: "יחידה 101" או "מחסום 208"\n\n✏️ **לסיום:** כתוב מספר יחידה + "סיום"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`);
+        return res.status(200).json({ status: 'OK - damage file received, waiting for unit number' });
+    }
+    
+    // 🔧 רק אם זה לא שם קובץ - תמשיך לחפש מספר יחידה
+    const unitMatch = messageText.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:חמסון\s*)?(?:מספר\s*)?(\d{1,3})/i);
+    if (unitMatch) {
+        log('INFO', `🎯 מצאתי מספר יחידה: ${unitMatch[1]} - מעבד מיד עם ${updatedFiles.length} קבצים`);
+        
+        const allFilePaths = updatedFiles.map(f => f.path);
+        
+        const result = await responseHandler.generateResponse(
+            messageText, 
+            phone, 
+            customer, 
+            hasFile, 
+            detectedFileType, 
+            allFilePaths
+        );
+        
+        await sendWhatsApp(phone, result.response);
+        memory.addMessage(phone, result.response, 'hadar', result.customer);
+        
+        if (result.sendDamageEmail) {
+            await sendEmail(result.customer, 'damage', result.problemDescription, {
+                serviceNumber: result.serviceNumber,
+                problemDescription: result.problemDescription,
+                attachments: allFilePaths
+            });
+            await sendCustomerConfirmationEmail(result.customer, 'damage', result.serviceNumber, result.problemDescription);
+        }
+        
+        memory.updateStage(phone, 'completed', customer, { tempFiles: [] });
+        return res.status(200).json({ status: 'OK - damage processed with all files' });
+    }
             
             // אם אין מספר יחידה - הנחיות עם טיימר
             autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
