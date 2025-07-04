@@ -4008,57 +4008,64 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     // 🔧 חדש: טיפול מיוחד לכל שלב
     const existingFiles = conversation?.data?.tempFiles || [];
     
-    // בדיקה שלא חורגים מ-4 קבצים בסה"כ
-    if (existingFiles.length >= 4) {
-        await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
-        return res.status(200).json({ status: 'OK - file limit reached' });
-    }
+// בדיקה שלא חורגים מ-4 קבצים בסה"כ
+if (existingFiles.length >= 4) {
+    await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
+    return res.status(200).json({ status: 'OK - file limit reached' });
+}
 
-    const originalFileName = messageData.fileMessageData.fileName || `file_${Date.now()}.file`;
-    const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, originalFileName);    
+const originalFileName = messageData.fileMessageData.fileName || `file_${Date.now()}.file`;
+const filePath = await downloadWhatsAppFile(messageData.fileMessageData.downloadUrl, originalFileName);    
+
+if (filePath) {
+    downloadedFiles.push(filePath);
     
-    if (filePath) {
-        downloadedFiles.push(filePath);
-        log('INFO', `✅ ${fileType} הורד: ${fileName}`);
+    // 🔧 תיקון: הגדרת fileType מתוך הקובץ
+    const detectedFileType = getFileType(originalFileName, messageData.fileMessageData.mimeType);
+    
+    log('INFO', `✅ ${detectedFileType} הורד: ${path.basename(filePath)}`);
+    
+    // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
+    const updatedFiles = [...existingFiles, { 
+        path: filePath, 
+        type: detectedFileType, 
+        name: path.basename(filePath) 
+    }];
+    
+    memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
+        ...conversation?.data, 
+        tempFiles: updatedFiles 
+    });
+
+    log('INFO', `📁 זיכרון עודכן: ${updatedFiles.length} קבצים`);
+    
+    // תקלות - עבד מיד עם הקובץ
+    if (conversation?.stage === 'problem_description') {
+        const result = await responseHandler.generateResponse(
+            messageText, 
+            phone, 
+            customer, 
+            hasFile, 
+            detectedFileType, 
+            [filePath]
+        );
         
-        // 🔧 תיקון: שמירת הקובץ בזיכרון הזמני
-        const updatedFiles = [...existingFiles, { path: filePath, type: fileType, name: fileName }];
-        memory.updateStage(phone, conversation?.stage || 'identifying', customer, { 
-            ...conversation?.data, 
-            tempFiles: updatedFiles 
-        });
+        await sendWhatsApp(phone, result.response);
+        memory.addMessage(phone, result.response, 'hadar', result.customer);
         
-        log('INFO', `📁 זיכרון עודכן: ${updatedFiles.length} קבצים (${updatedFiles.map(f => f.type).join(', ')})`);
-        
-        // 🔧 חדש: טיפול חכם לפי שלב
-        
-        // תקלות - עבד מיד עם הקובץ
-        if (conversation?.stage === 'problem_description') {
-            const result = await responseHandler.generateResponse(
-                messageText, 
-                phone, 
-                customer, 
-                hasFile, 
-                fileType, 
-                [filePath]
-            );
-            
-            await sendWhatsApp(phone, result.response);
-            memory.addMessage(phone, result.response, 'hadar', result.customer);
-            
-            // שליחת מיילים לפי הצורך
-            if (result.sendTechnicianEmail) {
-                await sendEmail(result.customer, 'technician', messageText, {
-                    serviceNumber: result.serviceNumber,
-                    problemDescription: result.problemDescription,
-                    solution: result.solution,
-                    resolved: result.resolved,
-                    attachments: result.attachments
-                }, phone);
-                await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
-            }
-            return res.status(200).json({ status: 'OK - problem processed with file' });
+        // שליחת מיילים לפי הצורך
+        if (result.sendTechnicianEmail) {
+            await sendEmail(result.customer, 'technician', messageText, {
+                serviceNumber: result.serviceNumber,
+                problemDescription: result.problemDescription,
+                solution: result.solution,
+                resolved: result.resolved,
+                attachments: result.attachments
+            }, phone);
+            await sendCustomerConfirmationEmail(result.customer, 'technician', result.serviceNumber, result.problemDescription);
         }
+        return res.status(200).json({ status: 'OK - problem processed with file' });
+    }
         
         // 🔧 חדש: נזקים - בדיקה מיוחדת למספר יחידה בטקסט
         if (conversation?.stage === 'damage_photo') {
@@ -4292,102 +4299,42 @@ await sendCustomerConfirmationEmail(result.customer, 'general_office', result.se
     }
 });
 
-// 🔧 שלב 2: החלף את הפונקציה downloadWhatsAppFile הקיימת בזו
-async function downloadWhatsAppFile(downloadUrl, originalFileName) {
+// פונקציה להורדת קבצים מ-WhatsApp - יחידה ופשוטה
+async function downloadWhatsAppFile(downloadUrl, fileName) {
     try {
-        log('INFO', `📥 מוריד קובץ: ${originalFileName}`);
+        log('INFO', `📥 מוריד קובץ: ${fileName}`);
         
         const response = await axios({
             method: 'GET',
             url: downloadUrl,
-            responseType: 'stream',
-            timeout: 30000 // 30 שניות timeout
+            responseType: 'stream'
         });
         
-        // 🔧 תיקון: יצירת שם קובץ בטוח
-        const timestamp = Date.now();
-        const fileExtension = path.extname(originalFileName) || '.file';
-        const baseName = path.basename(originalFileName, fileExtension).substring(0, 20); // מגביל אורך
-        
-        // ניקוי תווים בעייתיים
-        const safeName = baseName.replace(/[\/\\:*?"<>|]/g, '_');
-        const fileName = `${safeName}_${timestamp}${fileExtension}`;
-        
-        log('DEBUG', `📝 שם קובץ מקורי: ${originalFileName} -> שם בטוח: ${fileName}`);
-        
-        // 🔧 תיקון: וידוא קיום תיקיית uploads
+        // וידוא תיקיית uploads
         const uploadsDir = path.join(__dirname, 'uploads');
         if (!fs.existsSync(uploadsDir)) {
-            try {
-                fs.mkdirSync(uploadsDir, { recursive: true });
-                log('INFO', `📁 תיקיית uploads נוצרה: ${uploadsDir}`);
-            } catch (mkdirError) {
-                log('ERROR', `❌ שגיאה ביצירת תיקייה: ${mkdirError.message}`);
-                throw mkdirError;
-            }
+            fs.mkdirSync(uploadsDir, { recursive: true });
         }
         
         const filePath = path.join(uploadsDir, fileName);
-        
-        // 🔧 תיקון: בדיקה אחרונה של הנתיב
-        if (!filePath.startsWith(uploadsDir)) {
-            throw new Error('נתיב קובץ לא בטוח');
-        }
-        
-        log('DEBUG', `📍 נתיב מלא: ${filePath}`);
-        
         const writer = fs.createWriteStream(filePath);
         response.data.pipe(writer);
         
         return new Promise((resolve, reject) => {
             writer.on('finish', () => {
-                // 🔧 בדיקה שהקובץ נוצר בהצלחה
-                if (fs.existsSync(filePath)) {
-                    const stats = fs.statSync(filePath);
-                    log('INFO', `✅ קובץ הורד בהצלחה: ${fileName} (${stats.size} bytes)`);
-                    resolve(filePath);
-                } else {
-                    log('ERROR', `❌ קובץ לא נמצא אחרי הורדה: ${filePath}`);
-                    reject(new Error('קובץ לא נוצר'));
-                }
+                log('INFO', `✅ קובץ הורד: ${fileName}`);
+                resolve(filePath);
             });
-            
             writer.on('error', (error) => {
-                log('ERROR', `❌ שגיאה בכתיבת קובץ: ${error.message}`);
-                // נסה למחוק קובץ חלקי
-                try {
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
-                } catch (unlinkError) {
-                    log('ERROR', `❌ שגיאה במחיקת קובץ חלקי: ${unlinkError.message}`);
-                }
+                log('ERROR', `❌ שגיאה: ${error.message}`);
                 reject(error);
             });
-            
-            // 🔧 timeout נוסף למקרה של תקיעה
-            setTimeout(() => {
-                if (!writer.destroyed) {
-                    writer.destroy();
-                    reject(new Error('Timeout בהורדת קובץ'));
-                }
-            }, 45000); // 45 שניות
         });
         
     } catch (error) {
-        log('ERROR', `❌ שגיאה בהורדת קובץ: ${error.message}`);
+        log('ERROR', `❌ הורדה נכשלה: ${error.message}`);
         return null;
     }
-}
-// פונקציות עזר לתאימות עם הקוד הקיים
-function getFileType(fileName, mimeType) {
-    const result = fileHandler.identifyFile(fileName, mimeType);
-    return result.type;
-}
-
-function getFileExtension(fileName, mimeType) {
-    const result = fileHandler.identifyFile(fileName, mimeType);
-    return result.ext;
 }
 
 // הפעלת שרת
