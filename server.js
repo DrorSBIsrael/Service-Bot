@@ -2135,8 +2135,8 @@ class ResponseHandler {
         
         // 🔧 חדש: טיפול באישור תקלה
         if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-            const problemDescription = conversation?.data?.pendingProblem;
-            
+                const problemDescription = conversation?.data?.pendingProblem;
+                
             if (!problemDescription) {
                 return {
                     response: `❌ **לא נמצאה תקלה לאישור**\n\nאנא תאר את התקלה\n\n📞 039792365`,
@@ -2146,55 +2146,55 @@ class ResponseHandler {
             }
             
             // עבד את התקלה שנשמרה
-            const serviceNumber = await getNextServiceNumber();
-            
-            this.memory.updateStage(phone, 'processing_problem', customer, {
-                serviceNumber: serviceNumber,
-                problemDescription: problemDescription,
-                attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-            });
-            
-            let solution;
-            if (process.env.OPENAI_ASSISTANT_ID) {
-                solution = await handleProblemWithAssistant(problemDescription, customer);
-            } else {
-                solution = await findSolution(problemDescription, customer);
-            }
-            
-            if (solution.found) {
-                this.memory.updateStage(phone, 'waiting_feedback', customer, {
+                const serviceNumber = await getNextServiceNumber();
+                
+                this.memory.updateStage(phone, 'processing_problem', customer, {
                     serviceNumber: serviceNumber,
-                    problemDescription: problemDescription,
-                    solution: solution.response,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || [],
-                    threadId: solution.threadId || null,
-                    source: solution.source || 'database'
-                });
-                
-                autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
-    
-                let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
-                
-                return {
-                    response: responseMessage,
-                    stage: 'waiting_feedback',
-                    customer: customer,
-                    serviceNumber: serviceNumber
-                };
-            } else {
-                this.memory.updateStage(phone, 'completed', customer);
-                
-                return {
-                    response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                    stage: 'completed',
-                    customer: customer,
-                    serviceNumber: serviceNumber,
-                    sendTechnicianEmail: true,
                     problemDescription: problemDescription,
                     attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-                };
+                });
+                
+                let solution;
+                if (process.env.OPENAI_ASSISTANT_ID) {
+                    solution = await handleProblemWithAssistant(problemDescription, customer);
+                } else {
+                    solution = await findSolution(problemDescription, customer);
+                }
+                
+                if (solution.found) {
+                    this.memory.updateStage(phone, 'waiting_feedback', customer, {
+                        serviceNumber: serviceNumber,
+                        problemDescription: problemDescription,
+                        solution: solution.response,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || [],
+                        threadId: solution.threadId || null,
+                        source: solution.source || 'database'
+                    });
+                    
+                    autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
+        
+                    let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+                    
+                    return {
+                        response: responseMessage,
+                        stage: 'waiting_feedback',
+                        customer: customer,
+                        serviceNumber: serviceNumber
+                    };
+                } else {
+                    this.memory.updateStage(phone, 'completed', customer);
+                    
+                    return {
+                        response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                        stage: 'completed',
+                        customer: customer,
+                        serviceNumber: serviceNumber,
+                        sendTechnicianEmail: true,
+                        problemDescription: problemDescription,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                    };
+                }
             }
-        }
     
         // 🔧 טיפול בתוספות לתקלה קיימת
         if (conversation?.stage === 'problem_confirmation' && conversation?.data?.pendingProblem) {
@@ -2288,7 +2288,7 @@ class ResponseHandler {
         
         // 🔧 חדש: טיפול באישור נזק
         if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-            const damageData = conversation?.data?.pendingDamage;
+                const damageData = conversation?.data?.pendingDamage;
             
             if (!damageData || !damageData.description || !damageData.unitNumber) {
                 return {
@@ -2297,23 +2297,23 @@ class ResponseHandler {
                     customer: customer
                 };
             }
-            
-            autoFinishManager.clearTimer(phone);
-            const serviceNumber = await getNextServiceNumber();
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            const allFiles = conversation?.data?.tempFiles?.map(f => f.path) || [];
-            
-            return {
-                response: `✅ **דיווח נזק נשלח בהצלחה!**\n\nיחידה ${damageData.unitNumber} - ${damageData.description}\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                stage: 'completed',
-                customer: customer,
-                serviceNumber: serviceNumber,
-                sendDamageEmail: true,
-                problemDescription: `נזק ביחידה ${damageData.unitNumber} - ${damageData.description}`,
-                attachments: allFiles
-            };
-        }
+                
+                autoFinishManager.clearTimer(phone);
+                const serviceNumber = await getNextServiceNumber();
+                this.memory.updateStage(phone, 'completed', customer);
+                
+                const allFiles = conversation?.data?.tempFiles?.map(f => f.path) || [];
+                
+                return {
+                    response: `✅ **דיווח נזק נשלח בהצלחה!**\n\nיחידה ${damageData.unitNumber} - ${damageData.description}\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    customer: customer,
+                    serviceNumber: serviceNumber,
+                    sendDamageEmail: true,
+                    problemDescription: `נזק ביחידה ${damageData.unitNumber} - ${damageData.description}`,
+                    attachments: allFiles
+                };
+            }
         
         // 🔧 טיפול בתוספות לנזק קיים
         if (conversation?.stage === 'damage_confirmation' && conversation?.data?.pendingDamage) {
@@ -2428,7 +2428,7 @@ class ResponseHandler {
             
             // אם יש הכל - סיים ישירות (התנהגות ישנה)
             autoFinishManager.clearTimer(phone);
-            const serviceNumber = await getNextServiceNumber();
+                const serviceNumber = await getNextServiceNumber();
             this.memory.updateStage(phone, 'completed', customer);
             
             const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
@@ -2479,8 +2479,8 @@ class ResponseHandler {
             }
             
             autoFinishManager.startTimer(phone, customer, 'damage_photo', handleAutoFinish);
-            
-            return {
+                    
+                    return {
                 response: `✅ **${fileType} התקבל!**\n\nעכשיו אני צריכה את מספר היחידה\n\nדוגמה: "יחידה 101" או "מחסום 208"\n\n✏️ **לאישור:** כתוב מספר יחידה + "אישור"\n✏️ **לסיום מיידי:** כתוב מספר יחידה + "סיום"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
                 stage: 'damage_photo',
                 customer: customer
@@ -2588,10 +2588,10 @@ class ResponseHandler {
             if (specialResult && specialResult.success) {
                 // טיפול מיוחד הצליח (כמו הדרכה מיידית)
                 this.memory.updateStage(phone, `waiting_${requestType}_feedback`, customer, {
-                    serviceNumber: serviceNumber,
+                        serviceNumber: serviceNumber,
                     [`${requestType}Request`]: pendingData,
                     [`${requestType}Content`]: specialResult.content,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
                 });
                 
                 autoFinishManager.startTimer(phone, customer, `waiting_${requestType}_feedback`, handleAutoFinish);
@@ -2617,17 +2617,17 @@ class ResponseHandler {
                 }
                 
                 return result;
-            } else {
+                } else {
                 // טיפול רגיל - שליחה למייל
-                this.memory.updateStage(phone, 'completed', customer);
-                
+                    this.memory.updateStage(phone, 'completed', customer);
+                    
                 const emailData = {
                     response: `✅ **${labels.sentSuccess}**\n\n${icons.doc} **${labels.detailsLabel}:** ${pendingData}\n\n${icons.email} ${labels.emailMessage}\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                    stage: 'completed',
-                    customer: customer,
-                    serviceNumber: serviceNumber,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-                };
+                        stage: 'completed',
+                        customer: customer,
+                        serviceNumber: serviceNumber,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                    };
                 
                 // הוסף את השדה הנכון לשליחת מייל
                 emailData[`send${emailType}Email`] = true;
@@ -2749,160 +2749,77 @@ class ResponseHandler {
     }
     // handleTrainingRequest 
     async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
-        const msg = message.toLowerCase().trim();
-        const conversation = this.memory.getConversation(phone, customer);
-        
-        if (this.isMenuRequest(message)) {
-            this.memory.updateStage(phone, 'menu', customer);
-            autoFinishManager.clearTimer(phone);
-            return {
-                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                stage: 'menu',
-                customer: customer
-            };
-        }
-        
-        // 🔧 חדש: טיפול באישור הדרכה
-        if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-            const trainingRequest = conversation?.data?.pendingTraining;
-            
-            if (!trainingRequest) {
-                return {
-                    response: `❌ **לא נמצאה בקשת הדרכה לאישור**\n\nאנא כתוב על איזה נושא אתה זקוק להדרכה\n\n📞 039792365`,
-                    stage: 'training_request',
-                    customer: customer
-                };
-            }
-            
-            const serviceNumber = await getNextServiceNumber();
-            
-            let trainingContent = null;
-            if (process.env.OPENAI_ASSISTANT_ID) {
-                trainingContent = await handleTrainingWithAssistant(trainingRequest, customer);
-            }
-            
-            if (trainingContent && trainingContent.success) {
-                this.memory.updateStage(phone, 'waiting_training_feedback', customer, {
-                    serviceNumber: serviceNumber,
-                    trainingRequest: trainingRequest,
-                    trainingContent: trainingContent.content,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-                });
+        const config = {
+            stageName: 'training_request',
+            confirmationStage: 'training_confirmation',
+            feedbackStage: 'waiting_training_feedback',
+            pendingField: 'pendingTraining',
+            messageMinLength: 5,
+            excludeWords: ['הדרכה', '4'],
+            fileResponse: `✅ **קובץ התקבל!**\n\nכתוב על איזה נושא אתה זקוק להדרכה\n\n📎 **אפשר לצרף עוד קבצים**\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            confirmationResponse: (message, filesText) => `📚 **הבנתי את בקשת ההדרכה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד ההדרכה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            updateResponse: (updatedMessage) => `📚 **בקשת הדרכה עודכנה:**\n\n"${updatedMessage}"\n\n✅ **כתוב "אישור" לעיבוד ההדרכה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            emptyRequestResponse: `❌ **לא נמצאה בקשת הדרכה לאישור**\n\nאנא כתוב על איזה נושא אתה זקוק להדרכה\n\n📞 039792365`,
+            defaultResponse: `📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            handleApproval: async (conversation, customer, phone) => {
+                const trainingRequest = conversation?.data?.pendingTraining;
+                const serviceNumber = await getNextServiceNumber();
                 
-                autoFinishManager.startTimer(phone, customer, 'waiting_training_feedback', handleAutoFinish);
-                
-                let immediateResponse = `📚 **הדרכה אושרה ומעובדת:**\n\n${trainingContent.content}`;
-                
-                let needsEmail = false;
-                if (immediateResponse.length > 4000) {
-                    const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
-                    immediateResponse = `📚 **הדרכה אושרה ומעובדת:**\n\n${shortContent}`;
-                    needsEmail = true;
+                let trainingContent = null;
+                if (process.env.OPENAI_ASSISTANT_ID) {
+                    trainingContent = await handleTrainingWithAssistant(trainingRequest, customer);
                 }
                 
-                immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
-                immediateResponse += `\n\n❓ **האם ההדרכה עזרה לך?** (כן/לא)`;
-                immediateResponse += `\n\n⏰ **סיום אוטומטי בעוד 60 שניות**`;
-                
-                return {
-                    response: immediateResponse,
-                    stage: 'waiting_training_feedback',
-                    customer: customer,
-                    serviceNumber: serviceNumber,
-                    sendTrainingEmailImmediate: needsEmail,
-                    trainingRequest: trainingRequest,
-                    trainingContent: trainingContent.content,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-                };
-            } else {
-                this.memory.updateStage(phone, 'completed', customer);
-                
-                return {
-                    response: `📚 **בקשת הדרכה אושרה ונשלחה!**\n\n📋 **נושא:** "${trainingRequest}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                    stage: 'completed',
-                    customer: customer,
-                    serviceNumber: serviceNumber,
-                    sendTrainingEmail: true,
-                    trainingRequest: trainingRequest,
-                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-                };
+                if (trainingContent && trainingContent.success) {
+                    this.memory.updateStage(phone, 'waiting_training_feedback', customer, {
+                        serviceNumber: serviceNumber,
+                        trainingRequest: trainingRequest,
+                        trainingContent: trainingContent.content,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                    });
+                    
+                    autoFinishManager.startTimer(phone, customer, 'waiting_training_feedback', handleAutoFinish);
+                    
+                    let immediateResponse = `📚 **הדרכה אושרה ומעובדת:**\n\n${trainingContent.content}`;
+                    
+                    let needsEmail = false;
+                    if (immediateResponse.length > 4000) {
+                        const shortContent = trainingContent.content.substring(0, 3500) + "...\n\n📧 **החומר המלא נשלח למייל**";
+                        immediateResponse = `📚 **הדרכה אושרה ומעובדת:**\n\n${shortContent}`;
+                        needsEmail = true;
+                    }
+                    
+                    immediateResponse += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
+                    immediateResponse += `\n\n❓ **האם ההדרכה עזרה לך?** (כן/לא)`;
+                    immediateResponse += `\n\n⏰ **סיום אוטומטי בעוד 60 שניות**`;
+                    
+                    return {
+                        response: immediateResponse,
+                        stage: 'waiting_training_feedback',
+                        customer: customer,
+                        serviceNumber: serviceNumber,
+                        sendTrainingEmailImmediate: needsEmail,
+                        trainingRequest: trainingRequest,
+                        trainingContent: trainingContent.content,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                    };
+                } else {
+                    this.memory.updateStage(phone, 'completed', customer);
+                    
+                    return {
+                        response: `📚 **בקשת הדרכה אושרה ונשלחה!**\n\n📋 **נושא:** "${trainingRequest}"\n\n📧 אשלח חומר הדרכה מפורט למייל\n⏰ תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                        stage: 'completed',
+                        customer: customer,
+                        serviceNumber: serviceNumber,
+                        sendTrainingEmail: true,
+                        trainingRequest: trainingRequest,
+                        attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                    };
+                }
             }
-        }
-        
-        // 🔧 טיפול בתוספות להדרכה קיימת
-        if (conversation?.stage === 'training_confirmation' && conversation?.data?.pendingTraining) {
-            const existingTraining = conversation.data.pendingTraining;
-            const updatedTraining = `${existingTraining}\n+ ${message}`;
-            
-            this.memory.updateStage(phone, 'training_confirmation', customer, {
-                ...conversation.data,
-                pendingTraining: updatedTraining
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'training_confirmation', handleAutoFinish);
-            
-            return {
-                response: `📚 **בקשת הדרכה עודכנה:**\n\n"${updatedTraining}"\n\n✅ **כתוב "אישור" לעיבוד ההדרכה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'training_confirmation',
-                customer: customer
-            };
-        }
-        
-        // טיפול בקבצים
-        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-            const updatedFiles = [...(conversation?.data?.tempFiles || []), { 
-                path: downloadedFiles[0], 
-                type: getFileType(downloadedFiles[0]) 
-            }];
-            
-            this.memory.updateStage(phone, 'training_request', customer, { 
-                ...conversation?.data, 
-                tempFiles: updatedFiles 
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'training_request', handleAutoFinish);
-            
-            return {
-                response: `✅ **קובץ התקבל!**\n\nכתוב על איזה נושא אתה זקוק להדרכה\n\n📎 **אפשר לצרף עוד קבצים**\n\nדוגמאות:\n• "הפעלת המערכת"\n• "החלפת נייר"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'training_request',
-                customer: customer
-            };
-        }
-        
-        // 🔧 טיפול בנושא הדרכה - עם מסך אישור
-        if (message && message.trim().length >= 5 && 
-            !message.toLowerCase().includes('הדרכה') &&
-            !message.toLowerCase().includes('4')) {
-            
-            // שמירת בקשת ההדרכה ומעבר למסך אישור
-            this.memory.updateStage(phone, 'training_confirmation', customer, {
-                ...conversation?.data,
-                pendingTraining: message
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'training_confirmation', handleAutoFinish);
-            
-            const attachedFiles = conversation?.data?.tempFiles || [];
-            let filesText = '';
-            if (attachedFiles.length > 0) {
-                filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
-            }
-            
-            return {
-                response: `📚 **הבנתי את בקשת ההדרכה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד ההדרכה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'training_confirmation',
-                customer: customer
-            };
-        }
-        
-        // ברירת מחדל
-        autoFinishManager.startTimer(phone, customer, 'training_request', handleAutoFinish);
-        
-        return {
-            response: `📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-            stage: 'training_request',
-            customer: customer
         };
+        
+        return this.handleGenericRequest(message, phone, customer, hasFile, downloadedFiles, config);
     }
     // 🔧 תיקון משוב הדרכה - ללא שאלה כפולה
 async handleTrainingFeedback(message, phone, customer, conversation) {
@@ -2918,7 +2835,7 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
         return {
             response: `🎉 **מעולה! שמח שההדרכה עזרה!**\n\n🔄 **חזרה לתפריט:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
             stage: 'menu',
-            customer: customer,
+                        customer: customer,
             sendTrainingEmailFinal: true,
             serviceNumber: data.serviceNumber,
             trainingRequest: data.trainingRequest, // 🔧 נושא נכון
@@ -2937,8 +2854,8 @@ async handleTrainingFeedback(message, phone, customer, conversation) {
             trainingRequest: data.trainingRequest, // 🔧 נושא נכון
             trainingContent: data.trainingContent,
             resolved: false
-        };
-    } else {
+                    };
+                } else {
         // 🔧 החזר טיימר אם לא הבין
         autoFinishManager.startTimer(phone, customer, 'waiting_training_feedback', handleAutoFinish);
         
@@ -2980,12 +2897,12 @@ async handleFeedback(message, phone, customer, conversation) {
     if (msg.includes('לא עזר') || msg.includes('לא עבד') || msg.includes('לא פתר') ||
         msg.includes('לא הצליח') || msg.includes('עדיין') || msg === 'לא') {
         
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        return {
+                    this.memory.updateStage(phone, 'completed', customer);
+                    
+                    return {
             response: `🔧 **מעביר לטכנאי מומחה**\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${data.serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
+                        stage: 'completed',
+                        customer: customer,
             sendTechnicianEmail: true,
             serviceNumber: data.serviceNumber,
             problemDescription: data.problemDescription,
