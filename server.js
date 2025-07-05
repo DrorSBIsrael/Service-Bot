@@ -2971,120 +2971,37 @@ isFinishingWord(message) {
 
     // 🔧  handleGeneralOfficeRequest
     async handleGeneralOfficeRequest(message, phone, customer, hasFile, downloadedFiles) {
-        const msg = message.toLowerCase().trim();
-        const conversation = this.memory.getConversation(phone, customer);
-        
-        if (this.isMenuRequest(message)) {
-            this.memory.updateStage(phone, 'menu', customer);
-            autoFinishManager.clearTimer(phone);
-            return {
-                response: `🔄 **חזרה לתפריט הראשי**\n\nאיך אוכל לעזור?\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`,
-                stage: 'menu',
-                customer: customer
-            };
-        }
-        
-        // 🔧 חדש: טיפול באישור פנייה למשרד
-        if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-            const officeRequest = conversation?.data?.pendingOfficeRequest;
-            
-            if (!officeRequest) {
+        const config = {
+            stageName: 'general_office_request',
+            confirmationStage: 'office_confirmation',
+            pendingField: 'pendingOfficeRequest',
+            messageMinLength: 5,
+            excludeWords: ['משרד', '5'],
+            fileResponse: `✅ **קובץ התקבל!**\n\nכתוב את נושא הפנייה למשרד\n\n📎 **אפשר לצרף עוד קבצים**\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            confirmationResponse: (message, filesText) => `🏢 **הבנתי את הפנייה למשרד:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לשליחת הפנייה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            updateResponse: (updatedMessage) => `🏢 **פנייה למשרד עודכנה:**\n\n"${updatedMessage}"\n\n✅ **כתוב "אישור" לשליחת הפנייה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            emptyRequestResponse: `❌ **לא נמצאה פנייה לאישור**\n\nאנא כתוב את נושא הפנייה\n\n📞 039792365`,
+            defaultResponse: `🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            handleApproval: async (conversation, customer, phone) => {
+                const officeRequest = conversation?.data?.pendingOfficeRequest;
+                
+                autoFinishManager.clearTimer(phone);
+                const serviceNumber = await getNextServiceNumber();
+                this.memory.updateStage(phone, 'completed', customer);
+                
                 return {
-                    response: `❌ **לא נמצאה פנייה לאישור**\n\nאנא כתוב את נושא הפנייה\n\n📞 039792365`,
-                    stage: 'general_office_request',
-                    customer: customer
+                    response: `✅ **פנייה למשרד נשלחה בהצלחה!**\n\n📋 **נושא:** ${officeRequest}\n\n📧 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    customer: customer,
+                    serviceNumber: serviceNumber,
+                    sendGeneralOfficeEmail: true,
+                    officeRequestDetails: officeRequest,
+                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
                 };
             }
-            
-            autoFinishManager.clearTimer(phone);
-            const serviceNumber = await getNextServiceNumber();
-            this.memory.updateStage(phone, 'completed', customer);
-            
-            return {
-                response: `✅ **פנייה למשרד נשלחה בהצלחה!**\n\n📋 **נושא:** ${officeRequest}\n\n📧 המשרד יטפל בפנייתך ויחזור אליך תוך 24-48 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-                stage: 'completed',
-                customer: customer,
-                serviceNumber: serviceNumber,
-                sendGeneralOfficeEmail: true,
-                officeRequestDetails: officeRequest,
-                attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-            };
-        }
-        
-        // 🔧 טיפול בתוספות לפנייה קיימת
-        if (conversation?.stage === 'office_confirmation' && conversation?.data?.pendingOfficeRequest) {
-            const existingRequest = conversation.data.pendingOfficeRequest;
-            const updatedRequest = `${existingRequest}\n+ ${message}`;
-            
-            this.memory.updateStage(phone, 'office_confirmation', customer, {
-                ...conversation.data,
-                pendingOfficeRequest: updatedRequest
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'office_confirmation', handleAutoFinish);
-            
-            return {
-                response: `🏢 **פנייה למשרד עודכנה:**\n\n"${updatedRequest}"\n\n✅ **כתוב "אישור" לשליחת הפנייה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'office_confirmation',
-                customer: customer
-            };
-        }
-        
-        // טיפול בקבצים
-        if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-            const updatedFiles = [...(conversation?.data?.tempFiles || []), { 
-                path: downloadedFiles[0], 
-                type: getFileType(downloadedFiles[0]) 
-            }];
-            
-            this.memory.updateStage(phone, 'general_office_request', customer, { 
-                ...conversation?.data, 
-                tempFiles: updatedFiles 
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
-            
-            return {
-                response: `✅ **קובץ התקבל!**\n\nכתוב את נושא הפנייה למשרד\n\n📎 **אפשר לצרף עוד קבצים**\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'general_office_request',
-                customer: customer
-            };
-        }
-        
-        // 🔧 טיפול בפנייה למשרד - עם מסך אישור
-        if (message && message.trim().length >= 5 && 
-            !message.toLowerCase().includes('משרד') &&
-            !message.toLowerCase().includes('5')) {
-            
-            // שמירת הפנייה ומעבר למסך אישור
-            this.memory.updateStage(phone, 'office_confirmation', customer, {
-                ...conversation?.data,
-                pendingOfficeRequest: message
-            });
-            
-            autoFinishManager.startTimer(phone, customer, 'office_confirmation', handleAutoFinish);
-            
-            const attachedFiles = conversation?.data?.tempFiles || [];
-            let filesText = '';
-            if (attachedFiles.length > 0) {
-                filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
-            }
-            
-            return {
-                response: `🏢 **הבנתי את הפנייה למשרד:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לשליחת הפנייה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                stage: 'office_confirmation',
-                customer: customer
-            };
-        }
-        
-        // ברירת מחדל
-        autoFinishManager.startTimer(phone, customer, 'general_office_request', handleAutoFinish);
-        
-        return {
-            response: `🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-            stage: 'general_office_request',
-            customer: customer
         };
+        
+        return this.handleGenericRequest(message, phone, customer, hasFile, downloadedFiles, config);
     }
 } 
 // פונקציות עזר משופרות
@@ -3208,6 +3125,13 @@ async function sendWhatsAppToGroup(message) {
         return response.data;
     } catch (error) {
         log('ERROR', `❌ שגיאת שליחה לקבוצה: ${error.response?.data?.error || error.message}`);
+        log('ERROR', `פרטי שגיאה נוספים:`, {
+            status: error.response?.status,
+            statusText: error.response?.statusText,
+            data: error.response?.data,
+            message: error.message,
+            code: error.code
+        });
         // 🔧 תיקון חשוב: לא לזרוק שגיאה - רק להחזיר null
         return null;
     }
@@ -3326,7 +3250,7 @@ phoneList += allPhones;
                         <h2 style="color: #2c3e50; margin-top: 0;">👤 פרטי לקוח</h2>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                             <p><strong>שם לקוח:</strong> ${customer.name}</p>
-                            <p><strong>מספר לקוח:</strong> #${customer.id}</p>
+                            <p><strong>מספר לקוח:</strong> #${customer.customerId || customer.id || 'לא זמין'}</p>
                             <p><strong>אתר/חניון:</strong> ${customer.site}</p>
                             <p><strong>אימייל:</strong> ${customer.email || 'לא רשום'}</p>
                         </div>
@@ -3387,9 +3311,9 @@ if (extraData.problemDescription) {
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
-                    `📞 **טלפון שפנה:** ${phone}\n` +
+                    `📞 **טלפון שפנה:** ${phoneUsed || customer.phone}\n` +
                     `📞 **טלפון ראשי:** ${customer.phone}\n` +
-                    `🆔 **מספר קריאה:** ${extraData.serviceNumber || 'לא זמין'}\n\n` +
+                    `🆔 **מספר קריאה:** ${extraData.serviceNumber || serviceNumber || 'לא זמין'}\n\n` +
                     `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
                     `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
                 
