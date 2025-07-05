@@ -609,13 +609,13 @@ class AdvancedMemory {
     
     // יצירת מפתח ייחודי ללקוח
 createKey(phone, customer = null) {
-    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const cleanPhone = cleanPhoneNumber(phone);
     return `conv_${cleanPhone}`;
 }
 
 // קבלת שיחה - גרסה מתוקנת
 getConversation(phone, customer = null) {
-    const cleanPhone = phone.replace(/[^\d]/g, '');
+    const cleanPhone = cleanPhoneNumber(phone);
     const key = this.createKey(phone, customer);
     
     let conv = this.conversations.get(key);
@@ -799,7 +799,7 @@ class AutoFinishManager {
     
     // יצירת מפתח
     createKey(phone) {
-        return `timer_${phone.replace(/[^\d]/g, '')}`;
+        return `timer_${cleanPhoneNumber(phone)}`;
     }
     
     // איפוס טיימר (הפעלה מחדש)
@@ -1157,49 +1157,55 @@ async function handleAutoFinish(phone, customer, stage) {
     }
 })();
 
+// פונקציה גלובלית לנרמול טלפונים
+function normalizePhone(phoneNumber) {
+    if (!phoneNumber) return '';
+    
+    // הסרת כל התווים שאינם ספרות
+    let clean = phoneNumber.replace(/[^\d]/g, '');
+    
+    // רשימת נורמליזציות אפשריות
+    const normalized = [];
+    
+    // הוספת המספר כפי שהוא
+    normalized.push(clean);
+    
+    // אם מתחיל ב-972 (קוד ישראל) - הוסף גרסה ללא 972
+    if (clean.startsWith('972')) {
+        normalized.push(clean.substring(3));
+    }
+    
+    // אם מתחיל ב-0 - הוסף גרסה עם 972
+    if (clean.startsWith('0')) {
+        normalized.push('972' + clean.substring(1));
+        normalized.push(clean.substring(1)); // גם בלי ה-0
+    }
+    
+    // אם לא מתחיל ב-972 או ב-0, נסה להוסיף 972
+    if (!clean.startsWith('972') && !clean.startsWith('0') && clean.length >= 9) {
+        normalized.push('972' + clean);
+        normalized.push('0' + clean);
+    }
+    
+    // אם מתחיל ב-5 (סלולרי ישראלי) - הוסף גרסאות נוספות
+    if (clean.startsWith('5') && clean.length === 9) {
+        normalized.push('0' + clean);
+        normalized.push('972' + clean);
+    }
+    
+    return [...new Set(normalized)]; // הסרת כפילויות
+}
+
+// פונקציה לנרמול טלפון יחיד (ללא וריאציות)
+function cleanPhoneNumber(phone) {
+    return phone ? phone.replace(/[^\d]/g, '') : '';
+}
+
 // זיהוי לקוח מתקדם - מהקוד המקורי שעובד
 function findCustomerByPhone(phone) {
-    const cleanIncomingPhone = phone.replace(/[^\d]/g, '');
+    const cleanIncomingPhone = cleanPhoneNumber(phone);
     
-    log('DEBUG', `🔍 מחפש לקוח עבור טלפון נכנס: ${phone} -> נקי: ${cleanIncomingPhone}`);
-    
-    function normalizePhone(phoneNumber) {
-        if (!phoneNumber) return '';
-        
-        // הסרת כל התווים שאינם ספרות
-        let clean = phoneNumber.replace(/[^\d]/g, '');
-        
-        // רשימת נורמליזציות אפשריות
-        const normalized = [];
-        
-        // הוספת המספר כפי שהוא
-        normalized.push(clean);
-        
-        // אם מתחיל ב-972 (קוד ישראל) - הוסף גרסה ללא 972
-        if (clean.startsWith('972')) {
-            normalized.push(clean.substring(3));
-        }
-        
-        // אם מתחיל ב-0 - הוסף גרסה עם 972
-        if (clean.startsWith('0')) {
-            normalized.push('972' + clean.substring(1));
-            normalized.push(clean.substring(1)); // גם בלי ה-0
-        }
-        
-        // אם לא מתחיל ב-972 או ב-0, נסה להוסיף 972
-        if (!clean.startsWith('972') && !clean.startsWith('0') && clean.length >= 9) {
-            normalized.push('972' + clean);
-            normalized.push('0' + clean);
-        }
-        
-        // אם מתחיל ב-5 (סלולרי ישראלי) - הוסף גרסאות נוספות
-        if (clean.startsWith('5') && clean.length === 9) {
-            normalized.push('0' + clean);
-            normalized.push('972' + clean);
-        }
-        
-        return [...new Set(normalized)]; // הסרת כפילויות
-    }
+    log('DEBUG', `🔍 מחפש לקוח עבור טלפון נכנס: ${phone} -> נקי: ${cleanIncomingPhone}`)
     
     // נורמליזציה של הטלפון הנכנס
     const incomingVariations = normalizePhone(cleanIncomingPhone);
@@ -3295,7 +3301,7 @@ switch(type) {
         
         // הוסף SMS רק מחוץ לשעות עבודה
         if (workingHours.shouldSendSMS) {
-            emailRecipients.push('Dror@sbparking.co.il');
+            emailRecipients.push('DROR@sbparking.co.il');
             log('INFO', `📱 שולח גם ל-SMS - ${workingHours.dayName} ${workingHours.hour}:00 (מחוץ לשעות עבודה)`);
             
             // 🔧 חדש: שליחה לקבוצת WhatsApp במקרה של תקלה מחוץ לשעות עבודה
@@ -3743,7 +3749,8 @@ if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
         
         // בדיקה נוספת - אם זה הטלפון של המערכת עצמה
         if (req.body.senderData && req.body.senderData.sender) {
-            const phoneCheck = req.body.senderData.sender.replace('@c.us', '');
+            const senderNumber = req.body.senderData.sender;
+            const phoneCheck = cleanPhoneNumber(senderNumber);
             const systemPhone = '546284210'; // הטלפון של הבוט
             if (phoneCheck.includes(systemPhone)) {
                 log('INFO', `🚫 מתעלם מהודעה מהמערכת עצמה: ${phoneCheck}`);
@@ -3755,7 +3762,7 @@ if (req.body.senderData && req.body.senderData.chatId === GROUP_CHAT_ID) {
         const messageData = req.body.messageData;
         const senderData = req.body.senderData;
         
-        const phone = senderData.sender.replace('@c.us', '');
+        const phone = cleanPhoneNumber(senderData.sender);
         const customerName = senderData.senderName || 'לקוח';
         let messageText = '';
         let hasFile = false;
