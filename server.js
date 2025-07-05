@@ -1338,20 +1338,34 @@ function findCustomerByName(message) {
 
 async function findSolution(problemDescription, customer) {
     try {
-        log('INFO', '🔍 מחפש פתרון במסד תקלות עם OpenAI משופר...');
+        log('INFO', '🔍 מחפש פתרון במסד תקלות...');
         
         if (!serviceFailureDB || !Array.isArray(serviceFailureDB) || serviceFailureDB.length === 0) {
             log('ERROR', '❌ מסד התקלות ריק');
-            return await findSolutionFallbackSmart(problemDescription);
+            return {
+                found: false,
+                response: '🔧 **שגיאה במערכת**\n\n📧 שלחתי לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
+            };
         }
 
-        if (!process.env.OPENAI_API_KEY?.startsWith('sk-')) {
-            log('WARN', '⚠️ OpenAI API Key לא תקין - עובר ל-fallback');
-            return await findSolutionFallbackSmart(problemDescription);
-        }
-        
-        try {
-            // 🔧 prompt משופר עם התרחישים המלאים מהקובץ שלך
+        let bestMatch = null;
+        let matchMethod = '';
+
+        // שיטה 1: נסה עם OpenAI אם זמין
+        if (process.env.OPENAI_API_KEY?.startsWith('sk-') && process.env.OPENAI_ASSISTANT_ID) {
+            try {
+                // תחילה נסה עם Assistant המתקדם
+                const assistantResult = await handleProblemWithAssistant(problemDescription, customer);
+                if (assistantResult && assistantResult.found) {
+                    log('INFO', '✅ Assistant מצא פתרון');
+                    return assistantResult;
+                }
+            } catch (assistantError) {
+                log('WARN', '⚠️ Assistant נכשל, ממשיך לשיטה הבאה');
+            }
+
+            // אם Assistant נכשל, נסה עם ChatGPT רגיל
+            try {
             const fullScenarios = serviceFailureDB.map((scenario, index) => 
                 `${index + 1}. תרחיש: "${scenario.תרחיש}"
    פתרון: ${scenario.שלבים}
@@ -1367,13 +1381,10 @@ ${fullScenarios}
 
 הוראות:
 1. חפש את התרחיש המתאים ביותר לבעיה המתוארת
-2. השתמש במילות מפתח: "לא דולקת"=תרחיש 1, "לא פעילה"=תרחיש 2, "לא מוציאה קבלות"=תרחיש 3
-3. אם נמצא תרחיש מתאים (דמיון 70%+) - החזר את מספר התרחיש (1-${serviceFailureDB.length})
-4. אם אין תרחיש מתאים - החזר 0
+2. אם נמצא תרחיש מתאים (דמיון 70%+) - החזר את מספר התרחיש (1-${serviceFailureDB.length})
+3. אם אין תרחיש מתאים - החזר 0
 
 החזר רק מספר אחד (0-${serviceFailureDB.length}):`;
-
-            log('DEBUG', '🤖 שולח ל-OpenAI prompt משופר...');
             
             const completion = await Promise.race([
                 openai.chat.completions.create({
@@ -1383,7 +1394,7 @@ ${fullScenarios}
                     temperature: 0.1
                 }),
                 new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error('OpenAI timeout')), 6000) // 6 שניות
+                        setTimeout(() => reject(new Error('OpenAI timeout')), 6000)
                 )
             ]);
             
@@ -1393,177 +1404,117 @@ ${fullScenarios}
             log('INFO', `🤖 OpenAI החזיר: "${aiResponse}" -> תרחיש מספר: ${scenarioNumber}`);
             
             if (scenarioNumber > 0 && scenarioNumber <= serviceFailureDB.length) {
-                const scenario = serviceFailureDB[scenarioNumber - 1];
-                
-                let solution = `🔧 **פתרון לתקלה: ${scenario.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${scenario.שלבים}`;
-                
-                if (scenario.הערות && scenario.הערות.trim() !== '') {
-                    solution += `\n\n💡 **הערות חשובות:**\n${scenario.הערות}`;
+                    bestMatch = serviceFailureDB[scenarioNumber - 1];
+                    matchMethod = 'OpenAI';
                 }
-                
-                solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
-                
-                log('INFO', `✅ OpenAI מצא פתרון מתאים: ${scenario.תרחיש}`);
-                return { found: true, response: solution, scenario: scenario };
-            } else {
-                log('INFO', '⚠️ OpenAI לא מצא פתרון מתאים - עובר ל-fallback');
-                return await findSolutionFallbackSmart(problemDescription);
-            }
-            
         } catch (aiError) {
-            log('ERROR', `❌ שגיאה ב-OpenAI: ${aiError.message}`);
-            return await findSolutionFallbackSmart(problemDescription);
+                log('WARN', `⚠️ OpenAI נכשל: ${aiError.message}`);
+            }
         }
-        
-    } catch (error) {
-        log('ERROR', `❌ שגיאה כללית בחיפוש פתרון: ${error.message}`);
-        return await findSolutionFallbackSmart(problemDescription);
-    }
-}
 
-async function findSolutionFallbackSmart(problemDescription) {
-    try {
-        log('INFO', '🔄 מפעיל מערכת fallback חכמה משופרת...');
-        
+        // שיטה 2: חיפוש מילות מפתח אם OpenAI לא מצא
+        if (!bestMatch) {
         const problem = problemDescription.toLowerCase();
         
-        // מיפוי מדויק לפי הקובץ שלך
-        const keywordMapping = [
-            {
-                scenario: 'היחידה לא דולקת',
-                keywords: ['לא דולקת', 'לא עובד', 'כבוי', 'מת', 'חשמל', 'לא מגיב', 'נתיך', 'לא פועל'],
-                scenarioIndex: 0
-            },
-            {
-                scenario: 'היחידה לא פעילה למרות שהיא דולקת',
-                keywords: ['לא פעילה', 'דולקת אבל לא עובד', 'לא מגיב למכונית', 'תקשורת'],
-                scenarioIndex: 1
-            },
-            {
-                scenario: 'היחידה לא מוציאה קבלות ביציאה',
-                keywords: ['לא מוציאה קבלות', 'קבלה', 'נייר', 'מדפיס', 'ביציאה', 'לא מדפיס'],
-                scenarioIndex: 2
-            }
-        ];
-        
-        let bestMatch = null;
+            // מיפוי מורחב של מילות מפתח
+            const keywordGroups = [
+                {
+                    keywords: ['לא דולקת', 'לא עובד', 'כבוי', 'מת', 'חשמל', 'לא מגיב', 'נתיך', 'לא פועל', 'לא נדלק', 'כבה', 'נכבה'],
+                    scenarioPattern: 'דולקת'
+                },
+                {
+                    keywords: ['מחסום לא עולה', 'מחסום תקוע', 'לא עולה', 'לא נפתח', 'חסום', 'מחסום', 'תקוע', 'לא יורד'],
+                    scenarioPattern: 'מחסום'
+                },
+                {
+                    keywords: ['לא מדפיס', 'נייר', 'גליל', 'מדפסת', 'כרטיס לא יוצא', 'קבלה', 'לא מוציא', 'הדפסה'],
+                    scenarioPattern: 'מדפיס'
+                },
+                {
+                    keywords: ['אשראי', 'כרטיס אשראי', 'תשלום', 'חיוב', 'visa', 'mastercard', 'מסוף', 'לא מחייב', 'דחה'],
+                    scenarioPattern: 'אשראי'
+                },
+                {
+                    keywords: ['מסך', 'תצוגה', 'מסך שחור', 'כהה', 'לא מציג', 'תצוגה כהה', 'מסך כבוי', 'צג'],
+                    scenarioPattern: 'מסך'
+                },
+                {
+                    keywords: ['לא פעילה', 'דולקת אבל לא עובד', 'לא מגיב למכונית', 'תקשורת', 'דולקת אבל'],
+                    scenarioPattern: 'פעילה'
+                },
+                {
+                    keywords: ['לא מוציאה קבלות', 'קבלה', 'ביציאה', 'לא מוציא קבלות'],
+                    scenarioPattern: 'קבלות'
+                }
+            ];
+            
         let bestScore = 0;
         
-        for (const mapping of keywordMapping) {
+            for (const group of keywordGroups) {
             let score = 0;
+                let matchedKeywords = [];
             
-            for (const keyword of mapping.keywords) {
+                for (const keyword of group.keywords) {
                 if (problem.includes(keyword)) {
-                    score += keyword.length * 3;
-                    log('DEBUG', `✅ נמצאה מילת מפתח: "${keyword}" עבור ${mapping.scenario}`);
+                        score += keyword.length * 2;
+                        matchedKeywords.push(keyword);
+                    }
+                }
+                
+                if (score > bestScore && score >= 8) {
+                    // חפש תרחיש מתאים במסד
+                    const foundScenario = serviceFailureDB.find(scenario => 
+                        scenario.תרחיש && scenario.תרחיש.toLowerCase().includes(group.scenarioPattern)
+                    );
+                    
+                    if (foundScenario) {
+                bestScore = score;
+                        bestMatch = foundScenario;
+                        matchMethod = 'Keywords';
+                        log('DEBUG', `✅ נמצאה התאמה: "${foundScenario.תרחיש}" (ציון: ${score}, מילים: ${matchedKeywords.join(', ')})`);
+                    }
                 }
             }
-            
-            if (score > bestScore && score >= 9) {
-                bestScore = score;
-                bestMatch = serviceFailureDB[mapping.scenarioIndex];
-                log('DEBUG', `🎯 נמצא תרחיש: ${bestMatch.תרחיש} (ציון: ${score})`);
-            }
         }
-        
+
+        // החזרת תוצאה
         if (bestMatch) {
-            let solution = `🔧 **פתרון: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
+            let solution = `🔧 **פתרון לתקלה: ${bestMatch.תרחיש}**\n\n📋 **שלבי הפתרון:**\n${bestMatch.שלבים}`;
             
             if (bestMatch.הערות && bestMatch.הערות.trim() !== '') {
                 solution += `\n\n💡 **הערות חשובות:**\n${bestMatch.הערות}`;
             }
             
-            solution += `\n\n❓ **האם הפתרון עזר?** (כן/לא)`;
+            solution += `\n\n❓ **האם הפתרון עזר?**\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה`;
             
-            log('INFO', `✅ Fallback חכם מצא פתרון: ${bestMatch.תרחיש}`);
-            return { found: true, response: solution, scenario: bestMatch };
+            log('INFO', `✅ נמצא פתרון בשיטת ${matchMethod}: ${bestMatch.תרחיש}`);
+            return { 
+                found: true, 
+                response: solution, 
+                scenario: bestMatch,
+                source: matchMethod.toLowerCase()
+            };
         }
         
-        log('INFO', '⚠️ גם fallback חכם לא מצא פתרון מתאים');
+        // אם לא נמצא פתרון
+        log('INFO', '⚠️ לא נמצא פתרון מתאים במדריך');
         return {
             found: false,
-            response: '🔧 **לא נמצא פתרון מתאים במדריך**\n\n📧 שלחתי את התקלה לטכנאי מומחה\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **דחוף:** 039792365'
+            response: '🔧 **לא נמצא פתרון מתאים במדריך**\n\n📧 מעביר את התקלה לטכנאי מומחה\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n📞 **לבירורים דחופים:** 039792365'
         };
         
     } catch (error) {
-        log('ERROR', '❌ שגיאה גם ב-fallback חכם:', error.message);
+        log('ERROR', `❌ שגיאה כללית בחיפוש פתרון: ${error.message}`);
         return {
             found: false,
-            response: '🔧 **שגיאה במערכת**\n\n📧 שלחתי לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
+            response: '🔧 **שגיאה במערכת**\n\n📧 שלחתי את הפנייה לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n📞 039792365'
         };
     }
 }
 
-// פונקציית fallback משופרת - עם התאמה מדויקת יותר
-async function findSolutionFallback(problemDescription) {
-    try {
-        log('INFO', '🔄 מפעיל מערכת fallback חכמה...');
-        
-        const problem = problemDescription.toLowerCase();
-        
-        // מילות מפתח מדויקות לכל תרחיש
-        const keywordMapping = {
-            'אשראי': ['אשראי', 'כרטיס אשראי', 'תשלום', 'חיוב', 'visa', 'mastercard', 'מסוף'],
-            'מחסום לא עולה': ['מחסום לא עולה', 'מחסום תקוע', 'לא עולה', 'לא נפתח', 'חסום'],
-            'יחידה לא דולקת': ['לא דולקת', 'לא עובד', 'כבוי', 'מת', 'חשמל', 'לא מגיב', 'נתיך'],
-            'לא מדפיס': ['לא מדפיס', 'נייר', 'גליל', 'מדפסת', 'כרטיס לא יוצא'],
-            'מסך': ['מסך', 'תצוגה', 'מסך שחור', 'כהה', 'לא מציג', 'תצוגה כהה']
-        };
-        
-        let bestMatch = null;
-        let bestScore = 0;
-        
-        // חיפוש מדויק
-        for (const [keyword, variations] of Object.entries(keywordMapping)) {
-            let score = 0;
-            
-            for (const variation of variations) {
-                if (problem.includes(variation)) {
-                    score += variation.length;
-                    log('DEBUG', `✅ נמצאה מילת מפתח: "${variation}" עבור ${keyword} (+${variation.length})`);
-                }
-            }
-            
-            if (score > bestScore) {
-                const foundScenario = serviceFailureDB.find(scenario => 
-                    scenario.תרחיש && scenario.תרחיש.toLowerCase().includes(keyword)
-                );
-                
-                if (foundScenario) {
-                    bestScore = score;
-                    bestMatch = foundScenario;
-                    log('DEBUG', `🎯 נמצא תרחיש: ${foundScenario.תרחיש} (ציון: ${score})`);
-                }
-            }
-        }
-        
-        if (bestMatch && bestScore >= 3) {
-            let solution = `🔧 **פתרון: ${bestMatch.תרחיש}**\n\n${bestMatch.שלבים}`;
-            
-            if (bestMatch.הערות) {
-                solution += `\n\n💡 ${bestMatch.הערות}`;
-            }
-            
-            solution += `\n\n❓ האם עזר? (כן/לא)`;
-            
-            log('INFO', `✅ Fallback מצא פתרון: ${bestMatch.תרחיש} (ציון: ${bestScore})`);
-            return { found: true, response: solution, scenario: bestMatch };
-        }
-        
-        log('INFO', '⚠️ גם fallback לא מצא פתרון מתאים');
-        return {
-            found: false,
-            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365'
-        };
-        
-    } catch (error) {
-        log('ERROR', '❌ שגיאה גם ב-fallback:', error.message);
-        return {
-            found: false,
-            response: '🔧 **אשלח טכנאי**\n\n⏰ יצור קשר תוך 2-4 שעות בשעות העבודה\n📞 039792365'
-        };
-    }
-}
+
+
+
 
 // פונקציה חדשה לזיהוי מילות סיום - הוסף לפני ה-ResponseHandler:
 function isFinishingWord(message) {
@@ -2581,10 +2532,27 @@ class ResponseHandler {
     }
 
     // 🔧 handleOrderRequest
-async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
+// 🔧 פונקציה גנרית לטיפול בבקשות - מפחיתה כפילויות
+    async handleGenericRequest(message, phone, customer, hasFile, downloadedFiles, config) {
+        const {
+            requestType,        // 'order', 'training', 'damage', 'office'
+            stage,             // שלב נוכחי
+            confirmationStage, // שלב אישור
+            emailType,         // סוג המייל לשליחה
+            icons,             // אייקונים לתצוגה
+            labels,            // תוויות טקסט
+            defaultResponse,   // תגובת ברירת מחדל
+            exampleTexts,      // דוגמאות
+            minLength = 5,     // אורך מינימלי
+            requiresUnit = false, // האם דורש מספר יחידה
+            specialHandler = null // טיפול מיוחד
+        } = config;
+
     const msg = message.toLowerCase().trim();
     const conversation = this.memory.getConversation(phone, customer);
+        const pendingKey = `pending${requestType.charAt(0).toUpperCase() + requestType.slice(1)}`;
     
+        // בדיקת חזרה לתפריט
     if (this.isMenuRequest(message)) {
         this.memory.updateStage(phone, 'menu', customer);
         autoFinishManager.clearTimer(phone);
@@ -2595,139 +2563,140 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         };
     }
 
-    // 🔧 חדש: טיפול באישור הזמנה
+        // טיפול באישור
     if (msg === 'אישור' || msg === 'לאישור' || msg === 'אשר') {
-        const orderDescription = conversation?.data?.pendingOrder;
+            const pendingData = conversation?.data?.[pendingKey];
         
-        if (!orderDescription) {
+            if (!pendingData) {
             return {
-                response: `❌ **לא נמצאה הזמנה לאישור**\n\nאנא כתוב מה אתה מבקש להזמין\n\n📞 039792365`,
-                stage: 'order_request',
+                    response: `❌ **לא נמצאה ${labels.requestName} לאישור**\n\n${labels.requestPrompt}\n\n📞 039792365`,
+                    stage: stage,
                 customer: customer
             };
         }
         
         autoFinishManager.clearTimer(phone);
         const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
-        
-        return {
-            response: `✅ **הזמנה נשלחה בהצלחה!**\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendOrderEmail: true,
-            orderDetails: orderDescription,
-            attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
-        };
-    }
-
-    // 🔧 חדש: טיפול בתוספות להזמנה קיימת
-    if (conversation?.stage === 'order_confirmation' && conversation?.data?.pendingOrder) {
-        const existingOrder = conversation.data.pendingOrder;
-        const updatedOrder = `${existingOrder}\n+ ${message}`;
-        
-        this.memory.updateStage(phone, 'order_confirmation', customer, {
-            ...conversation.data,
-            pendingOrder: updatedOrder
-        });
-        
-        autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
-        
-        return {
-            response: `📋 **הזמנה עודכנה:**\n\n"${updatedOrder}"\n\n✅ **לחץ "אישור" לשליחה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-            stage: 'order_confirmation',
-            customer: customer
-        };
-    }
-
-    // 🔧 בדיקת סיום עם שמירת נתונים מהשיחה
-    if (message.toLowerCase().includes('סיום') || message.toLowerCase().includes('לסיים')) {
-        let orderDescription = '';
-        
-        // 🔧 חיפוש טוב יותר של תיאור ההזמנה
-        if (conversation && conversation.messages) {
-            const orderMessages = conversation.messages.filter(msg => 
-                msg.sender === 'customer' && 
-                msg.message.length > 4 && 
-                !msg.message.toLowerCase().includes('סיום') &&
-                !msg.message.toLowerCase().includes('לסיים') &&
-                !msg.message.toLowerCase().includes('3') &&
-                !msg.message.toLowerCase().includes('מחיר') &&
-                !msg.message.toLowerCase().includes('הצעת') &&
-                !msg.message.toLowerCase().includes('שלום') &&
-                !msg.message.toLowerCase().includes('בוקר') &&
-                !msg.message.toLowerCase().includes('ערב') &&
-                !msg.message.match(/^[1-5]$/) // מספרים בודדים
-            );
             
-            if (orderMessages.length > 0) {
-                const realOrderMessages = orderMessages.filter(msg => 
-                    msg.message.match(/\d+/) || // מכיל מספרים
-                    msg.message.toLowerCase().includes('כרטיס') ||
-                    msg.message.toLowerCase().includes('נייר') ||
-                    msg.message.toLowerCase().includes('גליל') ||
-                    msg.message.toLowerCase().includes('זרוע') ||
-                    msg.message.toLowerCase().includes('חלק') ||
-                    msg.message.toLowerCase().includes('מבקש') ||
-                    msg.message.toLowerCase().includes('צריך')
-                );
+            // טיפול מיוחד אם נדרש (למשל הדרכה עם Assistant)
+            let specialResult = null;
+            if (specialHandler) {
+                specialResult = await specialHandler(pendingData, customer);
+            }
+            
+            // החלטה על התגובה בהתאם לסוג
+            if (specialResult && specialResult.success) {
+                // טיפול מיוחד הצליח (כמו הדרכה מיידית)
+                this.memory.updateStage(phone, `waiting_${requestType}_feedback`, customer, {
+                    serviceNumber: serviceNumber,
+                    [`${requestType}Request`]: pendingData,
+                    [`${requestType}Content`]: specialResult.content,
+                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                });
                 
-                if (realOrderMessages.length > 0) {
-                    orderDescription = realOrderMessages[realOrderMessages.length - 1].message;
-                } else {
-                    orderDescription = orderMessages[orderMessages.length - 1].message;
+                autoFinishManager.startTimer(phone, customer, `waiting_${requestType}_feedback`, handleAutoFinish);
+                
+                let response = `${icons.main} **${labels.approved}:**\n\n${specialResult.content}`;
+                response += `\n\n🆔 מספר קריאה: ${serviceNumber}`;
+                response += `\n\n❓ **${labels.feedbackQuestion}** (כן/לא)`;
+                response += `\n\n⏰ **סיום אוטומטי בעוד 60 שניות**`;
+                
+                const result = {
+                    response: response,
+                    stage: `waiting_${requestType}_feedback`,
+                    customer: customer,
+                    serviceNumber: serviceNumber
+                };
+                
+                // הוסף שדה לשליחת מייל מיידי אם התוכן ארוך מדי
+                if (response.length > 4000) {
+                    result[`send${requestType.charAt(0).toUpperCase() + requestType.slice(1)}EmailImmediate`] = true;
+                    result[`${requestType}Request`] = pendingData;
+                    result[`${requestType}Content`] = specialResult.content;
+                    result.attachments = conversation?.data?.tempFiles?.map(f => f.path) || [];
                 }
+                
+                return result;
+            } else {
+                // טיפול רגיל - שליחה למייל
+                this.memory.updateStage(phone, 'completed', customer);
+                
+                const emailData = {
+                    response: `✅ **${labels.sentSuccess}**\n\n${icons.doc} **${labels.detailsLabel}:** ${pendingData}\n\n${icons.email} ${labels.emailMessage}\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                    stage: 'completed',
+                    customer: customer,
+                    serviceNumber: serviceNumber,
+                    attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
+                };
+                
+                // הוסף את השדה הנכון לשליחת מייל
+                emailData[`send${emailType}Email`] = true;
+                
+                // הוסף את הפרטים בשם הנכון
+                if (requestType === 'order') {
+                    emailData.orderDetails = pendingData;
+                } else if (requestType === 'training') {
+                    emailData.trainingRequest = pendingData;
+                } else if (requestType === 'office') {
+                    emailData.officeRequestDetails = pendingData;
+                }
+                
+                return emailData;
             }
         }
-        
-        if (!orderDescription || orderDescription.length < 5) {
-            return {
-                response: `📋 **אנא כתוב מה אתה מבקש להזמין**\n\nדוגמה: "2000 כרטיסים + סיום"\n\n📞 039792365`,
-                stage: 'order_request',
-                customer: customer
-            };
-        }
-        
-        autoFinishManager.clearTimer(phone);
-        const serviceNumber = await getNextServiceNumber();
-        this.memory.updateStage(phone, 'completed', customer);
+
+        // טיפול בתוספות לבקשה קיימת
+        if (conversation?.stage === confirmationStage && conversation?.data?.[pendingKey]) {
+            const existingRequest = conversation.data[pendingKey];
+            const updatedRequest = `${existingRequest}\n+ ${message}`;
+            
+            this.memory.updateStage(phone, confirmationStage, customer, {
+                ...conversation.data,
+                [pendingKey]: updatedRequest
+            });
+            
+            autoFinishManager.startTimer(phone, customer, confirmationStage, handleAutoFinish);
         
         return {
-            response: `✅ **הזמנה התקבלה בהצלחה!**\n\n📋 **מבוקש:** ${orderDescription}\n\n📧 נכין הצעת מחיר ונשלח תוך 24 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
-            stage: 'completed',
-            customer: customer,
-            serviceNumber: serviceNumber,
-            sendOrderEmail: true,
-            orderDetails: orderDescription,
-            attachments: downloadedFiles
+                response: `${icons.doc} **${labels.requestName} עודכנה:**\n\n"${updatedRequest}"\n\n✅ **כתוב "אישור" ${labels.toSend}**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+                stage: confirmationStage,
+                customer: customer
         };
     }
 
     // טיפול בקבצים
     if (hasFile && downloadedFiles && downloadedFiles.length > 0) {
-        autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+            const updatedFiles = [...(conversation?.data?.tempFiles || []), { 
+                path: downloadedFiles[0], 
+                type: getFileType(downloadedFiles[0]) 
+            }];
+            
+            this.memory.updateStage(phone, stage, customer, { 
+                ...conversation?.data, 
+                tempFiles: updatedFiles 
+            });
+            
+            autoFinishManager.startTimer(phone, customer, stage, handleAutoFinish);
         
         return {
-            response: `✅ **קובץ התקבל!**\n\nשלח עוד קבצים או כתוב מה אתה מבקש להזמין\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מפרטים\n\n✏️ **לסיום:** כתוב "סיום"\n\nדוגמה: "2000 כרטיסים + סיום"\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-            stage: 'order_request',
+                response: `✅ **קובץ התקבל!**\n\n${labels.requestPrompt}\n\n📎 **אפשר לצרף עוד קבצים**\n\n${exampleTexts}\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+                stage: stage,
             customer: customer
         };
     }
     
-    // 🔧 טיפול בטקסט הזמנה - עם מסך אישור
-    if (message && message.trim().length >= 5 && 
-        !message.toLowerCase().includes('מחיר') && 
-        !message.toLowerCase().includes('הצעת') &&
-        !message.toLowerCase().includes('סיום')) {
-        
-        // שמירת ההזמנה ומעבר למסך אישור
-        this.memory.updateStage(phone, 'order_confirmation', customer, {
+        // טיפול בטקסט בקשה - עם מסך אישור
+        if (message && message.trim().length >= minLength && 
+            !message.toLowerCase().includes(requestType) && 
+            !message.match(/^[1-5]$/)) {
+            
+            // שמירת הבקשה ומעבר למסך אישור
+            this.memory.updateStage(phone, confirmationStage, customer, {
             ...conversation?.data,
-            pendingOrder: message
+                [pendingKey]: message
         });
         
-        autoFinishManager.startTimer(phone, customer, 'order_confirmation', handleAutoFinish);
+            autoFinishManager.startTimer(phone, customer, confirmationStage, handleAutoFinish);
         
         const attachedFiles = conversation?.data?.tempFiles || [];
         let filesText = '';
@@ -2736,21 +2705,48 @@ async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
         }
         
         return {
-            response: `📋 **הבנתי שאתה מבקש להזמין:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לשליחת ההזמנה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-            stage: 'order_confirmation',
+                response: `${icons.main} **${labels.understood}:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" ${labels.toSend}**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+                stage: confirmationStage,
             customer: customer
         };
     }
     
     // ברירת מחדל
-    autoFinishManager.startTimer(phone, customer, 'order_request', handleAutoFinish);
+        autoFinishManager.startTimer(phone, customer, stage, handleAutoFinish);
     
     return {
-        response: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "2000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-        stage: 'order_request',
+            response: defaultResponse,
+            stage: stage,
         customer: customer
     };
 }
+
+    async handleOrderRequest(message, phone, customer, hasFile, downloadedFiles) {
+        return await this.handleGenericRequest(message, phone, customer, hasFile, downloadedFiles, {
+            requestType: 'order',
+            stage: 'order_request',
+            confirmationStage: 'order_confirmation',
+            emailType: 'Order',
+            icons: {
+                main: '💰',
+                doc: '📋',
+                email: '📧'
+            },
+            labels: {
+                requestName: 'הזמנה',
+                requestPrompt: 'אנא כתוב מה אתה מבקש להזמין',
+                toSend: 'לשליחת ההזמנה',
+                understood: 'הבנתי שאתה מבקש להזמין',
+                sentSuccess: 'הזמנה נשלחה בהצלחה!',
+                detailsLabel: 'מבוקש',
+                emailMessage: 'נכין הצעת מחיר ונשלח תוך 24 שעות',
+                approved: 'הזמנה אושרה ונשלחה',
+                feedbackQuestion: 'האם ההזמנה ברורה?'
+            },
+            defaultResponse: `💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel\n\nדוגמאות:\n• "2000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+            exampleTexts: 'דוגמאות:\n• "2000 כרטיסים"\n• "3 גלילים נייר"'
+        });
+    }
     // handleTrainingRequest 
     async handleTrainingRequest(message, phone, customer, hasFile, downloadedFiles) {
         const msg = message.toLowerCase().trim();
@@ -3267,22 +3263,36 @@ async function sendWhatsApp(phone, message) {
 // מזהה קבוצת WhatsApp לתקלות דחופות
 const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
 
-// שליחת WhatsApp לקבוצה
+// שליחת WhatsApp לקבוצה - תיקון מלא
 async function sendWhatsAppToGroup(message) {
     const instanceId = '7105253183';
     const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
     
     try {
+        log('DEBUG', `📱 שולח לקבוצה: ${GROUP_CHAT_ID}`);
+        
         const response = await axios.post(url, {
             chatId: GROUP_CHAT_ID,
             message: message
+        }, {
+            timeout: 10000, // 10 שניות
+            headers: {
+                'Content-Type': 'application/json'
+            }
         });
-        log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'כשל'}`);
+        
+        if (response.data && response.data.idMessage) {
+            log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data.idMessage}`);
+        } else {
+            log('INFO', `✅ הודעה נשלחה לקבוצה: ${response.data ? 'הצלחה' : 'תשובה ריקה'}`);
+        }
+        
         return response.data;
     } catch (error) {
-        log('ERROR', '❌ שגיאת שליחה לקבוצה:', error.message);
-        throw error;
+        log('ERROR', `❌ שגיאת שליחה לקבוצה: ${error.response?.data?.error || error.message}`);
+        // 🔧 תיקון חשוב: לא לזרוק שגיאה - רק להחזיר null
+        return null;
     }
 }
 
