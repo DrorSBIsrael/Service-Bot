@@ -3337,7 +3337,7 @@ switch(type) {
         
         // הוסף SMS רק מחוץ לשעות עבודה
         if (workingHours.shouldSendSMS) {
-            emailRecipients.push('Dror@sbparking.co.il');
+            emailRecipients.push('SMS@sbparking.co.il');
             log('INFO', `📱 שולח גם ל-SMS - ${workingHours.dayName} ${workingHours.hour}:00 (מחוץ לשעות עבודה)`);
             
             // 🔧 חדש: שליחה לקבוצת WhatsApp במקרה של תקלה מחוץ לשעות עבודה
@@ -3371,19 +3371,19 @@ if (extraData.problemDescription) {
         break;
         
     case 'order':
-        emailRecipients = ['Dror@sbparking.co.il', 'office@SBcloud.co.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
     case 'damage':
-        emailRecipients = ['Dror@sbparking.co.il', 'office@SBcloud.co.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
     case 'training':
-        emailRecipients = ['Dror@sbparking.co.il'];
+        emailRecipients = ['service@sbcloud.co.il'];
         break;
     case 'general_office':
-        emailRecipients = ['Dror@sbparking.co.il', 'office@SBcloud.co.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
     default:
-        emailRecipients = ['Dror@sbparking.co.il'];
+        emailRecipients = ['service@sbcloud.co.il'];
         break;
 }
 
