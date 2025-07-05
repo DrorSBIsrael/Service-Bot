@@ -455,7 +455,7 @@ try {
     }
     
 customers = customersData.map(client => ({
-    id: client["מס' לקוח"] || client["מספר לקוח"] || client.id || client.customer_id || "N/A",
+    id: client["מספר לקוח"] || client["מס' לקוח"] || client.id || client.customer_id || "N/A",
     name: client["שם לקוח"] || client.name || client.customer_name,
     site: client["שם החניון"] || client.site || client.parking_name,
     phone: client["טלפון"] || client.phone || client.phone1 || client.mobile,
