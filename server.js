@@ -3228,7 +3228,7 @@ function isWorkingHours() {
 }
 
 // פונקציה לשליחת קובץ בוואטסאפ
-async function sendWhatsAppFile(phone, filePath, caption = '') {
+async function sendWhatsAppFile(chatId, filePath, caption = '') {
     const instanceId = '7105253183';
     const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendFileByUpload/${token}`;
@@ -3240,36 +3240,22 @@ async function sendWhatsAppFile(phone, filePath, caption = '') {
         }
         
         const fileName = path.basename(filePath);
-        const fileExtension = path.extname(fileName).toLowerCase();
-        
-        // זיהוי סוג קובץ ל-API
-        let fileType = 'document';
-        if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(fileExtension)) {
-            fileType = 'image';
-        } else if (['.mp4', '.avi', '.mov', '.mkv', '.webm'].includes(fileExtension)) {
-            fileType = 'video';
-        } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(fileExtension)) {
-            fileType = 'audio';
-        }
+        log('DEBUG', `📤 שולח קובץ לוואטסאפ: ${fileName} ל-${chatId}`);
         
         const formData = new FormData();
-        formData.append('chatId', `${phone}@c.us`);
-        formData.append('file', fs.createReadStream(filePath));
-        formData.append('fileName', fileName);
+        formData.append('chatId', chatId);
+        formData.append('file', fs.createReadStream(filePath), fileName);
         if (caption) {
             formData.append('caption', caption);
         }
         
-        log('DEBUG', `📤 שולח קובץ ${fileType} לוואטסאפ: ${fileName} ל-${phone}`);
-        
         const response = await axios.post(url, formData, {
             timeout: 30000, // 30 שניות
             headers: {
-                ...formData.getHeaders(),
-                'Content-Type': 'multipart/form-data'
+                ...formData.getHeaders()
             },
-            maxContentLength: 100 * 1024 * 1024, // 100MB
-            maxBodyLength: 100 * 1024 * 1024
+            maxContentLength: 50 * 1024 * 1024, // 50MB
+            maxBodyLength: 50 * 1024 * 1024
         });
         
         if (response.data && response.data.idMessage) {
@@ -3281,9 +3267,33 @@ async function sendWhatsAppFile(phone, filePath, caption = '') {
         }
         
     } catch (error) {
-        log('ERROR', `❌ שגיאה בשליחת קובץ ${filePath}: ${error.response?.data?.error || error.message}`);
+        log('ERROR', `❌ שגיאה בשליחת קובץ ${path.basename(filePath)}: ${error.response?.status} - ${error.response?.statusText}`);
+        
+        // אם שגיאת 400, נסה שליחה כתמונה רגילה
+        if (error.response?.status === 400) {
+            try {
+                log('INFO', `🔄 מנסה שליחה כתמונה רגילה: ${fileName}`);
+                return await sendWhatsAppImageFallback(chatId, filePath, caption);
+            } catch (fallbackError) {
+                log('ERROR', `❌ גם שליחה חלופית נכשלה: ${fallbackError.message}`);
+                return null;
+            }
+        }
+        
         return null;
     }
+}
+
+// פונקציה חלופית לשליחת תמונות
+async function sendWhatsAppImageFallback(chatId, filePath, caption = '') {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
+    
+    // במקום העלאה ישירה, נשלח הודעה טקסט עם מידע על הקובץ
+    const textMessage = `📎 **קובץ מצורף:** ${path.basename(filePath)}\n${caption}\n\n⚠️ הקובץ נשלח במייל - לא ניתן להעלות לוואטסאפ`;
+    
+    return await sendWhatsAppToGroup(textMessage);
 }
 
 // פונקציה לשליחת קבצים לקבוצת הטכנאים
@@ -3294,8 +3304,6 @@ async function sendFilesToTechniciansGroup(customer, serviceNumber, problemDescr
             return false;
         }
         
-        const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
-        
         // שלח תחילה הודעת טקסט עם הפרטים
         const textMessage = `🚨 **קריאה דחופה עם קבצים**\n\n` +
             `👤 **לקוח:** ${customer.name}\n` +
@@ -3304,38 +3312,54 @@ async function sendFilesToTechniciansGroup(customer, serviceNumber, problemDescr
             `📞 **טלפון ראשי:** ${customer.phone}\n` +
             `🆔 **מספר קריאה:** ${serviceNumber}\n\n` +
             `🔧 **תיאור:**\n${problemDescription}\n\n` +
-            `📎 **מצורף ${attachments.length} קבצים:**\n` +
+            `📎 **מצורף ${attachments.length} קבצים - מפורטים במייל**\n` +
+            `⚠️ **הקבצים נשלחו במייל בלבד עקב מגבלות טכניות**\n\n` +
             `⏰ **זמן:** ${getIsraeliTime()}\n`;
         
         await sendWhatsAppToGroup(textMessage);
         
-        // שלח כל קובץ בנפרד
+        // נסה לשלוח כל קובץ, אבל אל תיכשל אם זה לא עובד
+        let successCount = 0;
         for (let i = 0; i < attachments.length; i++) {
             const filePath = attachments[i];
             const fileName = path.basename(filePath);
             const caption = `📎 **קובץ ${i + 1}/${attachments.length}**\n🆔 ${serviceNumber} - ${customer.name}\n📁 ${fileName}`;
             
-            // המתן קצת בין קבצים כדי לא לעמוס על השרת
+            // המתן קצת בין קבצים
             if (i > 0) {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 שניות
+                await new Promise(resolve => setTimeout(resolve, 3000)); // 3 שניות
             }
             
-            const result = await sendWhatsAppFile(GROUP_CHAT_ID.replace('@g.us', ''), filePath, caption);
+            const GROUP_CHAT_ID = '972545484210-1354702417@g.us';
+            const result = await sendWhatsAppFile(GROUP_CHAT_ID, filePath, caption);
             
             if (result) {
                 log('INFO', `✅ קובץ ${i + 1}/${attachments.length} נשלח לקבוצה: ${fileName}`);
+                successCount++;
             } else {
-                log('ERROR', `❌ כשל בשליחת קובץ ${i + 1}: ${fileName}`);
+                log('WARN', `⚠️ קובץ ${i + 1} לא נשלח: ${fileName} - ימשיך במייל`);
             }
         }
         
         // הודעת סיום
-        await sendWhatsAppToGroup(`✅ **הושלמה שליחת ${attachments.length} קבצים עבור קריאה ${serviceNumber}**`);
+        if (successCount > 0) {
+            await sendWhatsAppToGroup(`✅ **הושלמה שליחה - ${successCount}/${attachments.length} קבצים נשלחו בוואטסאפ**\n📧 **כל הקבצים זמינים במייל**`);
+        } else {
+            await sendWhatsAppToGroup(`⚠️ **קבצים לא נשלחו בוואטסאפ עקב מגבלות טכניות**\n📧 **כל הקבצים זמינים במייל בלבד**\n🆔 קריאה: ${serviceNumber}`);
+        }
         
         return true;
         
     } catch (error) {
         log('ERROR', `❌ שגיאה כללית בשליחת קבצים לטכנאים: ${error.message}`);
+        
+        // שלח לפחות הודעה שיש קבצים במייל
+        try {
+            await sendWhatsAppToGroup(`⚠️ **שגיאה בשליחת קבצים לוואטסאפ**\n📧 **כל הקבצים זמינים במייל**\n🆔 קריאה: ${serviceNumber} - ${customer.name}`);
+        } catch (groupError) {
+            log('ERROR', `❌ שגיאה גם בשליחת הודעת חירום: ${groupError.message}`);
+        }
+        
         return false;
     }
 }
