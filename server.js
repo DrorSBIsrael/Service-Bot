@@ -2231,29 +2231,11 @@ class ResponseHandler {
             
             autoFinishManager.startTimer(phone, customer, 'problem_confirmation', handleAutoFinish);
             
-// 🔘 חדש: שליחה עם כפתורים
-const confirmMessage = `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n⏰ **סיום אוטומטי בעוד 60 שניות**`;
-const confirmButtons = createSimpleConfirmButtons();
-
-try {
-    await sendWhatsAppWithButtons(phone, confirmMessage, confirmButtons);
-    log('INFO', '✅ נשלחו כפתורי אישור');
-} catch (buttonError) {
-    log('ERROR', '❌ כפתורים נכשלו, שולח הודעה רגילה');
-    // אם כפתורים נכשלים - חזור להודעה רגילה
-    return {
-        response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-        stage: 'problem_confirmation',
-        customer: customer
-    };
-}
-
-return {
-    response: '', // ריק כי כבר שלחנו עם כפתורים
-    stage: 'problem_confirmation',
-    customer: customer,
-    skipRegularSend: true // מונע שליחה כפולה
-};
+            return {
+                response: `📋 **תיאור התקלה עודכן:**\n\n"${updatedProblem}"\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות נוספות**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+                stage: 'problem_confirmation',
+                customer: customer
+            };
         }
     
         // טיפול בקבצים
@@ -2294,28 +2276,10 @@ return {
                 filesText = `\n\n📎 **קבצים מצורפים:** ${attachedFiles.map(f => f.type).join(', ')} (${attachedFiles.length})`;
             }
             
-            // 🔘 חדש: שליחה עם כפתורים
-            const confirmMessage = `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n⏰ **סיום אוטומטי בעוד 60 שניות**`;
-            const confirmButtons = createSimpleConfirmButtons();
-    
-            try {
-                await sendWhatsAppWithButtons(phone, confirmMessage, confirmButtons);
-                log('INFO', '✅ נשלחו כפתורי אישור תקלה');
-            } catch (buttonError) {
-                log('ERROR', '❌ כפתורים נכשלו, שולח הודעה רגילה');
-                // אם כפתורים נכשלים - חזור להודעה רגילה
-                return {
-                    response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
-                    stage: 'problem_confirmation',
-                    customer: customer
-                };
-            }
-    
             return {
-                response: '', // ריק כי כבר שלחנו עם כפתורים
+                response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
                 stage: 'problem_confirmation',
-                customer: customer,
-                skipRegularSend: true // מונע שליחה כפולה
+                customer: customer
             };
         }
         
@@ -3189,57 +3153,6 @@ async function sendWhatsApp(phone, message) {
     }
 }
 
-// הוסף את הקוד הזה מיד אחרי פונקציית sendWhatsApp (בסביבות שורה 650):
-
-// פונקציה לשליחת כפתורים אינטראקטיביים
-async function sendWhatsAppWithButtons(phone, message, buttons) {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
-    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendButtons/${token}`;
-    
-    try {
-        log('DEBUG', `📤 שולח כפתורים ל-${phone}: ${buttons.length} כפתורים`);
-        
-        const response = await axios.post(url, {
-            chatId: `${phone}@c.us`,
-            message: message,
-            footer: "שיידט את בכמן",
-            buttons: buttons
-        }, {
-            timeout: 8000,
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        
-        if (response.data && response.data.idMessage) {
-            log('INFO', `✅ כפתורים נשלחו בהצלחה: ${response.data.idMessage}`);
-        }
-        
-        return response.data;
-        
-    } catch (error) {
-        log('ERROR', '❌ שגיאת כפתורים, שולח הודעה רגילה:', error.message);
-        
-        // אם כפתורים נכשלו - שלח הודעה רגילה
-        const fallbackMessage = message + '\n\n' + buttons.map((btn, i) => `${i + 1}️⃣ ${btn.buttonText}`).join('\n');
-        return await sendWhatsApp(phone, fallbackMessage);
-    }
-}
-
-// פונקציה ליצירת כפתורי אישור פשוטים
-function createSimpleConfirmButtons() {
-    return [
-        {
-            buttonId: "confirm_yes",
-            buttonText: "✅ אישור"
-        },
-        {
-            buttonId: "confirm_edit",
-            buttonText: "✏️ שינויים"
-        }
-    ];
-}
 // מזהה קבוצת WhatsApp לתקלות דחופות
 const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
 
@@ -4042,81 +3955,6 @@ app.get('/', (req, res) => {
 // WhatsApp Webhook מעולה
 app.post('/webhook/whatsapp', async (req, res) => {
     try {
-        app.post('/webhook/whatsapp', async (req, res) => {
-            try {
-                // 🔘 חדש: בדיקה אם זה כפתור שנלחץ
-                if (req.body.typeWebhook === 'incomingButtonPressed') {
-                    try {
-                        const buttonData = req.body.messageData;
-                        const senderData = req.body.senderData;
-                        const phone = cleanPhoneNumber(senderData.sender);
-                        const buttonId = buttonData.selectedButtonId;
-                        
-                        log('INFO', `🔘 נלחץ כפתור: ${buttonId} מ-${phone}`);
-                        
-                        // מצא לקוח
-                        let customer = findCustomerByPhone(phone);
-                        
-                        // המר כפתור לטקסט
-                        let responseText = '';
-                        switch (buttonId) {
-                            case 'confirm_yes':
-                                responseText = 'אישור';
-                                break;
-                            case 'confirm_edit':
-                                responseText = 'שינויים';
-                                break;
-                            default:
-                                responseText = buttonData.selectedButtonText || 'כפתור';
-                        }
-                        
-                        log('INFO', `🔄 ממיר כפתור "${buttonId}" לטקסט: "${responseText}"`);
-                        
-                        // עבד כאילו הלקוח כתב את הטקסט
-                        memory.addMessage(phone, responseText, 'customer', customer);
-                        
-                        const result = await responseHandler.generateResponse(
-                            responseText,
-                            phone,
-                            customer,
-                            false, false, []
-                        );
-                        
-                        // שלח תגובה
-                        if (!result.skipRegularSend && result.response && result.response.trim() !== '') {
-                            await sendWhatsApp(phone, result.response);
-                            memory.addMessage(phone, result.response, 'hadar', result.customer);
-                        }
-                        
-                        // טיפול במיילים אם נדרש
-                        if (result.sendTechnicianEmail) {
-                            await sendEmail(result.customer, 'technician', responseText, {
-                                serviceNumber: result.serviceNumber,
-                                problemDescription: result.problemDescription,
-                                resolved: result.resolved,
-                                attachments: result.attachments
-                            }, phone);
-                        }
-                        
-                        return res.status(200).json({ status: 'OK - button processed' });
-                        
-                    } catch (buttonError) {
-                        log('ERROR', '❌ שגיאה בעיבוד כפתור:', buttonError.message);
-                        return res.status(200).json({ status: 'OK - button error' });
-                    }
-                }
-                
-                // הקוד הקיים שלך נשאר בדיוק אותו דבר:
-                if (req.body.typeWebhook !== 'incomingMessageReceived') {
-                    return res.status(200).json({ status: 'OK - not a message' });
-                }
-                
-                // ... שאר הקוד שלך ממשיך בדיוק כמו שהוא...
-            } catch (error) {
-                log('ERROR', '❌ שגיאה כללית:', error.message);
-                res.status(500).json({ error: 'Server error' });
-            }
-        });
         if (req.body.typeWebhook !== 'incomingMessageReceived') {
             return res.status(200).json({ status: 'OK - not a message' });
         }
@@ -4373,14 +4211,9 @@ if (filePath) {
             detectedFileType, 
             [filePath]
         );
-
-        // שליחת תגובה - רק אם לא נשלחה כבר
-        if (!result.skipRegularSend && result.response && result.response.trim() !== '') {
-            await sendWhatsApp(phone, result.response);
-            memory.addMessage(phone, result.response, 'hadar', result.customer);
-        } else if (result.skipRegularSend) {
-            log('INFO', '⏭️ דולג על שליחה רגילה - נשלחו כפתורים');
-        }
+        
+        await sendWhatsApp(phone, result.response);
+        memory.addMessage(phone, result.response, 'hadar', result.customer);
         
         // שליחת מיילים לפי הצורך
         if (result.sendTechnicianEmail) {
@@ -4429,14 +4262,9 @@ if (conversation?.stage === 'damage_photo') {
             detectedFileType, 
             allFilePaths
         );
-
-        // שליחת תגובה - רק אם לא נשלחה כבר
-        if (!result.skipRegularSend && result.response && result.response.trim() !== '') {
-            await sendWhatsApp(phone, result.response);
-            memory.addMessage(phone, result.response, 'hadar', result.customer);
-        } else if (result.skipRegularSend) {
-            log('INFO', '⏭️ דולג על שליחה רגילה - נשלחו כפתורים');
-        }
+        
+        await sendWhatsApp(phone, result.response);
+        memory.addMessage(phone, result.response, 'hadar', result.customer);
         
         if (result.sendDamageEmail) {
             await sendEmail(result.customer, 'damage', result.problemDescription, {
@@ -4534,17 +4362,13 @@ if (tempFiles.length > 0) {
             downloadedFiles
         );
         
-// שליחת תגובה - רק אם לא נשלחה כבר
-if (!result.skipRegularSend && result.response && result.response.trim() !== '') {
-    await sendWhatsApp(phone, result.response);
-    memory.addMessage(phone, result.response, 'hadar', result.customer);
-} else if (result.skipRegularSend) {
-    log('INFO', '⏭️ דולג על שליחה רגילה - נשלחו כפתורים');
-}
-
-log('INFO', `📤 תגובה נשלחה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
-
-// שליחת מיילים לפי הצורך
+        // שליחת תגובה
+        await sendWhatsApp(phone, result.response);
+        memory.addMessage(phone, result.response, 'hadar', result.customer);
+        
+        log('INFO', `📤 תגובה נשלחה ללקוח ${result.customer ? result.customer.name : 'לא מזוהה'}: ${result.stage}`);
+        
+        // שליחת מיילים לפי הצורך
         if (result.sendTechnicianEmail) {
             log('INFO', `📧 שולח מייל טכנאי ללקוח ${result.customer.name}`);
             await sendEmail(result.customer, 'technician', messageText, {
