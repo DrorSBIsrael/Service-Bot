@@ -4092,9 +4092,51 @@ if (hasFile && messageData.fileMessageData && messageData.fileMessageData.downlo
     const existingFiles = conversation?.data?.tempFiles || [];
     
 // בדיקה שלא חורגים מ-4 קבצים בסה"כ
+// בדיקה שלא חורגים מ-4 קבצים בסה"כ
 if (existingFiles.length >= 4) {
-    await sendWhatsApp(phone, `⚠️ **הגבלת קבצים**\n\nניתן לשלוח עד 4 קבצים בלבד בפנייה אחת.\n\nכתוב "סיום" כדי לסיים עם הקבצים הקיימים\n\nאו שלח "תפריט" לחזרה לתפריט הראשי\n\n🟡 רשום סיום לשליחת המייל`);
-    return res.status(200).json({ status: 'OK - file limit reached' });
+    // 🔧 חדש: סיום אוטומטי כשמגיעים ל-4 קבצים
+    log('INFO', `⚠️ הגיעו ל-4 קבצים - סיום אוטומטי עבור ${customer ? customer.name : phone}`);
+    
+    // בדוק באיזה שלב אנחנו ובצע סיום מיידי
+    if (conversation?.stage === 'damage_photo') {
+        // חפש מספר יחידה בהודעות קודמות
+        let unitNumber = null;
+        if (conversation.messages) {
+            for (let i = conversation.messages.length - 1; i >= 0 && !unitNumber; i--) {
+                const msg = conversation.messages[i];
+                if (msg.sender === 'customer') {
+                    const unitMatch = msg.message.match(/(?:יחידה\s*)?(?:מחסום\s*)?(?:מספר\s*)?(\d{1,3})/i);
+                    if (unitMatch) {
+                        unitNumber = unitMatch[1];
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (unitNumber) {
+            // יש מספר יחידה - סיים את הדיווח
+            const serviceNumber = await getNextServiceNumber();
+            const allFilePaths = existingFiles.map(f => f.path);
+            
+            await sendWhatsApp(phone, `🚫 **הגיעו ל-4 קבצים - סיום אוטומטי**\n\n✅ **דיווח נזק נשלח:**\nיחידה ${unitNumber}\n📎 ${existingFiles.length} קבצים\n\n🔍 מעביר לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}`);
+            
+            await sendEmail(customer, 'damage', `נזק ביחידה ${unitNumber} - 4 קבצים`, {
+                serviceNumber: serviceNumber,
+                problemDescription: `נזק ביחידה ${unitNumber} - 4 קבצים`,
+                attachments: allFilePaths
+            });
+            
+            memory.updateStage(phone, 'completed', customer, { tempFiles: [] });
+            return res.status(200).json({ status: 'OK - auto completed with 4 files' });
+        }
+    }
+    
+    // אם אין מספר יחידה או שלב אחר - נקה והחזר לתפריט
+    await sendWhatsApp(phone, `🚫 **הגיעו ל-4 קבצים - מחזיר לתפריט**\n\n🔄 **תפריט ראשי:**\n1️⃣ דיווח תקלה\n2️⃣ דיווח נזק\n3️⃣ הצעת מחיר\n4️⃣ הדרכה\n5️⃣ משרד כללי\n\n📞 039792365`);
+    
+    memory.updateStage(phone, 'menu', customer, { tempFiles: [] });
+    return res.status(200).json({ status: 'OK - file limit reached, returned to menu' });
 }
 
 const originalFileName = messageData.fileMessageData.fileName || `file_${Date.now()}.file`;
