@@ -8,6 +8,7 @@ const app = express();
 const OpenAI = require('openai');
 // Google Sheets Integration
 const { google } = require('googleapis');
+const FormData = require('form-data');
 // הגדרת Google Sheets
 const sheets = google.sheets('v4');
 let auth = null;
@@ -3226,6 +3227,119 @@ function isWorkingHours() {
     return result;
 }
 
+// פונקציה לשליחת קובץ בוואטסאפ
+async function sendWhatsAppFile(phone, filePath, caption = '') {
+    const instanceId = '7105253183';
+    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendFileByUpload/${token}`;
+    
+    try {
+        if (!fs.existsSync(filePath)) {
+            log('ERROR', `❌ קובץ לא קיים: ${filePath}`);
+            return null;
+        }
+        
+        const fileName = path.basename(filePath);
+        const fileExtension = path.extname(fileName).toLowerCase();
+        
+        // זיהוי סוג קובץ ל-API
+        let fileType = 'document';
+        if (['.jpg', '.jpeg', '.png', '.gif', '.webp'].includes(fileExtension)) {
+            fileType = 'image';
+        } else if (['.mp4', '.avi', '.mov', '.mkv', '.webm'].includes(fileExtension)) {
+            fileType = 'video';
+        } else if (['.mp3', '.wav', '.ogg', '.m4a'].includes(fileExtension)) {
+            fileType = 'audio';
+        }
+        
+        const formData = new FormData();
+        formData.append('chatId', `${phone}@c.us`);
+        formData.append('file', fs.createReadStream(filePath));
+        formData.append('fileName', fileName);
+        if (caption) {
+            formData.append('caption', caption);
+        }
+        
+        log('DEBUG', `📤 שולח קובץ ${fileType} לוואטסאפ: ${fileName} ל-${phone}`);
+        
+        const response = await axios.post(url, formData, {
+            timeout: 30000, // 30 שניות
+            headers: {
+                ...formData.getHeaders(),
+                'Content-Type': 'multipart/form-data'
+            },
+            maxContentLength: 100 * 1024 * 1024, // 100MB
+            maxBodyLength: 100 * 1024 * 1024
+        });
+        
+        if (response.data && response.data.idMessage) {
+            log('INFO', `✅ קובץ נשלח בוואטסאפ: ${fileName} - ${response.data.idMessage}`);
+            return response.data;
+        } else {
+            log('WARN', `⚠️ קובץ נשלח אבל תגובה לא ברורה: ${fileName}`);
+            return response.data;
+        }
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליחת קובץ ${filePath}: ${error.response?.data?.error || error.message}`);
+        return null;
+    }
+}
+
+// פונקציה לשליחת קבצים לקבוצת הטכנאים
+async function sendFilesToTechniciansGroup(customer, serviceNumber, problemDescription, attachments = [], phone = null) {
+    try {
+        if (!attachments || attachments.length === 0) {
+            log('INFO', 'אין קבצים לשלוח לטכנאים');
+            return false;
+        }
+        
+        const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט את בכמן ישראל
+        
+        // שלח תחילה הודעת טקסט עם הפרטים
+        const textMessage = `🚨 **קריאה דחופה עם קבצים**\n\n` +
+            `👤 **לקוח:** ${customer.name}\n` +
+            `🏢 **חניון:** ${customer.site}\n` +
+            `📞 **טלפון שפנה:** ${phone || customer.phone}\n` +
+            `📞 **טלפון ראשי:** ${customer.phone}\n` +
+            `🆔 **מספר קריאה:** ${serviceNumber}\n\n` +
+            `🔧 **תיאור:**\n${problemDescription}\n\n` +
+            `📎 **מצורף ${attachments.length} קבצים:**\n` +
+            `⏰ **זמן:** ${getIsraeliTime()}\n`;
+        
+        await sendWhatsAppToGroup(textMessage);
+        
+        // שלח כל קובץ בנפרד
+        for (let i = 0; i < attachments.length; i++) {
+            const filePath = attachments[i];
+            const fileName = path.basename(filePath);
+            const caption = `📎 **קובץ ${i + 1}/${attachments.length}**\n🆔 ${serviceNumber} - ${customer.name}\n📁 ${fileName}`;
+            
+            // המתן קצת בין קבצים כדי לא לעמוס על השרת
+            if (i > 0) {
+                await new Promise(resolve => setTimeout(resolve, 2000)); // 2 שניות
+            }
+            
+            const result = await sendWhatsAppFile(GROUP_CHAT_ID.replace('@g.us', ''), filePath, caption);
+            
+            if (result) {
+                log('INFO', `✅ קובץ ${i + 1}/${attachments.length} נשלח לקבוצה: ${fileName}`);
+            } else {
+                log('ERROR', `❌ כשל בשליחת קובץ ${i + 1}: ${fileName}`);
+            }
+        }
+        
+        // הודעת סיום
+        await sendWhatsAppToGroup(`✅ **הושלמה שליחת ${attachments.length} קבצים עבור קריאה ${serviceNumber}**`);
+        
+        return true;
+        
+    } catch (error) {
+        log('ERROR', `❌ שגיאה כללית בשליחת קבצים לטכנאים: ${error.message}`);
+        return false;
+    }
+}
+
 // שליחת מייל משופרת
 async function sendEmail(customer, type, details, extraData = {}, phoneUsed = null) {
     try {
@@ -3359,13 +3473,14 @@ switch(type) {
             // 🔧 חדש: שליחה לקבוצת WhatsApp במקרה של תקלה מחוץ לשעות עבודה
             try {
                 let problemText = details;
-if (extraData.problemDescription) {
-    problemText = extraData.problemDescription;
-} else if (extraData.orderDetails) {
-    problemText = extraData.orderDetails;
-} else if (extraData.trainingRequest) {
-    problemText = extraData.trainingRequest;
-}
+                if (extraData.problemDescription) {
+                    problemText = extraData.problemDescription;
+                } else if (extraData.orderDetails) {
+                    problemText = extraData.orderDetails;
+                } else if (extraData.trainingRequest) {
+                    problemText = extraData.trainingRequest;
+                }
+                
                 const groupMessage = `🚨 **תקלה דחופה מחוץ לשעות עבודה**\n\n` +
                     `👤 **לקוח:** ${customer.name}\n` +
                     `🏢 **חניון:** ${customer.site}\n` +
@@ -3373,9 +3488,25 @@ if (extraData.problemDescription) {
                     `📞 **טלפון ראשי:** ${customer.phone}\n` +
                     `🆔 **מספר קריאה:** ${extraData.serviceNumber || serviceNumber || 'לא זמין'}\n\n` +
                     `🔧 **תיאור התקלה:**\n${problemText}\n\n` +
-                    `⏰ **זמן:** ${getIsraeliTime()}\n\n` ;
+                    `⏰ **זמן:** ${getIsraeliTime()}\n\n` +
+                    `${extraData.attachments && extraData.attachments.length > 0 ? 
+                        `📎 **יש ${extraData.attachments.length} קבצים מצורפים - נשלחים בנפרד...**` : 
+                        ''}`;
                 
                 await sendWhatsAppToGroup(groupMessage);
+                
+                // 🔧 חדש: שליחת קבצים אם יש
+                if (extraData.attachments && extraData.attachments.length > 0) {
+                    log('INFO', `📎 שולח ${extraData.attachments.length} קבצים לטכנאים בוואטסאפ`);
+                    await sendFilesToTechniciansGroup(
+                        customer, 
+                        extraData.serviceNumber || serviceNumber, 
+                        problemText, 
+                        extraData.attachments, 
+                        phoneUsed
+                    );
+                }
+                
                 log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name}`);
             } catch (groupError) {
                 log('ERROR', '❌ שגיאה בשליחה לקבוצה:', groupError.message);
@@ -3389,15 +3520,57 @@ if (extraData.problemDescription) {
     case 'order':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
+        
     case 'damage':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+        
+        // 🔧 חדש: גם נזקים מחוץ לשעות עבודה ישלחו לוואטסאפ
+        const damageWorkingHours = isWorkingHours();
+        if (damageWorkingHours.shouldSendSMS) {
+            emailRecipients.push('SMS@sbparking.co.il');
+            log('INFO', `📱 נזק מחוץ לשעות עבודה - שולח גם לטכנאים`);
+            
+            try {
+                const damageMessage = `🚨 **דיווח נזק דחוף מחוץ לשעות עבודה**\n\n` +
+                    `👤 **לקוח:** ${customer.name}\n` +
+                    `🏢 **חניון:** ${customer.site}\n` +
+                    `📞 **טלפון שפנה:** ${phoneUsed || customer.phone}\n` +
+                    `📞 **טלפון ראשי:** ${customer.phone}\n` +
+                    `🆔 **מספר קריאה:** ${extraData.serviceNumber || serviceNumber}\n\n` +
+                    `🚨 **תיאור הנזק:**\n${extraData.problemDescription || details}\n\n` +
+                    `⏰ **זמן:** ${getIsraeliTime()}\n\n` +
+                    `${extraData.attachments && extraData.attachments.length > 0 ? 
+                        `📎 **יש ${extraData.attachments.length} קבצים מצורפים - נשלחים בנפרד...**` : 
+                        ''}`;
+                
+                await sendWhatsAppToGroup(damageMessage);
+                
+                // שליחת קבצים עבור נזקים
+                if (extraData.attachments && extraData.attachments.length > 0) {
+                    log('INFO', `📎 שולח ${extraData.attachments.length} קבצים לטכנאים (נזק)`);
+                    await sendFilesToTechniciansGroup(
+                        customer, 
+                        extraData.serviceNumber || serviceNumber, 
+                        extraData.problemDescription || details, 
+                        extraData.attachments, 
+                        phoneUsed
+                    );
+                }
+                
+            } catch (damageGroupError) {
+                log('ERROR', '❌ שגיאה בשליחת נזק לקבוצה:', damageGroupError.message);
+            }
+        }
         break;
+        
     case 'training':
         emailRecipients = ['service@sbcloud.co.il'];
         break;
+        
     case 'general_office':
         emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         break;
+        
     default:
         emailRecipients = ['service@sbcloud.co.il'];
         break;
