@@ -602,8 +602,8 @@ const openai = new OpenAI({
 class AdvancedMemory {
     constructor() {
         this.conversations = new Map();
-        this.maxAge = 4 * 60 * 60 * 1000; // 4 שעות
-        setInterval(() => this.cleanup(), 60 * 60 * 1000); // ניקוי כל שעה
+        this.maxAge = 30 * 60 * 1000; // 30 דקות
+        setInterval(() => this.cleanup(), 5 * 60 * 1000); // ניקוי כל 5 דקות
         log('INFO', '🧠 זיכרון מתקדם אותחל');
     }
     
@@ -697,19 +697,35 @@ createOrUpdateConversation(phone, customer = null, initialStage = 'identifying')
         for (const [key, conv] of this.conversations.entries()) {
             const timeSinceLastActivity = now - conv.lastActivity;
             
-            // 🔧 ניקוי אגרסיבי - מחק שיחות ישנות או תקועות
+            // 🔧 ניקוי אגרסיבי משופר - שינוי הזמנים
             if (timeSinceLastActivity > this.maxAge || 
+                (timeSinceLastActivity > 5 * 60 * 1000 && // 5 דקות במקום 10
+                 ['identifying', 'confirming_identity', 'guest_details'].includes(conv.stage)) ||
                 (timeSinceLastActivity > 10 * 60 * 1000 && // 10 דקות
-                 ['identifying', 'confirming_identity', 'guest_details'].includes(conv.stage))) {
+                 ['completed', 'technician_escalated'].includes(conv.stage))) {
+                
+                // 🔧 חדש: נקה קבצים זמניים לפני מחיקת השיחה
+                if (conv.data && conv.data.tempFiles) {
+                    conv.data.tempFiles.forEach(file => {
+                        try {
+                            if (fs.existsSync(file.path)) {
+                                fs.unlinkSync(file.path);
+                                log('DEBUG', `🗑️ נמחק קובץ זמני: ${file.path}`);
+                            }
+                        } catch (error) {
+                            log('WARN', `⚠️ לא ניתן למחוק קובץ: ${file.path}`);
+                        }
+                    });
+                }
                 
                 this.conversations.delete(key);
-                log('INFO', `🧹 נוקה conversation תקוע: ${key} - שלב: ${conv.stage}`);
+                log('INFO', `🧹 נוקה conversation: ${key} - שלב: ${conv.stage} (${Math.round(timeSinceLastActivity/60000)} דק)`);
             }
         }
         
         const afterCount = this.conversations.size;
         if (beforeCount !== afterCount) {
-            log('INFO', `🧹 ניקוי זיכרון: ${beforeCount - afterCount} שיחות נמחקו`);
+            log('INFO', `🧹 ניקוי זיכרון: ${beforeCount - afterCount} שיחות נמחקו, נותרו: ${afterCount}`);
         }
     }
     
