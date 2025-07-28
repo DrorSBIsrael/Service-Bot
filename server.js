@@ -1966,7 +1966,7 @@ class ResponseHandler {
                 this.memory.updateStage(phone, 'problem_description', customer);
                 
                 let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
+                response += `${customer.name} מחניון ${customer.site} 👋\n\n🔧 **תיאור התקלה:**\n\nאנא כתוב תיאור קצר של התקלה + מספר יחידה (3 ספרות)\n\n📷 **אפשר לצרף:** תמונה או סרטון\n\nדוגמאות:\n• "היחידה 101 לא דולקת"\n• "מחסום 205 לא עולה"\n• "יחידה 350 לא מדפיס כרטיסים"\n\nהמתן מספר שניות לתשובה🤞`;
                 
                 return { response, stage: 'problem_description', customer: customer };
             }
@@ -1975,7 +1975,7 @@ class ResponseHandler {
                 this.memory.updateStage(phone, 'damage_photo', customer);
                 
                 let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`;
+                response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\n📷 **דיווח נזק:**\n\nאנא שלח תמונות/סרטונים/מסמכים של הנזק + מספר היחידה\n\n📎 **ניתן לשלוח עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, Word, Excel\n\nדוגמה: תמונות + "יחידה 101"\n\n📞 039792365`;
                 
                 return { response, stage: 'damage_photo', customer: customer };
             }
@@ -1984,7 +1984,7 @@ class ResponseHandler {
                 this.memory.updateStage(phone, 'order_request', customer);
                 
                 let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`;
+                response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\n💰 **הצעת מחיר / הזמנה**\n\nמה אתה מבקש להזמין?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, סרטונים\n\nדוגמאות:\n• "20,000 כרטיסים"\n• "3 גלילים נייר" + תמונה\n• "זרוע חלופית" + PDF מפרט\n\n📞 039792365`;
                 
                 return { response, stage: 'order_request', customer: customer };
             }
@@ -1993,7 +1993,7 @@ class ResponseHandler {
                 this.memory.updateStage(phone, 'training_request', customer);
                 
                 let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\nהמתן מספר שניות לתשובה🤞`;
+                response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\n📚 **הדרכה**\n\nבאיזה נושא אתה זקוק להדרכה?\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, סרטונים, PDF, מסמכים\n\nדוגמאות:\n• "הפעלת המערכת" + תמונת מסך\n• "החלפת נייר"\n• "טיפול בתקלות"\n\nהמתן מספר שניות לתשובה🤞`;
                 
                 return { response, stage: 'training_request', customer: customer };
             }
@@ -2002,7 +2002,7 @@ class ResponseHandler {
                 this.memory.updateStage(phone, 'general_office_request', customer);
                 
                 let response = greetingResponse ? `${greetingResponse} ` : '';
-                response += `${customer.name} 👋 - אני הדר, הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`;
+                response += `${customer.name} מחניון ${customer.site} 👋 - אני הדר, הבוט של שיידט\n\n🏢 **פנייה למשרד כללי**\n\nאנא תאר את בקשתך או הנושא שברצונך לטפל בו\n\n📎 **ניתן לצרף עד 4 קבצים**\n🗂️ **סוגי קבצים:** תמונות, PDF, Word, Excel, מסמכים\n\nדוגמאות:\n• "עדכון פרטי התקשרות"\n• "בקשה להדרכה מורחבת"\n• "בעיה בחיוב" + קובץ PDF\n\n📞 039792365`;
                 
                 return { response, stage: 'general_office_request', customer: customer };
             }
