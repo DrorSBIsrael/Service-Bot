@@ -231,10 +231,15 @@ async function runAssistant(threadId, assistantId, instructions = "") {
         const run = await openai.beta.threads.runs.create(threadId, {
             assistant_id: assistantId,
             instructions: instructions,
-            // 🔧 הוספת פרמטרים למהירות
             model: "gpt-4o-mini", // מודל מהיר יותר אם זמין
-            max_completion_tokens: 1000, // הגבלת אורך התשובה
-            temperature: 0.3 // יותר עקבי, פחות יצירתי
+            max_completion_tokens: 150, // הגבלת אורך התשובה
+            temperature: 0.3, // יותר עקבי, פחות יצירתי
+            // 💡 זהו השינוי העיקרי! הוספת הכלי Retrieval ל-Assistant
+            tool_resources: {
+                file_search: {
+                    vector_store_ids: [process.env.OPENAI_VECTOR_STORE_ID]
+                }
+            }
         });
         
         log('INFO', `🤖 מפעיל Assistant: ${run.id}`);
