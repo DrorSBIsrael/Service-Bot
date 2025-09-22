@@ -3209,7 +3209,8 @@ function isWorkingHours() {
     const isWorkingDay = (day >= 0 && day <= 4); // ראשון עד חמישי
     
     // שעות עבודה: 9:00-16:00
-    const isWorkingHour = (hour >= 9 && hour < 16);
+    // const isWorkingHour = (hour >= 9 && hour < 16);
+    const isWorkingHour = (hour >= 2 && hour < 3);
     
     const result = {
         hour: hour,
@@ -3487,8 +3488,7 @@ switch(type) {
         const workingHours = isWorkingHours();
         
         // תמיד שלח ל-service
-        //emailRecipients = ['service@sbcloud.co.il'];
-        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+        emailRecipients = ['service@sbcloud.co.il'];
         
         // הוסף SMS רק מחוץ לשעות עבודה
         if (workingHours.shouldSendSMS) {
