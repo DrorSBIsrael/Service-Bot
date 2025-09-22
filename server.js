@@ -3487,7 +3487,8 @@ switch(type) {
         const workingHours = isWorkingHours();
         
         // תמיד שלח ל-service
-        emailRecipients = ['service@sbcloud.co.il'];
+        //emailRecipients = ['service@sbcloud.co.il'];
+        emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
         
         // הוסף SMS רק מחוץ לשעות עבודה
         if (workingHours.shouldSendSMS) {
