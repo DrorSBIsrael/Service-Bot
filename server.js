@@ -3210,7 +3210,7 @@ function isWorkingHours() {
     
     // שעות עבודה: 9:00-16:00
     // const isWorkingHour = (hour >= 9 && hour < 16);
-    const isWorkingHour = (hour >= 2 && hour < 3);
+    const isWorkingHour = (hour >= 9 && hour < 16);
     
     const result = {
         hour: hour,
