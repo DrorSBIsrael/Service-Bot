@@ -2196,7 +2196,7 @@ class ResponseHandler {
                     
                     autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
         
-                    let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n\n🆔 מספר קריאה: ${serviceNumber}`;
+                    let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n`;
                     
                     return {
                         response: responseMessage,
@@ -2208,7 +2208,7 @@ class ResponseHandler {
                     this.memory.updateStage(phone, 'completed', customer);
                     
                     return {
-                        response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                        response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n`,
                         stage: 'completed',
                         customer: customer,
                         serviceNumber: serviceNumber,
@@ -2277,7 +2277,7 @@ class ResponseHandler {
             }
             
             return {
-                response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\n📞 039792365`,
+                response: `📋 **הבנתי את התקלה:**\n\n"${message}"${filesText}\n\n✅ **כתוב "אישור" לעיבוד התקלה**\n➕ **או כתוב תוספות/שינויים**\n\n⏰ **סיום אוטומטי בעוד 60 שניות**\n\nהמתן מספר שניות לתשובה🤞`,
                 stage: 'problem_confirmation',
                 customer: customer
             };
