@@ -3196,7 +3196,67 @@ async function sendWhatsAppToGroup(message) {
     }
 }
 
-// בדיקת שעות עבודה
+// רשימת חגים ישראליים - עדכן כל שנה
+function getIsraeliHolidays(year) {
+    // חגים קבועים (לוח גרגוריאני)
+    const fixedHolidays = [
+        { month: 0, day: 1, name: 'ראש השנה האזרחי' }, // 1 בינואר
+        { month: 4, day: 14, name: 'יום העצמאות' }, // 14 במאי (משתנה, זו דוגמה)
+    ];
+    
+    // חגים עבריים - יש לעדכן כל שנה לפי הלוח העברי
+    // אלו התאריכים ב-2025 (דוגמה - צריך עדכון שנתי!)
+    const holidays2025 = [
+        { month: 3, day: 13, name: 'פסח - ערב חג' },
+        { month: 3, day: 14, name: 'פסח - יום ראשון' },
+        { month: 3, day: 15, name: 'פסח - יום שני' },
+        { month: 3, day: 16, name: 'פסח - חול המועד' },
+        { month: 3, day: 17, name: 'פסח - חול המועד' },
+        { month: 3, day: 18, name: 'פסח - חול המועד' },
+        { month: 3, day: 19, name: 'פסח - חול המועד' },
+        { month: 3, day: 20, name: 'פסח - יום שביעי' },
+        { month: 3, day: 21, name: 'פסח - יום שמיני' },
+        { month: 4, day: 13, name: 'יום העצמאות' },
+        { month: 5, day: 2, name: 'שבועות - ערב חג' },
+        { month: 5, day: 3, name: 'שבועות - יום ראשון' },
+        { month: 5, day: 4, name: 'שבועות - יום שני' },
+        { month: 8, day: 23, name: 'ראש השנה - ערב חג' },
+        { month: 8, day: 24, name: 'ראש השנה - יום ראשון' },
+        { month: 8, day: 25, name: 'ראש השנה - יום שני' },
+        { month: 9, day: 2, name: 'יום כיפור - ערב חג' },
+        { month: 9, day: 3, name: 'יום כיפור' },
+        { month: 9, day: 7, name: 'סוכות - ערב חג' },
+        { month: 9, day: 8, name: 'סוכות - יום ראשון' },
+        { month: 9, day: 9, name: 'סוכות - יום שני' },
+        { month: 9, day: 14, name: 'שמחת תורה - ערב חג' },
+        { month: 9, day: 15, name: 'שמחת תורה' }
+    ];
+    
+    // חגים ב-2026 - לעדכן בתחילת 2026!
+    const holidays2026 = [
+        // כאן תוסיף את החגים ב-2026 כשמגיע הזמן
+    ];
+    
+    if (year === 2025) return holidays2025;
+    if (year === 2026) return holidays2026;
+    
+    return []; // אם לא הוגדרו חגים לשנה זו
+}
+
+// בדיקה אם תאריך הוא חג
+function isHoliday(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const day = date.getDate();
+    
+    const holidays = getIsraeliHolidays(year);
+    
+    return holidays.some(holiday => 
+        holiday.month === month && holiday.day === day
+    );
+}
+
+// שעות עבודה הפונקציה המשופרת
 function isWorkingHours() {
     const now = new Date();
     const israelTime = new Date(now.toLocaleString("en-US", {timeZone: "Asia/Jerusalem"}));
@@ -3204,12 +3264,14 @@ function isWorkingHours() {
     const hour = israelTime.getHours();
     const day = israelTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     
+    // בדיקת חג
+    const isHolidayToday = isHoliday(israelTime);
+    
     // בדיקת יום - 0=ראשון, 1=שני, 2=שלישי, 3=רביעי, 4=חמישי, 5=שישי, 6=שבת
     const isFridayOrSaturday = (day === 5 || day === 6); // שישי או שבת
-    const isWorkingDay = (day >= 0 && day <= 4); // ראשון עד חמישי
+    const isWorkingDay = (day >= 0 && day <= 4) && !isHolidayToday; // ראשון עד חמישי וגם לא חג
     
     // שעות עבודה: 9:00-16:00
-    // const isWorkingHour = (hour >= 9 && hour < 16);
     const isWorkingHour = (hour >= 9 && hour < 16);
     
     const result = {
@@ -3217,16 +3279,23 @@ function isWorkingHours() {
         day: day,
         dayName: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][day],
         isFridayOrSaturday: isFridayOrSaturday,
+        isHoliday: isHolidayToday,
         isWorkingDay: isWorkingDay,
         isWorkingHour: isWorkingHour,
         isWorkingTime: isWorkingDay && isWorkingHour,
-        shouldSendSMS: !isWorkingDay || !isWorkingHour // שלח SMS אם לא בשעות עבודה
+        shouldSendSMS: !isWorkingDay || !isWorkingHour || isHolidayToday // שלח SMS אם לא בשעות עבודה או חג
     };
     
-    log('DEBUG', `🕐 בדיקת שעות עבודה: ${result.dayName} ${hour}:00 - עבודה: ${result.isWorkingTime}, SMS: ${result.shouldSendSMS}`);
+    if (isHolidayToday) {
+        log('DEBUG', `🎉 היום חג! - ${result.dayName} ${hour}:00 - SMS: כן`);
+    } else {
+        log('DEBUG', `🕐 בדיקת שעות עבודה: ${result.dayName} ${hour}:00 - עבודה: ${result.isWorkingTime}, SMS: ${result.shouldSendSMS}`);
+    }
     
     return result;
 }
+
+
 
 // פונקציה לשליחת קובץ בוואטסאפ
 async function sendWhatsAppFile(chatId, filePath, caption = '') {
