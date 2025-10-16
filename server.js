@@ -3206,39 +3206,32 @@ function getIsraeliHolidays(year) {
     
     // חגים עבריים - יש לעדכן כל שנה לפי הלוח העברי
     // אלו התאריכים ב-2025 (דוגמה - צריך עדכון שנתי!)
-    const holidays2025 = [
-        { month: 3, day: 13, name: 'פסח - ערב חג' },
-        { month: 3, day: 14, name: 'פסח - יום ראשון' },
-        { month: 3, day: 15, name: 'פסח - יום שני' },
-        { month: 3, day: 16, name: 'פסח - חול המועד' },
-        { month: 3, day: 17, name: 'פסח - חול המועד' },
-        { month: 3, day: 18, name: 'פסח - חול המועד' },
-        { month: 3, day: 19, name: 'פסח - חול המועד' },
-        { month: 3, day: 20, name: 'פסח - יום שביעי' },
-        { month: 3, day: 21, name: 'פסח - יום שמיני' },
-        { month: 4, day: 13, name: 'יום העצמאות' },
-        { month: 5, day: 2, name: 'שבועות - ערב חג' },
-        { month: 5, day: 3, name: 'שבועות - יום ראשון' },
-        { month: 5, day: 4, name: 'שבועות - יום שני' },
-        { month: 8, day: 23, name: 'ראש השנה - ערב חג' },
-        { month: 8, day: 24, name: 'ראש השנה - יום ראשון' },
-        { month: 8, day: 25, name: 'ראש השנה - יום שני' },
-        { month: 9, day: 2, name: 'יום כיפור - ערב חג' },
-        { month: 9, day: 3, name: 'יום כיפור' },
-        { month: 9, day: 7, name: 'סוכות - ערב חג' },
-        { month: 9, day: 8, name: 'סוכות - יום ראשון' },
-        { month: 9, day: 9, name: 'סוכות - יום שני' },
-        { month: 9, day: 14, name: 'שמחת תורה - ערב חג' },
-        { month: 9, day: 15, name: 'שמחת תורה' }
-    ];
-    
-    // חגים ב-2026 - לעדכן בתחילת 2026!
     const holidays2026 = [
-        // כאן תוסיף את החגים ב-2026 כשמגיע הזמן
+        { month: 3, day: 1, name: 'פסח - ערב חג' },
+        { month: 3, day: 2, name: 'פסח - יום ראשון' },
+        { month: 3, day: 5, name: 'פסח - יום שביעי' },
+        { month: 3, day: 6, name: 'פסח - יום שמיני' },
+        { month: 3, day: 21, name: 'יום העצמאות' },
+        { month: 3, day: 22, name: 'יום העצמאות' },
+        { month: 5, day: 21, name: 'שבועות - ערב חג' },
+        { month: 8, day: 11, name: 'ראש השנה - ערב חג' },
+        { month: 8, day: 12, name: 'ראש השנה - יום ראשון' },
+        { month: 8, day: 13, name: 'ראש השנה - יום שני' },
+        { month: 8, day: 20, name: 'יום כיפור - ערב חג' },
+        { month: 8, day: 21, name: 'יום כיפור' },
+        { month: 8, day: 25, name: 'סוכות - ערב חג' },
+        { month: 8, day: 26, name: 'סוכות - יום ראשון' },
+        { month: 9, day: 1, name: 'סוכות - יום שני' },
+        { month: 9, day: 2, name: 'שמחת תורה - ערב חג' },
     ];
     
-    if (year === 2025) return holidays2025;
-    if (year === 2026) return holidays2026;
+    // חגים ב-2027 - לעדכן בתחילת 2026!
+    const holidays2027 = [
+        // כאן תוסיף את החגים ב-2027 כשמגיע הזמן
+    ];
+    
+    if (year === 2026) return holidays2025;
+    if (year === 2027) return holidays2026;
     
     return []; // אם לא הוגדרו חגים לשנה זו
 }
