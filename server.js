@@ -273,13 +273,7 @@ async function runAssistant(threadId, assistantId, instructions = "") {
 // פונקציה מיוחדת לטיפול בתקלות עם Assistant
 async function handleProblemWithAssistant(problemDescription, customer) {
     try {
-        log('INFO', '🔧 מעבד תקלה עם OpenAI Assistant מותאם...');
-
-        const threadId = await createThread();
-        if (!threadId) {
-            log('WARN', '⚠️ נכשל ביצירת thread - עובר לשיטה הרגילה');
-            return await findSolution(problemDescription, customer);
-        }
+        log('INFO', '🚀 מעבד תקלה עם OpenAI Chat (מהיר)...');
 
         // 🔧 הכנת ידע מוקדם להזרקה לקונטקסט
         const scenariosText = serviceFailureDB.map(s =>
@@ -293,17 +287,9 @@ async function handleProblemWithAssistant(problemDescription, customer) {
             ).join('\n');
         }
 
-        // 🔧 Prompt משופר וממוקד עם ידע מוזרק
-        const contextMessage = `
+        // 🔧 Prompt משופר וממוקד למהירות ואיכות
+        const systemPrompt = `
 SYSTEM: אתה טכנאי מומחה למערכות בקרת חניה של שיידט את בכמן.
-
-CUSTOMER INFO:
-- שם: ${customer.name}
-- חניון: ${customer.site}
-- כתובת: ${customer.address}
-
-PROBLEM REPORTED:
-"${problemDescription}"
 
 KNOWLEDGE BASE (SCENARIOS):
 ${scenariosText}
@@ -312,65 +298,62 @@ EQUIPMENT INFO:
 ${equipmentText}
 
 INSTRUCTIONS:
-1. השתמש במידע ב-KNOWLEDGE BASE למציאת הפתרון המדויק ביותר.
-2. אם לא נמצא פתרון מדויק, השתמש בידע הכללי וב-EQUIPMENT INFO.
-3. תן הוראות צעד אחר צעד, ברורות ומעשיות.
-4. התמקד בפתרונות שהלקוח יכול לבצע בעצמו.
-5. אם צריך טכנאי - ציין זאת במפורש.
-6. השתמש באימוג'י לבהירות.
-7. תשובה קצרה ועניינית - מקסימום 300 מילים.
+1. זהה את התקלה המדוייקת מתוך ה-KNOWLEDGE BASE.
+2. אם יש מספר תקלות, שלב את הפתרונות בצורה חכמה.
+3. כתוב תשובה ישירה וקצרה. בלי "אני מבין" ובלי הקדמות מיותרות.
+4. השתמש בפורמט כותרות מודגשות עם אימוג'י.
+5. אל תמציא שלבים שלא קיימים במידע שקיבלת.
 
 FORMAT:
-🔧 **פתרון לתקלה: [שם התקלה]**
+🔧 **[שם התקלה/ות]**
 
-📋 **שלבי הפתרון:**
-1. [שלב ראשון]
-2. [שלב שני]
-3. [שלב שלישי]
+📋 **ביצוע:**
+1. [פעולה ברורה ותמציתית]
+2. [פעולה]
 
-💡 **הערות חשובות:**
-[הערות בטיחות או טיפים]
+💡 **דגש:** [הערה קריטית אחת בלבד, אם יש]
 
-⚠️ **אם לא עוזר:**
-[מתי לקרוא לטכנאי]
+⚠️ [רק אם צריך טכנאי: "אם לא עוזר - הזמן טכנאי"]
 `;
 
-        const messageAdded = await addMessageToThread(threadId, contextMessage);
-        if (!messageAdded) {
-            log('WARN', '⚠️ נכשל בהוספת הודעה - עובר לשיטה הרגילה');
-            return await findSolution(problemDescription, customer);
-        }
+        const userMessage = `
+CUSTOMER: ${customer.name} (חניון ${customer.site})
+PROBLEM: "${problemDescription}"
+`;
 
-        // 🔧 הפעלת Assistant עם הוראות מותאמות
-        const assistantResponse = await runAssistant(
-            threadId,
-            process.env.OPENAI_ASSISTANT_ID,
-            `אתה טכנאי מומחה למערכות בקרת חניה.
-            השתמש במידע שסופק בהודעה האחרונה (KNOWLEDGE BASE) למציאת הפתרון.
-            תן פתרון מעשי וקצר בעברית עם אימוג'י.
-            מקסימום 300 מילים.`
-        );
+        // 🔧 שימוש ב-Chat Completions API המהיר
+        const completion = await openai.chat.completions.create({
+            model: "gpt-4o-mini", // מודל מהיר מאוד
+            messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: userMessage }
+            ],
+            temperature: 0.3, // דיוק גבוה
+            max_tokens: 400
+        });
 
-        if (assistantResponse) {
-            log('INFO', '✅ Assistant נתן פתרון מותאם אישית');
+        const responseContent = completion.choices[0].message.content;
 
-            // עיצוב התגובה עם הוראות ברורות
-            let formattedResponse = `${assistantResponse}`;
-            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n✅ כתוב "כן" אם הבעיה נפתרה\n❌ כתוב "לא" אם עדיין יש בעיה`;
+        if (responseContent) {
+            log('INFO', '✅ OpenAI Chat ענה במהירות');
+
+            // עיצוב התגובה
+            let formattedResponse = responseContent.trim();
+            formattedResponse += `\n\n❓ **האם הפתרון עזר?**\n✅ כתוב "כן" אם נפתר\n❌ כתוב "לא" אם לא`;
 
             return {
                 found: true,
                 response: formattedResponse,
-                source: 'assistant',
-                threadId: threadId
+                source: 'chat-fast',
+                threadId: null
             };
-        } else {
-            log('WARN', '⚠️ Assistant לא החזיר תגובה - עובר לשיטה הרגילה');
-            return await findSolution(problemDescription, customer);
         }
 
+        log('WARN', '⚠️ OpenAI Chat לא החזיר תוכן');
+        return await findSolution(problemDescription, customer);
+
     } catch (error) {
-        log('ERROR', '❌ שגיאה כללית בAssistant - עובר לשיטה הרגילה:', error.message);
+        log('ERROR', '❌ שגיאה ב-Chat API:', error.message);
         return await findSolution(problemDescription, customer);
     }
 }
