@@ -350,11 +350,11 @@ PROBLEM: "${problemDescription}"
         }
 
         log('WARN', '⚠️ OpenAI Chat לא החזיר תוכן');
-        return await findSolution(problemDescription, customer);
+        return null; // שובר את הלולאה - ימשיך לשיטה הבאה ב-findSolution
 
     } catch (error) {
         log('ERROR', '❌ שגיאה ב-Chat API:', error.message);
-        return await findSolution(problemDescription, customer);
+        return null; // שובר את הלולאה - ימשיך לשיטה הבאה ב-findSolution
     }
 }
 // פונקציה מיוחדת לטיפול בהדרכה עם Assistant
