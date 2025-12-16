@@ -2213,11 +2213,8 @@ class ResponseHandler {
             });
 
             let solution;
-            if (process.env.OPENAI_ASSISTANT_ID) {
-                solution = await handleProblemWithAssistant(problemDescription, customer);
-            } else {
-                solution = await findSolution(problemDescription, customer);
-            }
+            // השתמש תמיד ב-findSolution שמנהל את ה-fallback בצורה חכמה
+            solution = await findSolution(problemDescription, customer);
 
             if (solution.found) {
                 this.memory.updateStage(phone, 'waiting_feedback', customer, {
