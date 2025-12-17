@@ -2216,6 +2216,8 @@ class ResponseHandler {
             // השתמש תמיד ב-findSolution שמנהל את ה-fallback בצורה חכמה
             solution = await findSolution(problemDescription, customer);
 
+            log('DEBUG', `🔍 התקבלה תשובה מ-findSolution: found=${solution.found}, responseLength=${solution.response ? solution.response.length : 0}`);
+
             if (solution.found) {
                 this.memory.updateStage(phone, 'waiting_feedback', customer, {
                     serviceNumber: serviceNumber,
@@ -2229,6 +2231,8 @@ class ResponseHandler {
                 autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
 
                 let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n`;
+
+                log('DEBUG', `📤 מכין הודעת תשובה (אורך ${responseMessage.length}): ${responseMessage.substring(0, 100)}...`);
 
                 return {
                     response: responseMessage,
