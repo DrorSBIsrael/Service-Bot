@@ -350,11 +350,11 @@ PROBLEM: "${problemDescription}"
         }
 
         log('WARN', '⚠️ OpenAI Chat לא החזיר תוכן');
-        return null; // שובר את הלולאה - ימשיך לשיטה הבאה ב-findSolution
+        return await findSolution(problemDescription, customer);
 
     } catch (error) {
         log('ERROR', '❌ שגיאה ב-Chat API:', error.message);
-        return null; // שובר את הלולאה - ימשיך לשיטה הבאה ב-findSolution
+        return await findSolution(problemDescription, customer);
     }
 }
 // פונקציה מיוחדת לטיפול בהדרכה עם Assistant
@@ -2213,10 +2213,11 @@ class ResponseHandler {
             });
 
             let solution;
-            // השתמש תמיד ב-findSolution שמנהל את ה-fallback בצורה חכמה
-            solution = await findSolution(problemDescription, customer);
-
-            log('DEBUG', `🔍 התקבלה תשובה מ-findSolution: found=${solution.found}, responseLength=${solution.response ? solution.response.length : 0}`);
+            if (process.env.OPENAI_ASSISTANT_ID) {
+                solution = await handleProblemWithAssistant(problemDescription, customer);
+            } else {
+                solution = await findSolution(problemDescription, customer);
+            }
 
             if (solution.found) {
                 this.memory.updateStage(phone, 'waiting_feedback', customer, {
@@ -2231,8 +2232,6 @@ class ResponseHandler {
                 autoFinishManager.startTimer(phone, customer, 'waiting_feedback', handleAutoFinish);
 
                 let responseMessage = `📋 **תקלה אושרה ומעובדת**\n\n"${problemDescription}"\n\n${solution.response}\n`;
-
-                log('DEBUG', `📤 מכין הודעת תשובה (אורך ${responseMessage.length}): ${responseMessage.substring(0, 100)}...`);
 
                 return {
                     response: responseMessage,
