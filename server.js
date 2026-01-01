@@ -3274,8 +3274,8 @@ function getIsraeliHolidays(year) {
         // כאן תוסיף את החגים ב-2027 כשמגיע הזמן
     ];
 
-    if (year === 2026) return holidays2025;
-    if (year === 2027) return holidays2026;
+    if (year === 2026) return holidays2026;
+    if (year === 2027) return []; // טרם הוגדר
 
     return []; // אם לא הוגדרו חגים לשנה זו
 }
