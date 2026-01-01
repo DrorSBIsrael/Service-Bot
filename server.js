@@ -169,7 +169,7 @@ function log(level, message, data = null) {
     if (debugLevels[level] >= debugLevels[DEBUG_LEVEL]) {
         const timestamp = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
         console.log(`${timestamp} [${level}] ${message}`);
-        if (data && level === 'DEBUG') console.log(data);
+        if (data && (level === 'DEBUG' || level === 'ERROR')) console.log(data);
     }
 }
 
@@ -3167,10 +3167,14 @@ async function sendWhatsApp(phone, message) {
 
         log('DEBUG', `📤 שולח ל-${phone}: ${message.substring(0, 50)}...`);
 
-        const response = await axios.post(url, {
+        const payload = {
             chatId: `${phone}@c.us`,
             message: message
-        }, {
+        };
+
+        log('DEBUG', `📤 WhatsApp Payload check for ${phone}:`, payload);
+
+        const response = await axios.post(url, payload, {
             timeout: 8000,
             headers: {
                 'Content-Type': 'application/json'
@@ -3745,7 +3749,8 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
 
     } catch (error) {
         log('ERROR', '❌ שגיאת מייל מפורטת:', error.message);
-        log('ERROR', 'פרטים נוספים:', error);
+
+        log('ERROR', 'פרטים נוספים:', JSON.parse(JSON.stringify(error, Object.getOwnPropertyNames(error))));
     }
 }
 
