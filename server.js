@@ -3154,8 +3154,8 @@ const responseHandler = new ResponseHandler(memory, customers);
 
 // שליחת WhatsApp
 async function sendWhatsApp(phone, message) {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const instanceId = process.env.GREEN_API_INSTANCE_ID || process.env.WHATSAPP_INSTANCE || '7105253183';
+    const token = process.env.GREEN_API_TOKEN || process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
 
     try {
@@ -3202,8 +3202,8 @@ const GROUP_CHAT_ID = '972545484210-1354702417@g.us'; // קבוצת שיידט �
 
 // שליחת WhatsApp לקבוצה - תיקון מלא
 async function sendWhatsAppToGroup(message) {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const instanceId = process.env.GREEN_API_INSTANCE_ID || process.env.WHATSAPP_INSTANCE || '7105253183';
+    const token = process.env.GREEN_API_TOKEN || process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendMessage/${token}`;
 
     try {
@@ -3336,8 +3336,8 @@ function isWorkingHours() {
 
 // פונקציה לשליחת קובץ בוואטסאפ
 async function sendWhatsAppFile(chatId, filePath, caption = '') {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const instanceId = process.env.GREEN_API_INSTANCE_ID || process.env.WHATSAPP_INSTANCE || '7105253183';
+    const token = process.env.GREEN_API_TOKEN || process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendFileByUpload/${token}`;
 
     try {
@@ -3393,8 +3393,8 @@ async function sendWhatsAppFile(chatId, filePath, caption = '') {
 
 // פונקציה חלופית לשליחת תמונות
 async function sendWhatsAppImageFallback(chatId, filePath, caption = '') {
-    const instanceId = '7105253183';
-    const token = '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
+    const instanceId = process.env.GREEN_API_INSTANCE_ID || process.env.WHATSAPP_INSTANCE || '7105253183';
+    const token = process.env.GREEN_API_TOKEN || process.env.WHATSAPP_TOKEN || '2fec0da532cc4f1c9cb5b1cdc561d2e36baff9a76bce407889';
     const url = `https://7105.api.greenapi.com/waInstance${instanceId}/sendFileByUrl/${token}`;
 
     // במקום העלאה ישירה, נשלח הודעה טקסט עם מידע על הקובץ
@@ -4683,5 +4683,23 @@ function checkGoogleSheetsConfig() {
 }
 
 checkGoogleSheetsConfig();
+
+// בדיקת Green API
+function checkGreenAPIConfig() {
+    console.log('🔍 בדיקת הגדרות Green API:');
+    const instanceId = process.env.GREEN_API_INSTANCE_ID || process.env.WHATSAPP_INSTANCE;
+    const token = process.env.GREEN_API_TOKEN || process.env.WHATSAPP_TOKEN;
+
+    console.log('INSTANCE ID:', instanceId ? `✅ מוגדר (${instanceId})` : '⚠️ שימוש בברירת מחדל (hardcoded)');
+    console.log('TOKEN:', token ? '✅ מוגדר (מוסתר)' : '⚠️ שימוש בברירת מחדל (hardcoded)');
+
+    if (instanceId && token) {
+        console.log('📲 Green API מוגדר דרך משתני סביבה');
+    } else {
+        console.log('⚠️ Green API רץ עם הגדרות קשיחות (אם עשית Reset למכון - זה לא יעבוד!)');
+    }
+}
+
+checkGreenAPIConfig();
 
 module.exports = app;
