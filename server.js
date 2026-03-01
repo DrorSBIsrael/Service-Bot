@@ -3253,6 +3253,11 @@ function getIsraeliHolidays(year) {
     // חגים עבריים - יש לעדכן כל שנה לפי הלוח העברי
     // אלו התאריכים ב-2025 (דוגמה - צריך עדכון שנתי!)
     const holidays2026 = [
+        { month: 2, day: 1, name: 'מלחמה' },
+        { month: 2, day: 2, name: 'מלחמה' },
+        { month: 2, day: 3, name: 'מלחמה' },
+        { month: 2, day: 4, name: 'מלחמה' },
+        { month: 2, day: 5, name: 'מלחמה' },
         { month: 3, day: 1, name: 'פסח - ערב חג' },
         { month: 3, day: 2, name: 'פסח - יום ראשון' },
         { month: 3, day: 5, name: 'פסח - יום שביעי' },
