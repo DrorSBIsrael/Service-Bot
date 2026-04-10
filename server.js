@@ -3601,7 +3601,7 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                 const workingHours = isWorkingHours();
 
                 // תמיד שלח ל-service
-                emailRecipients = ['service@sbcloud.co.il'];
+                emailRecipients = ['service1@sbcloud.co.il'];
 
                 // הוסף SMS רק מחוץ לשעות עבודה
                 if (workingHours.shouldSendSMS) {
@@ -3651,16 +3651,16 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                         // ממשיך גם אם השליחה לקבוצה נכשלת
                     }
                 } else {
-                    log('INFO', `💼 שעות עבודה - ${workingHours.dayName} ${workingHours.hour}:00 (רק service@sbcloud.co.il)`);
+                    log('INFO', `💼 שעות עבודה - ${workingHours.dayName} ${workingHours.hour}:00 (רק service1@sbcloud.co.il)`);
                 }
                 break;
 
             case 'order':
-                emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+                emailRecipients = ['office@SBcloud.co.il'];
                 break;
 
             case 'damage':
-                emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+                emailRecipients = ['office@SBcloud.co.il'];
 
                 // 🔧 חדש: גם נזקים מחוץ לשעות עבודה ישלחו לוואטסאפ
                 const damageWorkingHours = isWorkingHours();
@@ -3706,11 +3706,11 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                 break;
 
             case 'general_office':
-                emailRecipients = ['service@sbcloud.co.il', 'office@SBcloud.co.il'];
+                emailRecipients = ['office@SBcloud.co.il'];
                 break;
 
             default:
-                emailRecipients = ['service@sbcloud.co.il'];
+                emailRecipients = ['service1@sbcloud.co.il'];
                 break;
         }
 
