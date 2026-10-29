@@ -3601,7 +3601,7 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                 const workingHours = isWorkingHours();
 
                 // תמיד שלח ל-service
-                emailRecipients = ['service1@sbcloud.co.il'];
+                emailRecipients = ['service@sbcloud.co.il'];
 
                 // הוסף SMS רק מחוץ לשעות עבודה
                 if (workingHours.shouldSendSMS) {
