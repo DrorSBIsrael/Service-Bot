@@ -3518,7 +3518,7 @@ async function wakeUpOnDutyTechnician(serviceNumber, customer, problemText) {
         const hour = israelTime.getHours();
 
         // פועל אך ורק בין 21:00 בערב ל-07:00 בבוקר
-        const isNightShift = (hour >= 20 || hour < 7);
+        const isNightShift = (hour >= 22 || hour < 6);
         if (!isNightShift) {
             return;
         }
