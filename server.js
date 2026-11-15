@@ -3461,7 +3461,9 @@ async function placeSingleWakeUpCall(phoneDigits, voiceMessage) {
         try {
             const sid = process.env.TWILIO_ACCOUNT_SID;
             const auth = Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
-            const twiml = `<Response><Pause length="1"/><Say language="he-IL">${voiceMessage}</Say><Pause length="1"/><Say language="he-IL">${voiceMessage}</Say></Response>`;
+            const publicBaseUrl = process.env.PUBLIC_BASE_URL || 'https://email-bot-service.onrender.com';
+            const audioUrl = `${publicBaseUrl}/wakeup-audio.mp3`;
+            const twiml = `<Response><Pause length="1"/><Play>${audioUrl}</Play><Pause length="1"/><Play>${audioUrl}</Play><Say voice="Google.he-IL-Wavenet-A" language="he-IL">${voiceMessage}</Say></Response>`;
 
             const params = new URLSearchParams();
             params.append('To', intlPhone);
@@ -3516,7 +3518,7 @@ async function wakeUpOnDutyTechnician(serviceNumber, customer, problemText) {
         const hour = israelTime.getHours();
 
         // פועל אך ורק בין 21:00 בערב ל-07:00 בבוקר
-        const isNightShift = (hour >= 19 || hour < 7);
+        const isNightShift = (hour >= 20 || hour < 7);
         if (!isNightShift) {
             return;
         }
@@ -4307,6 +4309,32 @@ app.get('/', (req, res) => {
             </div>
         </div>
     `);
+});
+
+// קובץ שמע בעברית עבור שיחת ההשכמה לטכנאי תורן ב-Twilio
+let cachedWakeupAudioBuffer = null;
+app.get('/wakeup-audio.mp3', async (req, res) => {
+    try {
+        if (!cachedWakeupAudioBuffer) {
+            const text = 'שלום, יש קריאה דחופה במערכת שיידט את בכמן, תבדוק בבקשה בהודעות ובמייל';
+            const ttsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=iw&client=tw-ob&q=${encodeURIComponent(text)}`;
+            const ttsRes = await axios.get(ttsUrl, {
+                responseType: 'arraybuffer',
+                headers: { 'User-Agent': 'Mozilla/5.0' },
+                timeout: 10000
+            });
+            cachedWakeupAudioBuffer = Buffer.from(ttsRes.data);
+        }
+        res.set({
+            'Content-Type': 'audio/mpeg',
+            'Content-Length': cachedWakeupAudioBuffer.length,
+            'Cache-Control': 'public, max-age=86400'
+        });
+        return res.send(cachedWakeupAudioBuffer);
+    } catch (err) {
+        log('ERROR', `❌ שגיאה ביצירת קובץ שמע להשכמה: ${err.message}`);
+        return res.status(500).send('Audio error');
+    }
 });
 
 // WhatsApp Webhook מעולה
