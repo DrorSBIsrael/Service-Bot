@@ -3390,33 +3390,52 @@ function formatTicketOpenedMessage(serviceNumber, description = '', prefixTitle 
     }
 }
 
-// שליפת טלפון של טכנאי תורן (on duty) מגיליון Google Sheets (עמודות V ו-W)
+// שליפת טלפון של טכנאי תורן מגיליון Google Sheets:
+// עדיפות 1: עמודה R ("דיווח תורנות") -> טלפון מעמודה V
+// עדיפות 2 (גיבוי אם אין בעמודה R): עמודה W ("on duty") -> טלפון מעמודה V
 const ON_DUTY_SHEET_ID = process.env.ON_DUTY_SHEET_ID || '1-UC1uXQBtxnGF2pPAzj0xMRzlK3oAOeNwDkFqcJrATc';
 
 async function getOnDutyTechnicianPhones() {
     try {
-        const csvUrl = `https://docs.google.com/spreadsheets/d/${ON_DUTY_SHEET_ID}/gviz/tq?tqx=out:csv&range=V1:W40`;
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${ON_DUTY_SHEET_ID}/gviz/tq?tqx=out:csv&range=R1:W40`;
         const response = await axios.get(csvUrl, { timeout: 10000 });
         const lines = String(response.data || '').split(/\r?\n/);
-        const onDutyPhones = [];
+
+        const primaryPhonesR = [];  // לפי עמודה R = "דיווח תורנות"
+        const fallbackPhonesW = []; // לפי עמודה W = "on duty"
 
         for (const line of lines) {
             if (!line.trim()) continue;
-            // פיצול CSV בסיסי של שתי העמודות V ו-W
+            // עמודות בטווח R עד W:
+            // [0]=R (אתר/דיווח), [1]=S (שעה), [2]=T (פעמים), [3]=U (מספר עובד), [4]=V (טלפון), [5]=W (עמודה 2 / on duty)
             const parts = line.split(',').map(col => col.replace(/^"|"$/g, '').trim());
-            const phoneCol = parts[0] || '';
-            const dutyCol = (parts[1] || '').toLowerCase();
+            const colR = parts[0] || '';
+            const phoneColV = parts[4] || '';
+            const colW = (parts[5] || '').toLowerCase();
 
-            if (dutyCol.includes('on duty')) {
-                const cleanDigits = phoneCol.replace(/\D/g, '');
-                if (cleanDigits.length >= 9) {
-                    onDutyPhones.push(cleanDigits);
-                }
+            const cleanDigits = phoneColV.replace(/\D/g, '');
+            if (cleanDigits.length < 9) continue;
+
+            if (colR.includes('דיווח תורנות')) {
+                primaryPhonesR.push(cleanDigits);
+            }
+            if (colW.includes('on duty')) {
+                fallbackPhonesW.push(cleanDigits);
             }
         }
 
-        log('INFO', `🕵️‍♂️ טכנאים תורנים שזוהו בגיליון (on duty): ${onDutyPhones.join(', ') || 'לא נמצא'}`);
-        return onDutyPhones;
+        if (primaryPhonesR.length > 0) {
+            log('INFO', `🕵️‍♂️ טכנאי תורן זוהה לפי עמודה R ("דיווח תורנות"): ${primaryPhonesR.join(', ')}`);
+            return primaryPhonesR;
+        }
+
+        if (fallbackPhonesW.length > 0) {
+            log('INFO', `🕵️‍♂️ לא נמצא "דיווח תורנות" בעמודה R - משתמש בגיבוי מעמודה W ("on duty"): ${fallbackPhonesW.join(', ')}`);
+            return fallbackPhonesW;
+        }
+
+        log('WARN', `⚠️ לא נמצא טכנאי תורן בגיליון (לא בעמודה R "דיווח תורנות" ולא בעמודה W "on duty")`);
+        return [];
     } catch (error) {
         log('ERROR', `❌ שגיאה בשליפת טכנאי תורן מהגיליון: ${error.message}`);
         return [];
@@ -3518,7 +3537,7 @@ async function wakeUpOnDutyTechnician(serviceNumber, customer, problemText) {
         const hour = israelTime.getHours();
 
         // פועל אך ורק בין 21:00 בערב ל-07:00 בבוקר
-        const isNightShift = (hour >= 22 || hour < 6);
+        const isNightShift = (hour >= 21 || hour < 7);
         if (!isNightShift) {
             return;
         }
