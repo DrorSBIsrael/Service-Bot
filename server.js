@@ -871,12 +871,22 @@ async function handleAutoFinish(phone, customer, stage) {
 
         // בדיקה באיזה שלב אנחנו וביצוע המשך מתאים
         if (stage === 'waiting_feedback') {
-            // 🔧 שינוי: במקום לבטל - מעביר לטכנאי אוטומטית
-            await sendWhatsApp(phone, `⏰ **המשך אוטומטי לאחר 60 שניות**\n🔧 מעביר את הפנייה לטכנאי מומחה\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה`);
+            // 🔧 שינוי: במקום לבטל - מעביר לטכנאי אוטומטית עם הודעה ברורה ומספר קריאה
+            const serviceNumber = (conversation && conversation.data && conversation.data.serviceNumber)
+                ? conversation.data.serviceNumber
+                : await getNextServiceNumber();
+
+            await sendWhatsApp(
+                phone,
+                formatTicketOpenedMessage(
+                    serviceNumber,
+                    conversation?.data?.problemDescription || '',
+                    '⏰ **המשך אוטומטי לאחר 60 שניות**'
+                )
+            );
 
             // שלח מייל טכנאי
             if (conversation && conversation.data) {
-                const serviceNumber = conversation.data.serviceNumber || await getNextServiceNumber();
                 await sendEmail(customer, 'technician', conversation.data.problemDescription, {
                     serviceNumber: serviceNumber,
                     problemDescription: conversation.data.problemDescription,
@@ -889,7 +899,7 @@ async function handleAutoFinish(phone, customer, stage) {
             memory.updateStage(phone, 'completed', customer, {
                 autoFinished: true,
                 lastIssue: conversation?.data?.problemDescription || 'תקלה',
-                lastServiceNumber: conversation?.data?.serviceNumber,
+                lastServiceNumber: serviceNumber,
                 handoverEndTime: Date.now() + 30 * 60 * 1000 // 🤖 הקפאה ל-30 דקות
             });
 
@@ -919,7 +929,14 @@ async function handleAutoFinish(phone, customer, stage) {
             if (tempFiles.length > 0) {
                 // יש קבצים - שלח עם מה שיש
                 const serviceNumber = await getNextServiceNumber();
-                await sendWhatsApp(phone, `⏰ **המשך אוטומטי לאחר 60 שניות**\n✅ נשלח דיווח נזק עם ${tempFiles.length} קבצים\n🔍 מעביר לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n🆔 מספר קריאה: ${serviceNumber}`);
+                await sendWhatsApp(
+                    phone,
+                    formatTicketOpenedMessage(
+                        serviceNumber,
+                        `דיווח נזק עם ${tempFiles.length} קבצים`,
+                        '⏰ **המשך אוטומטי לאחר 60 שניות**'
+                    )
+                );
 
                 const allFilePaths = tempFiles.map(f => f.path);
                 await sendEmail(customer, 'damage', `נזק - דיווח אוטומטי עם ${tempFiles.length} קבצים`, {
@@ -1134,7 +1151,10 @@ async function handleAutoFinish(phone, customer, stage) {
                         attachments: conversation?.data?.tempFiles?.map(f => f.path) || []
                     });
 
-                    await sendWhatsApp(phone, `🔧 **תקלה נשלחה לטכנאי**\n\n"${problemDescription}"\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}`);
+                    await sendWhatsApp(
+                        phone,
+                        formatTicketOpenedMessage(serviceNumber, problemDescription)
+                    );
                 }
             } else {
                 // אין תקלה בהמתנה - חזור לתפריט
@@ -1152,7 +1172,14 @@ async function handleAutoFinish(phone, customer, stage) {
                 const description = damageData.description || 'נזק';
                 const unitNumber = damageData.unitNumber || 'לא צוין';
 
-                await sendWhatsApp(phone, `⏰ **המשך אוטומטי לאחר 60 שניות**\n✅ **דיווח נזק נשלח אוטומטית!**\n\nיחידה ${unitNumber} - ${description}\n\n🔍 מעביר לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n🆔 מספר קריאה: ${serviceNumber}`);
+                await sendWhatsApp(
+                    phone,
+                    formatTicketOpenedMessage(
+                        serviceNumber,
+                        `יחידה ${unitNumber} - ${description}`,
+                        '⏰ **המשך אוטומטי לאחר 60 שניות**'
+                    )
+                );
 
                 const allFiles = conversation?.data?.tempFiles?.map(f => f.path) || [];
 
@@ -1957,7 +1984,7 @@ class ResponseHandler {
                     this.memory.updateStage(phone, 'technician_escalated', customer);
 
                     return {
-                        response: `📝 **הבנתי שהפתרון לא עזר**\n\n"${lastIssue}"\n\n🔧 **מעביר לטכנאי מומחה**\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${lastServiceNumber}\n\n📞 039792365`,
+                        response: formatTicketOpenedMessage(lastServiceNumber, lastIssue, '📝 **הבנתי שהפתרון לא עזר**'),
                         stage: 'technician_escalated',
                         customer: customer,
                         sendTechnicianEmail: true,
@@ -2248,7 +2275,7 @@ class ResponseHandler {
                 });
 
                 return {
-                    response: `📋 **תקלה אושרה ונשלחה לטכנאי**\n\n"${problemDescription}"\n\n🔧 מעביר לטכנאי מומחה\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}\n`,
+                    response: formatTicketOpenedMessage(serviceNumber, problemDescription),
                     stage: 'completed',
                     customer: customer,
                     serviceNumber: serviceNumber,
@@ -2368,7 +2395,7 @@ class ResponseHandler {
             const allFiles = conversation?.data?.tempFiles?.map(f => f.path) || [];
 
             return {
-                response: `✅ **דיווח נזק נשלח בהצלחה!**\n\nיחידה ${damageData.unitNumber} - ${damageData.description}\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                response: formatTicketOpenedMessage(serviceNumber, `דיווח נזק - יחידה ${damageData.unitNumber}: ${damageData.description}`),
                 stage: 'completed',
                 customer: customer,
                 serviceNumber: serviceNumber,
@@ -2497,7 +2524,7 @@ class ResponseHandler {
             const filesDescription = allFiles.length > 1 ? `${allFiles.length} קבצים` : fileType || 'קובץ';
 
             return {
-                response: `✅ **הדיווח הושלם בהצלחה!**\n\nיחידה ${unitNumber} - קיבלתי ${filesDescription}!\n\n🔍 מעביר לטכנאי\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${serviceNumber}\n\n📞 039792365`,
+                response: formatTicketOpenedMessage(serviceNumber, `דיווח נזק ביחידה ${unitNumber} (${filesDescription})`),
                 stage: 'completed',
                 customer: customer,
                 serviceNumber: serviceNumber,
@@ -3008,7 +3035,7 @@ class ResponseHandler {
             });
 
             return {
-                response: `🔧 **מעביר לטכנאי מומחה**\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${data.serviceNumber}\n\n📞 039792365`,
+                response: formatTicketOpenedMessage(data.serviceNumber, data.problemDescription),
                 stage: 'completed',
                 customer: customer,
                 sendTechnicianEmail: true,
@@ -3031,7 +3058,7 @@ class ResponseHandler {
             const fullProblemDescription = `${data.problemDescription}\n\nמידע נוסף מהלקוח: ${message}`;
 
             return {
-                response: `📝 **קיבלתי את המידע הנוסף!**\n\n"${message}"\n\n🔧 מעביר לטכנאי מומחה עם כל הפרטים\n\n⏰ טכנאי יצור קשר תוך 2-4 שעות בשעות העבודה\n\n🆔 מספר קריאה: ${data.serviceNumber}\n\n📞 039792365`,
+                response: formatTicketOpenedMessage(data.serviceNumber, fullProblemDescription, `📝 **קיבלתי את המידע הנוסף:** "${message}"`),
                 stage: 'completed',
                 customer: customer,
                 sendTechnicianEmail: true,
@@ -3339,6 +3366,207 @@ function isWorkingHours() {
     return result;
 }
 
+// בניית הודעת אישור פתיחת קריאה ברורה ללקוח (מותאמת לשעות עבודה / מחוץ לשעות עבודה)
+function formatTicketOpenedMessage(serviceNumber, description = '', prefixTitle = '') {
+    const wh = isWorkingHours();
+    const header = prefixTitle ? `${prefixTitle}\n\n` : '';
+    const descLine = description ? `📋 **נושא:** ${description}\n` : '';
+
+    if (wh.isWorkingTime) {
+        return `${header}✅ **קיבלנו את פנייתך ונפתחה קריאת שירות במערכת!**\n` +
+               `🆔 **מספר קריאה:** ${serviceNumber || 'בטיפול'}\n` +
+               `${descLine}\n` +
+               `🔧 **סטטוס:** הפנייה נקלטה והועברה לטיפול צוות הטכנאים שלנו.\n` +
+               `⏰ **זמן מענה:** טכנאי ייצור קשר תוך **2-4 שעות** בשעות העבודה (ימים א'-ה', 09:00-16:00).\n` +
+               `📞 טלפון המוקד: 03-9792365`;
+    } else {
+        return `${header}✅ **קיבלנו את פנייתך ונפתחה קריאת שירות במערכת!**\n` +
+               `🆔 **מספר קריאה:** ${serviceNumber || 'בטיפול'}\n` +
+               `${descLine}\n` +
+               `🌙 **לתשומת ליבך – הפנייה נפתחה מחוץ לשעות העבודה הרגילות:**\n` +
+               `🕒 **שעות פעילות המוקד:** ימים א'-ה' בין השעות **09:00-16:00**.\n` +
+               `🚨 **כיצד מטופלת הפנייה כעת?** פרטי הקריאה הועברו לטכנאי התורן ולקבוצת הטכנאים. תקלות דחופות מטופלות ע"י כונן תורן, ופניות שוטפות יטופלו בעדיפות ראשונה עם פתיחת המוקד ביום העבודה הבא (תוך 2-4 שעות בשעות העבודה).\n` +
+               `📞 טלפון המוקד: 03-9792365`;
+    }
+}
+
+// שליפת טלפון של טכנאי תורן (on duty) מגיליון Google Sheets (עמודות V ו-W)
+const ON_DUTY_SHEET_ID = process.env.ON_DUTY_SHEET_ID || '1-UC1uXQBtxnGF2pPAzj0xMRzlK3oAOeNwDkFqcJrATc';
+
+async function getOnDutyTechnicianPhones() {
+    try {
+        const csvUrl = `https://docs.google.com/spreadsheets/d/${ON_DUTY_SHEET_ID}/gviz/tq?tqx=out:csv&range=V1:W40`;
+        const response = await axios.get(csvUrl, { timeout: 10000 });
+        const lines = String(response.data || '').split(/\r?\n/);
+        const onDutyPhones = [];
+
+        for (const line of lines) {
+            if (!line.trim()) continue;
+            // פיצול CSV בסיסי של שתי העמודות V ו-W
+            const parts = line.split(',').map(col => col.replace(/^"|"$/g, '').trim());
+            const phoneCol = parts[0] || '';
+            const dutyCol = (parts[1] || '').toLowerCase();
+
+            if (dutyCol.includes('on duty')) {
+                const cleanDigits = phoneCol.replace(/\D/g, '');
+                if (cleanDigits.length >= 9) {
+                    onDutyPhones.push(cleanDigits);
+                }
+            }
+        }
+
+        log('INFO', `🕵️‍♂️ טכנאים תורנים שזוהו בגיליון (on duty): ${onDutyPhones.join(', ') || 'לא נמצא'}`);
+        return onDutyPhones;
+    } catch (error) {
+        log('ERROR', `❌ שגיאה בשליפת טכנאי תורן מהגיליון: ${error.message}`);
+        return [];
+    }
+}
+
+// ביצוע שיחת טלפון קולית יחידה דרך Twilio או ימות המשיח (ומחזיר האם נענתה)
+async function placeSingleWakeUpCall(phoneDigits, voiceMessage) {
+    // המרה לפורמט ישראלי (05XXXXXXXX) ולפורמט בינלאומי (+9725XXXXXXXX)
+    const localPhone = phoneDigits.startsWith('972')
+        ? '0' + phoneDigits.substring(3)
+        : (phoneDigits.startsWith('0') ? phoneDigits : '0' + phoneDigits);
+    const intlPhone = '+972' + localPhone.substring(1);
+
+    // אפשרות 1: ימות המשיח (Call2All) - ספק ישראלי (פריפייד בשקלים ללא דמי מנוי)
+    // מוגדר ע"י YEMOT_TOKEN=077xxxxxxx:password ב-Render
+    if (process.env.YEMOT_TOKEN) {
+        try {
+            const ttsMessage = `t-${voiceMessage}`;
+            // יצירת קמפיין/שיחה מיידית עם השמעת הודעה
+            const yemotUrl = 'https://www.call2all.co.il/ym/api/RunCampaign';
+            const res = await axios.get(yemotUrl, {
+                params: {
+                    token: process.env.YEMOT_TOKEN,
+                    ttsMode: 1,
+                    ttsText: `${voiceMessage}. אני חוזר, ${voiceMessage}`,
+                    phones: localPhone,
+                     callerId: process.env.YEMOT_CALLER_ID || ''
+                },
+                timeout: 15000
+            });
+            log('INFO', `📞 [ימות המשיח] שיחת השכמה נשלחה אל ${localPhone}: ${JSON.stringify(res.data)}`);
+            return { initiated: true, provider: 'yemot', data: res.data };
+        } catch (err) {
+            log('ERROR', `❌ שגיאה בחיוג דרך ימות המשיח אל ${localPhone}: ${err.message}`);
+        }
+    }
+
+    // אפשרות 2: Twilio Programmable Voice (עם בדיקת סטטוס מענה מדויקת)
+    // מוגדר ע"י TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER ב-Render
+    if (process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_FROM_NUMBER) {
+        try {
+            const sid = process.env.TWILIO_ACCOUNT_SID;
+            const auth = Buffer.from(`${sid}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+            const twiml = `<Response><Pause length="1"/><Say language="he-IL">${voiceMessage}</Say><Pause length="1"/><Say language="he-IL">${voiceMessage}</Say></Response>`;
+
+            const params = new URLSearchParams();
+            params.append('To', intlPhone);
+            params.append('From', process.env.TWILIO_FROM_NUMBER);
+            params.append('Twiml', twiml);
+            params.append('Timeout', '35');
+
+            const createRes = await axios.post(
+                `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls.json`,
+                params.toString(),
+                {
+                    headers: {
+                        'Authorization': `Basic ${auth}`,
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    timeout: 15000
+                }
+            );
+
+            const callSid = createRes.data.sid;
+            log('INFO', `📞 [Twilio] חיוג אל ${intlPhone} התחיל (SID: ${callSid}). ממתין לבדיקת מענה...`);
+
+            // המתנה של 45 שניות לסיום הצלצול ובדיקה האם הטכנאי ענה
+            await new Promise(r => setTimeout(r, 45000));
+
+            const statusRes = await axios.get(
+                `https://api.twilio.com/2010-04-01/Accounts/${sid}/Calls/${callSid}.json`,
+                { headers: { 'Authorization': `Basic ${auth}` }, timeout: 10000 }
+            );
+
+            const callStatus = statusRes.data.status; // completed, busy, no-answer, failed, canceled
+            const duration = parseInt(statusRes.data.duration || '0', 10);
+            const answered = (callStatus === 'completed' && duration >= 4);
+
+            log('INFO', `📞 [Twilio] תוצאת שיחה ${callSid}: סטטוס=${callStatus}, משך=${duration} שניות, נענה=${answered}`);
+            return { initiated: true, answered, provider: 'twilio' };
+        } catch (err) {
+            log('ERROR', `❌ שגיאה בחיוג Twilio אל ${intlPhone}: ${err.response?.data?.message || err.message}`);
+            return { initiated: false, answered: false };
+        }
+    }
+
+    log('WARN', `⚠️ לא הוגדר ספק שיחות קוליות (YEMOT_TOKEN או TWILIO_ACCOUNT_SID) ב-Render`);
+    return { initiated: false, answered: false };
+}
+
+// מנגנון השכמה לילי לטכנאי תורן (21:00 עד 07:00) - עד 3 ניסיונות חיוג במידה ואין מענה
+async function wakeUpOnDutyTechnician(serviceNumber, customer, problemText) {
+    try {
+        const now = new Date();
+        const israelTime = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Jerusalem" }));
+        const hour = israelTime.getHours();
+
+        // פועל אך ורק בין 21:00 בערב ל-07:00 בבוקר
+        const isNightShift = (hour >= 21 || hour < 7);
+        if (!isNightShift) {
+            return;
+        }
+
+        const onDutyPhones = await getOnDutyTechnicianPhones();
+        if (!onDutyPhones || onDutyPhones.length === 0) {
+            log('WARN', '⚠️ קריאת לילה (21:00-07:00) אך לא נמצא טכנאי מסומן ב-on duty בגיליון!');
+            return;
+        }
+
+        const voiceMessage = 'שלום, יש קריאה דחופה, תבדוק בבקשה בהודעות ובמייל';
+
+        for (const techPhone of onDutyPhones) {
+            // 1. שליחת הודעת ווצאפ אישית ישירה לטכנאי התורן
+            await sendWhatsApp(
+                techPhone,
+                `🚨 **התרעת תורן לילה (${serviceNumber})**\n` +
+                `🏢 חניון: ${customer ? customer.site : 'לא זוהה'} (${customer ? customer.name : ''})\n` +
+                `🔧 תקלה: ${problemText}\n\n` +
+                `📞 *מבצע כעת חיוג השכמה לטלפון שלך...*`
+            );
+
+            // 2. ביצוע עד 3 ניסיונות חיוג קולי (בהפרש של 2 דקות אם אין מענה)
+            (async () => {
+                const maxAttempts = 3;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    log('INFO', `📞 ניסיון חיוג השכמה ${attempt}/${maxAttempts} לטכנאי תורן: ${techPhone}`);
+                    const result = await placeSingleWakeUpCall(techPhone, voiceMessage);
+
+                    // אם הטכנאי ענה לשיחה (ב-Twilio) או שלא מוגדר ספק – עוצרים
+                    if (result.answered) {
+                        log('INFO', `✅ הטכנאי התורן (${techPhone}) ענה לשיחת ההשכמה בניסיון ${attempt}!`);
+                        break;
+                    }
+                    if (!result.initiated) {
+                        break;
+                    }
+
+                    if (attempt < maxAttempts) {
+                        log('INFO', `⏳ אין מענה מטכנאי תורן (${techPhone}) בניסיון ${attempt}. ממתין 2 דקות לניסיון הבא...`);
+                        await new Promise(r => setTimeout(r, 120 * 1000));
+                    }
+                }
+            })();
+        }
+    } catch (error) {
+        log('ERROR', `❌ שגיאה במנגנון השכמת טכנאי תורן: ${error.message}`);
+    }
+}
+
 
 
 // פונקציה לשליחת קובץ בוואטסאפ
@@ -3601,7 +3829,7 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                 const workingHours = isWorkingHours();
 
                 // תמיד שלח ל-service
-                emailRecipients = ['service@sbcloud.co.il'];
+                emailRecipients = ['service1@sbcloud.co.il'];
 
                 // הוסף SMS רק מחוץ לשעות עבודה
                 if (workingHours.shouldSendSMS) {
@@ -3646,6 +3874,13 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                         }
 
                         log('INFO', `📱 הודעה נשלחה לקבוצת WhatsApp: ${customer.name}`);
+
+                        // 📞 חדש: השכמת טכנאי תורן בשיחה קולית בין 21:00 ל-07:00 (עד 3 ניסיונות)
+                        await wakeUpOnDutyTechnician(
+                            extraData.serviceNumber || serviceNumber,
+                            customer,
+                            problemText
+                        );
                     } catch (groupError) {
                         log('ERROR', '❌ שגיאה בשליחה לקבוצה:', groupError.message);
                         // ממשיך גם אם השליחה לקבוצה נכשלת
@@ -3694,6 +3929,13 @@ async function sendEmail(customer, type, details, extraData = {}, phoneUsed = nu
                                 phoneUsed
                             );
                         }
+
+                        // 📞 חדש: השכמת טכנאי תורן בשיחה קולית בין 21:00 ל-07:00 (עד 3 ניסיונות)
+                        await wakeUpOnDutyTechnician(
+                            extraData.serviceNumber || serviceNumber,
+                            customer,
+                            extraData.problemDescription || details
+                        );
 
                     } catch (damageGroupError) {
                         log('ERROR', '❌ שגיאה בשליחת נזק לקבוצה:', damageGroupError.message);
@@ -4271,7 +4513,14 @@ app.post('/webhook/whatsapp', async (req, res) => {
                         const serviceNumber = await getNextServiceNumber();
                         const allFilePaths = existingFiles.map(f => f.path);
 
-                        await sendWhatsApp(phone, `🚫 **הגיעו ל-4 קבצים - סיום אוטומטי**\n\n✅ **דיווח נזק נשלח:**\nיחידה ${unitNumber}\n📎 ${existingFiles.length} קבצים\n\n🔍 מעביר לטכנאי\n⏰ יצור קשר תוך 2-4 שעות\n\n🆔 מספר קריאה: ${serviceNumber}`);
+                        await sendWhatsApp(
+                            phone,
+                            formatTicketOpenedMessage(
+                                serviceNumber,
+                                `נזק ביחידה ${unitNumber} (${existingFiles.length} קבצים)`,
+                                '🚫 **הגיעו ל-4 קבצים - סיום אוטומטי**'
+                            )
+                        );
 
                         await sendEmail(customer, 'damage', `נזק ביחידה ${unitNumber} - 4 קבצים`, {
                             serviceNumber: serviceNumber,
